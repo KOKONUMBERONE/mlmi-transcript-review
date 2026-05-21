@@ -43,8 +43,20 @@ export default function App() {
   const [popup, setPopup] = useState<PopupAnchor | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
+  const riskMarkers = useMemo(
+    () =>
+      transcript.segments.map((s) => ({
+        segmentId: s.id,
+        start: s.start,
+        end: s.end,
+        risk: s.paraRisk,
+      })),
+    [transcript],
+  )
+
   const audio = useAudio(audioFile, transcript.audioDuration, {
     onError: (msg) => setErrorMsg(msg),
+    riskMarkers,
   })
 
   const currentReviewer = (): string =>

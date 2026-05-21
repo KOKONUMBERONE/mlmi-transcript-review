@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import WaveSurfer from 'wavesurfer.js'
+import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.esm.js'
 import { makeSilentWav } from '../utils/silentWav'
+import type { Risk } from '../types'
+
+export interface RiskMarker {
+  segmentId: number
+  start: number
+  end: number
+  risk: Risk
+}
 
 export interface AudioController {
   containerRef: React.RefObject<HTMLDivElement>
@@ -15,6 +24,13 @@ export interface AudioController {
 
 interface Options {
   onError?: (msg: string) => void
+  riskMarkers?: RiskMarker[]
+}
+
+const RISK_COLOR: Record<Risk, string> = {
+  high: 'rgba(220, 38, 38, 0.22)',
+  med: 'rgba(217, 119, 6, 0.18)',
+  low: 'rgba(0, 0, 0, 0)',
 }
 
 export function useAudio(
@@ -24,22 +40,23 @@ export function useAudio(
 ): AudioController {
   const containerRef = useRef<HTMLDivElement>(null)
   const wsRef = useRef<WaveSurfer | null>(null)
+  const regionsRef = useRef<ReturnType<typeof RegionsPlugin.create> | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [ready, setReady] = useState(false)
 
-  // Track the URL currently in use by wavesurfer, so we can revoke it
-  // exactly when it's no longer needed.
   const currentUrlRef = useRef<string | null>(null)
 
-  // Keep callback in a ref so we don't have to re-run effects on identity change.
   const onErrorRef = useRef(options.onError)
   onErrorRef.current = options.onError
 
   // Mount once.
   useEffect(() => {
     if (!containerRef.current) return
+
+    const regions = RegionsPlugin.create()
+    regionsRef.current = regions
 
     const ws = WaveSurfer.create({
       container: containerRef.current,
@@ -53,6 +70,7 @@ export function useAudio(
       barRadius: 1,
       normalize: false,
       interact: true,
+      plugins: [regions],
     })
 
     wsRef.current = ws
@@ -73,10 +91,19 @@ export function useAudio(
       )
     })
 
+    // Clicking a region seeks to its start. The regions plugin emits
+    // 'region-clicked' separately from wavesurfer's own click-to-seek, so we
+    // also need to stop the event from propagating to avoid a double-seek.
+    regions.on('region-clicked', (region, e) => {
+      e?.stopPropagation()
+      const d = ws.getDuration()
+      if (d > 0) ws.seekTo(Math.max(0, Math.min(region.start / d, 1)))
+    })
+
     return () => {
       ws.destroy()
       wsRef.current = null
-      // Final cleanup: revoke any URL still attached.
+      regionsRef.current = null
       if (currentUrlRef.current) {
         URL.revokeObjectURL(currentUrlRef.current)
         currentUrlRef.current = null
@@ -85,9 +112,6 @@ export function useAudio(
   }, [])
 
   // Load source: own the object URL lifecycle.
-  // - Create a new URL for the new blob.
-  // - After ws.load() resolves (new audio decoded), revoke the previous URL.
-  // - If we unmount mid-load, the cleanup below revokes the in-flight URL.
   useEffect(() => {
     const ws = wsRef.current
     if (!ws) return
@@ -115,7 +139,6 @@ export function useAudio(
         onErrorRef.current?.(
           `Audio failed to load: ${err instanceof Error ? err.message : String(err)}`,
         )
-        // Failed load — drop the new URL too so nothing leaks.
         if (currentUrlRef.current === newUrl) {
           URL.revokeObjectURL(newUrl)
           currentUrlRef.current = prevUrl
@@ -124,12 +147,48 @@ export function useAudio(
 
     return () => {
       cancelled = true
-      // If a newer load has superseded this one, revoke this URL now.
       if (currentUrlRef.current !== newUrl) {
         URL.revokeObjectURL(newUrl)
       }
     }
   }, [audioBlob, fallbackDuration])
+
+  // Sync risk markers with the regions plugin.
+  // Re-runs whenever the source markers change OR when a new audio file becomes
+  // ready (regions are cleared on every load, so they must be re-added).
+  const markers = options.riskMarkers
+  useEffect(() => {
+    const regions = regionsRef.current
+    if (!regions || !ready) return
+
+    regions.clearRegions()
+
+    if (!markers) return
+    for (const m of markers) {
+      if (m.risk === 'low') continue
+      const region = regions.addRegion({
+        id: `risk-${m.segmentId}`,
+        start: m.start,
+        end: m.end,
+        color: RISK_COLOR[m.risk],
+        drag: false,
+        resize: false,
+      })
+      if (region.element) {
+        const label = m.risk === 'high' ? 'High-risk segment' : 'Medium-risk segment'
+        region.element.title = `${label} (click to seek)`
+        region.element.style.cursor = 'pointer'
+        // Keep risk regions visually subordinate to the cursor and progress.
+        region.element.style.zIndex = '2'
+        region.element.style.pointerEvents = 'auto'
+      }
+    }
+
+    return () => {
+      // Don't clearRegions on cleanup — the next run does it. Clearing here
+      // would also fire during fast-refresh in dev with no replacement.
+    }
+  }, [markers, ready])
 
   return {
     containerRef,
