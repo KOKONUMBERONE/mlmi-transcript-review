@@ -25,6 +25,10 @@ export interface AudioController {
 interface Options {
   onError?: (msg: string) => void
   riskMarkers?: RiskMarker[]
+  onPlay?: (position: number) => void
+  onPause?: (position: number) => void
+  onWaveformSeek?: (from: number, to: number) => void
+  onRegionClick?: (marker: RiskMarker, fromPosition: number) => void
 }
 
 const RISK_COLOR: Record<Risk, string> = {
@@ -47,9 +51,13 @@ export function useAudio(
   const [ready, setReady] = useState(false)
 
   const currentUrlRef = useRef<string | null>(null)
+  // Mirror of currentTime in a ref so handlers reading "previous position"
+  // see a fresh value without re-running effects on every timeupdate.
+  const timeRef = useRef<number>(0)
 
-  const onErrorRef = useRef(options.onError)
-  onErrorRef.current = options.onError
+  // Latest callbacks in a ref so we don't tear down wavesurfer on identity churn.
+  const callbacksRef = useRef(options)
+  callbacksRef.current = options
 
   // Mount once.
   useEffect(() => {
@@ -75,29 +83,50 @@ export function useAudio(
 
     wsRef.current = ws
 
+    const updateTime = (t: number) => {
+      timeRef.current = t
+      setCurrentTime(t)
+    }
+
     ws.on('ready', () => {
       setDuration(ws.getDuration())
       setReady(true)
     })
-    ws.on('play', () => setIsPlaying(true))
-    ws.on('pause', () => setIsPlaying(false))
-    ws.on('finish', () => setIsPlaying(false))
-    ws.on('audioprocess', (t) => setCurrentTime(t))
-    ws.on('seeking', (t) => setCurrentTime(t))
-    ws.on('timeupdate', (t) => setCurrentTime(t))
+    ws.on('play', () => {
+      setIsPlaying(true)
+      callbacksRef.current.onPlay?.(timeRef.current)
+    })
+    ws.on('pause', () => {
+      setIsPlaying(false)
+      callbacksRef.current.onPause?.(timeRef.current)
+    })
+    ws.on('finish', () => {
+      setIsPlaying(false)
+      callbacksRef.current.onPause?.(timeRef.current)
+    })
+    ws.on('audioprocess', updateTime)
+    ws.on('seeking', updateTime)
+    ws.on('timeupdate', updateTime)
+    ws.on('interaction', (newTime: number) => {
+      // Fires when the user clicks the waveform itself (not regions, not our
+      // programmatic seeks). We capture the position BEFORE the click using
+      // timeRef, then let the seek complete.
+      callbacksRef.current.onWaveformSeek?.(timeRef.current, newTime)
+    })
     ws.on('error', (err) => {
-      onErrorRef.current?.(
+      callbacksRef.current.onError?.(
         `Audio failed to load: ${err instanceof Error ? err.message : String(err)}`,
       )
     })
 
-    // Clicking a region seeks to its start. The regions plugin emits
-    // 'region-clicked' separately from wavesurfer's own click-to-seek, so we
-    // also need to stop the event from propagating to avoid a double-seek.
     regions.on('region-clicked', (region, e) => {
       e?.stopPropagation()
       const d = ws.getDuration()
       if (d > 0) ws.seekTo(Math.max(0, Math.min(region.start / d, 1)))
+      // Find the original marker by id so we can log segmentId + risk.
+      const markers = callbacksRef.current.riskMarkers ?? []
+      const marker = markers.find((m) => `risk-${m.segmentId}` === region.id)
+      if (marker) callbacksRef.current.onRegionClick?.(marker, timeRef.current)
     })
 
     return () => {
@@ -119,6 +148,7 @@ export function useAudio(
     setReady(false)
     setIsPlaying(false)
     setCurrentTime(0)
+    timeRef.current = 0
 
     const blob = audioBlob ?? makeSilentWav(fallbackDuration)
     const newUrl = URL.createObjectURL(blob)
@@ -136,7 +166,7 @@ export function useAudio(
       })
       .catch((err) => {
         if (cancelled) return
-        onErrorRef.current?.(
+        callbacksRef.current.onError?.(
           `Audio failed to load: ${err instanceof Error ? err.message : String(err)}`,
         )
         if (currentUrlRef.current === newUrl) {
@@ -154,8 +184,6 @@ export function useAudio(
   }, [audioBlob, fallbackDuration])
 
   // Sync risk markers with the regions plugin.
-  // Re-runs whenever the source markers change OR when a new audio file becomes
-  // ready (regions are cleared on every load, so they must be re-added).
   const markers = options.riskMarkers
   useEffect(() => {
     const regions = regionsRef.current
@@ -178,15 +206,9 @@ export function useAudio(
         const label = m.risk === 'high' ? 'High-risk segment' : 'Medium-risk segment'
         region.element.title = `${label} (click to seek)`
         region.element.style.cursor = 'pointer'
-        // Keep risk regions visually subordinate to the cursor and progress.
         region.element.style.zIndex = '2'
         region.element.style.pointerEvents = 'auto'
       }
-    }
-
-    return () => {
-      // Don't clearRegions on cleanup — the next run does it. Clearing here
-      // would also fire during fast-refresh in dev with no replacement.
     }
   }, [markers, ready])
 

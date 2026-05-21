@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { exportEventLogAsCSV, exportEventLogAsJSON } from '../utils/exportEventLog'
+import type { LogEvent } from '../types'
 
 const SHORTCUTS: { keys: string[]; label: string }[] = [
   { keys: ['Space'], label: 'Play / pause' },
@@ -8,17 +10,31 @@ const SHORTCUTS: { keys: string[]; label: string }[] = [
   { keys: ['V'], label: 'Verify active segment' },
 ]
 
-export default function ShortcutLegend() {
+interface Props {
+  /** Returns the latest in-memory event log. Called only when the researcher
+   *  clicks an export button — never on render. */
+  getEvents: () => LogEvent[]
+  onExport: (kind: 'events_json' | 'events_csv', count: number) => void
+}
+
+export default function ShortcutLegend({ getEvents, onExport }: Props) {
   const [open, setOpen] = useState(false)
+
+  const handleExport = (kind: 'events_json' | 'events_csv') => {
+    const events = getEvents()
+    onExport(kind, events.length)
+    if (kind === 'events_json') exportEventLogAsJSON(events)
+    else exportEventLogAsCSV(events)
+  }
 
   return (
     <div className="fixed bottom-3 right-3 z-40">
       {open && (
-        <div className="mb-2 w-60 bg-white border border-border rounded-md shadow-lg p-3">
+        <div className="mb-2 w-64 bg-white border border-border rounded-md shadow-lg p-3">
           <p className="text-[10px] text-ink-faint uppercase tracking-[0.2em] mb-2">
             Keyboard shortcuts
           </p>
-          <ul className="space-y-1.5">
+          <ul className="space-y-1.5 mb-3">
             {SHORTCUTS.map((s) => (
               <li
                 key={s.label}
@@ -38,6 +54,31 @@ export default function ShortcutLegend() {
               </li>
             ))}
           </ul>
+
+          {/* Researcher-only event-log export. Tucked here rather than in the
+              main UI because it's not for the reviewer. */}
+          <div className="pt-2 border-t border-border">
+            <p className="text-[10px] text-ink-faint uppercase tracking-[0.2em] mb-1.5">
+              Researcher
+            </p>
+            <p className="text-[10px] text-ink-faint leading-snug mb-2">
+              Behavioural event log (session data for analysis).
+            </p>
+            <div className="flex gap-1">
+              <button
+                onClick={() => handleExport('events_json')}
+                className="text-[11px] font-mono px-2 py-0.5 border border-border rounded hover:border-border-strong text-ink-muted hover:text-ink transition-colors"
+              >
+                Events JSON
+              </button>
+              <button
+                onClick={() => handleExport('events_csv')}
+                className="text-[11px] font-mono px-2 py-0.5 border border-border rounded hover:border-border-strong text-ink-muted hover:text-ink transition-colors"
+              >
+                Events CSV
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

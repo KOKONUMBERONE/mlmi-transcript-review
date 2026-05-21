@@ -14,6 +14,7 @@ interface Props {
   reviewer: string
   audioFilename: string | null
   transcriptFilename: string | null
+  onExport?: (kind: string, count: number) => void
 }
 
 function formatAction(entry: HistoryEntry): React.ReactNode {
@@ -77,6 +78,7 @@ export default function HistorySidebar({
   reviewer,
   audioFilename,
   transcriptFilename,
+  onExport,
 }: Props) {
   const progress = totalSegments === 0 ? 0 : (verifiedCount / totalSegments) * 100
   const hasHistory = history.length > 0
@@ -131,12 +133,18 @@ export default function HistorySidebar({
             <ExportButton
               label="CSV"
               disabled={!hasHistory}
-              onClick={() => exportHistoryAsCSV(history)}
+              onClick={() => {
+                exportHistoryAsCSV(history)
+                onExport?.('audit_csv', history.length)
+              }}
             />
             <ExportButton
               label="JSON"
               disabled={!hasHistory}
-              onClick={() => exportHistoryAsJSON(history)}
+              onClick={() => {
+                exportHistoryAsJSON(history)
+                onExport?.('audit_json', history.length)
+              }}
             />
           </div>
           <div className="flex items-center gap-1.5">
@@ -148,11 +156,17 @@ export default function HistorySidebar({
             </span>
             <ExportButton
               label="TXT"
-              onClick={() => exportTranscriptText(exportArgs)}
+              onClick={() => {
+                exportTranscriptText(exportArgs)
+                onExport?.('transcript_txt', totalSegments)
+              }}
             />
             <ExportButton
               label="JSON"
-              onClick={() => exportTranscriptJson(exportArgs)}
+              onClick={() => {
+                exportTranscriptJson(exportArgs)
+                onExport?.('transcript_json', totalSegments)
+              }}
             />
           </div>
         </div>

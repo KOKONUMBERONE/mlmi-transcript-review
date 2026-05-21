@@ -11,6 +11,8 @@ interface Props {
   onSeek: (seconds: number) => void
   onWordClick: (segId: number, wordIdx: number, rect: DOMRect) => void
   onToggleVerify: (segId: number) => void
+  onFilterChange?: (filter: string) => void
+  onSortChange?: (sort: string) => void
 }
 
 const RISK_CHIP: Record<Risk, string> = {
@@ -47,9 +49,20 @@ export default function TranscriptView({
   onSeek,
   onWordClick,
   onToggleVerify,
+  onFilterChange,
+  onSortChange,
 }: Props) {
   const [filter, setFilter] = useState<RiskFilter>('all')
   const [sort, setSort] = useState<SortMode>('chrono')
+
+  const setFilterAndLog = (next: RiskFilter) => {
+    setFilter(next)
+    onFilterChange?.(next)
+  }
+  const setSortAndLog = (next: SortMode) => {
+    setSort(next)
+    onSortChange?.(next)
+  }
 
   // Active segment is always computed from the FULL transcript, so the
   // "currently playing" highlight tracks audio regardless of filter/sort.
@@ -118,7 +131,7 @@ export default function TranscriptView({
                 <span className="text-ink-faint uppercase tracking-widest text-[10px]">Show</span>
                 <select
                   value={filter}
-                  onChange={(e) => setFilter(e.target.value as RiskFilter)}
+                  onChange={(e) => setFilterAndLog(e.target.value as RiskFilter)}
                   className="text-[11px] border border-border rounded px-1.5 py-0.5 bg-white hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
                 >
                   <option value="all">All segments</option>
@@ -130,7 +143,7 @@ export default function TranscriptView({
                 <span className="text-ink-faint uppercase tracking-widest text-[10px]">Order</span>
                 <select
                   value={sort}
-                  onChange={(e) => setSort(e.target.value as SortMode)}
+                  onChange={(e) => setSortAndLog(e.target.value as SortMode)}
                   className="text-[11px] border border-border rounded px-1.5 py-0.5 bg-white hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
                 >
                   <option value="chrono">Chronological</option>
@@ -158,8 +171,8 @@ export default function TranscriptView({
               </span>
               <button
                 onClick={() => {
-                  setFilter('all')
-                  setSort('chrono')
+                  setFilterAndLog('all')
+                  setSortAndLog('chrono')
                 }}
                 className="text-[11px] text-ink-muted hover:text-ink underline decoration-dotted underline-offset-2"
               >
