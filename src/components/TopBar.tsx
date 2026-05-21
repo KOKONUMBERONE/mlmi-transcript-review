@@ -13,6 +13,7 @@ interface Props {
   onReviewerChange: (name: string) => void
   onUploadAudio: (file: File) => void
   onUploadTranscript: (file: File) => void
+  onSpeedChange?: (speed: number) => void
 }
 
 function formatTime(seconds: number): string {
@@ -41,6 +42,7 @@ export default function TopBar({
   onReviewerChange,
   onUploadAudio,
   onUploadTranscript,
+  onSpeedChange,
 }: Props) {
   const reviewerMissing = reviewer.trim() === ''
 
@@ -164,7 +166,11 @@ export default function TopBar({
           <span className="text-[10px] text-ink-faint uppercase tracking-widest">Speed</span>
           <select
             defaultValue="1"
-            onChange={(e) => audio.setRate(parseFloat(e.target.value))}
+            onChange={(e) => {
+              const v = parseFloat(e.target.value)
+              if (onSpeedChange) onSpeedChange(v)
+              else audio.setRate(v)
+            }}
             className="text-xs border border-border rounded px-2 py-1 bg-white text-ink hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
           >
             <option value="0.5">0.5×</option>
