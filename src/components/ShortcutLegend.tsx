@@ -11,13 +11,22 @@ const SHORTCUTS: { keys: string[]; label: string }[] = [
 ]
 
 interface Props {
-  /** Returns the latest in-memory event log. Called only when the researcher
-   *  clicks an export button — never on render. */
   getEvents: () => LogEvent[]
   onExport: (kind: 'events_json' | 'events_csv', count: number) => void
+  participantId: string
+  condition: string
+  onParticipantChange: (id: string) => void
+  onConditionChange: (condition: string) => void
 }
 
-export default function ShortcutLegend({ getEvents, onExport }: Props) {
+export default function ShortcutLegend({
+  getEvents,
+  onExport,
+  participantId,
+  condition,
+  onParticipantChange,
+  onConditionChange,
+}: Props) {
   const [open, setOpen] = useState(false)
 
   const handleExport = (kind: 'events_json' | 'events_csv') => {
@@ -55,12 +64,40 @@ export default function ShortcutLegend({ getEvents, onExport }: Props) {
             ))}
           </ul>
 
-          {/* Researcher-only event-log export. Tucked here rather than in the
-              main UI because it's not for the reviewer. */}
+          {/* Researcher-only controls. Not for the reviewer. */}
           <div className="pt-2 border-t border-border">
-            <p className="text-[10px] text-ink-faint uppercase tracking-[0.2em] mb-1.5">
+            <p className="text-[10px] text-ink-faint uppercase tracking-[0.2em] mb-2">
               Researcher
             </p>
+
+            {/* Study identity */}
+            <div className="space-y-1.5 mb-2">
+              <label className="flex items-center gap-2">
+                <span className="text-[10px] text-ink-faint w-16 shrink-0">
+                  Participant
+                </span>
+                <input
+                  type="text"
+                  value={participantId}
+                  onChange={(e) => onParticipantChange(e.target.value)}
+                  placeholder="e.g. P01"
+                  className="flex-1 font-mono text-[11px] border border-border rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-border-strong"
+                />
+              </label>
+              <label className="flex items-center gap-2">
+                <span className="text-[10px] text-ink-faint w-16 shrink-0">
+                  Condition
+                </span>
+                <input
+                  type="text"
+                  value={condition}
+                  onChange={(e) => onConditionChange(e.target.value)}
+                  placeholder="e.g. A_plain"
+                  className="flex-1 font-mono text-[11px] border border-border rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-border-strong"
+                />
+              </label>
+            </div>
+
             <p className="text-[10px] text-ink-faint leading-snug mb-2">
               Behavioural event log (session data for analysis).
             </p>

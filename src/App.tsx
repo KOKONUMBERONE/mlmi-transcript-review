@@ -42,6 +42,8 @@ export default function App() {
   const availableModels = useMemo(() => modelsOf(transcript), [transcript])
   const [model, setModel] = useState<ModelName>(availableModels[0])
   const [reviewer, setReviewer] = useState<string>('')
+  const [participantId, setParticipantId] = useState<string>('')
+  const [condition, setCondition] = useState<string>('')
 
   const [edits, setEdits] = useState<Record<string, EditState>>({})
   const [verified, setVerified] = useState<Record<number, boolean>>({})
@@ -56,8 +58,8 @@ export default function App() {
   // Mirror reviewer/model into the event-log context so every event carries
   // the latest values without us threading them through every call site.
   useEffect(() => {
-    events.setContext({ reviewer, model })
-  }, [reviewer, model, events])
+    events.setContext({ reviewer, model, participantId, condition })
+  }, [reviewer, model, participantId, condition, events])
 
   // Emit session_start exactly once, after the first transcript is in place.
   const sessionStartedRef = useRef(false)
@@ -456,6 +458,10 @@ export default function App() {
         onExport={(kind, count) =>
           events.log('export', { export_kind: kind, segment_count: count })
         }
+        participantId={participantId}
+        condition={condition}
+        onParticipantChange={setParticipantId}
+        onConditionChange={setCondition}
       />
 
       {popup && popupSegment && (

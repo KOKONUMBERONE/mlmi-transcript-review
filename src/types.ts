@@ -69,6 +69,8 @@ export interface LogEvent {
   type: EventType
   reviewer: string
   model: string
+  participant_id: string // study participant code, e.g. "P01" — "demo" if unset
+  condition: string      // study condition code, e.g. "A_plain" — "demo" if unset
 
   // Event-specific fields (all optional, flat for pandas):
   audio_position?: number
