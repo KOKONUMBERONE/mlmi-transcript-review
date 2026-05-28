@@ -5,15 +5,28 @@ export type ModelName =
   | 'Model B (wav2vec2)'
   | 'Model C (Consensus)'
 
+// `risk` is the *uncertainty* dimension (confidence-based, upstream).
+// The three `predicted_*` fields are the *importance* dimension and the
+// 2x2 combination, written by the local FastAPI service in /predict.
 export interface Word {
   text: string
   risk: Risk
   alternatives?: string[]
+  predicted_importance?: Risk
+  predicted_proba?: { high: number; med: number; low: number }
+  combined_risk?: Risk
 }
 
+// Which signal the transcript view colours words by.
+export type RiskDimension = 'uncertainty' | 'importance' | 'combined'
+
+// `speaker` is open-ended: pipelines that skip diarization emit a single
+// generic label (e.g. "Speaker"), pipelines that do diarization can emit
+// arbitrary names. The UI maps known labels (Officer/Witness) to themed
+// colours and falls back to a neutral colour for everything else.
 export interface Segment {
   id: number
-  speaker: 'Officer' | 'Witness'
+  speaker: string
   start: number
   end: number
   paraRisk: Risk

@@ -1,0 +1,39 @@
+import type { ModelName, Risk, RiskDimension, Segment } from '../types'
+
+const RANK: Record<Risk, number> = { low: 0, med: 1, high: 2 }
+const BY_RANK: Risk[] = ['low', 'med', 'high']
+
+/**
+ * The upstream `segment.paraRisk` is computed from the *uncertainty* signal
+ * only. When the reviewer switches to the importance or combined view, the
+ * left-bar colour, the "HIGH RISK" badge, the per-segment filter, the sort
+ * order, and the chip counts in the header all need to follow that signal.
+ *
+ * We re-aggregate from per-word risk = max of the selected dimension's risk
+ * across the segment's words (under the currently selected ASR model). The
+ * importance/combined fields may not exist yet (prediction service down or
+ * pending) — in that case the per-word fallback in Word.tsx kicks in and we
+ * end up equivalent to the uncertainty signal, which is the safe default.
+ */
+export function segmentRiskFor(
+  segment: Segment,
+  model: ModelName,
+  dimension: RiskDimension,
+): Risk {
+  // Fall back to upstream paraRisk for uncertainty when the segment hasn't
+  // been re-emitted by the prediction service yet — preserves existing
+  // behaviour exactly when nothing else is available.
+  if (dimension === 'uncertainty') return segment.paraRisk
+
+  const words = segment.words[model] ?? []
+  let maxRank = RANK.low
+  for (const w of words) {
+    const r: Risk =
+      dimension === 'importance'
+        ? w.predicted_importance ?? w.risk
+        : w.combined_risk ?? w.risk
+    if (RANK[r] > maxRank) maxRank = RANK[r]
+    if (maxRank === RANK.high) return 'high' // early exit
+  }
+  return BY_RANK[maxRank]
+}

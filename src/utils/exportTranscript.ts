@@ -111,7 +111,7 @@ interface ExportedWord {
 
 interface ExportedSegment {
   id: number
-  speaker: 'Officer' | 'Witness'
+  speaker: string
   start: number
   end: number
   paraRisk: 'high' | 'med' | 'low'

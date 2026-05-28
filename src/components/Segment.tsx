@@ -1,4 +1,5 @@
-import type { EditState, ModelName, Segment as SegmentType } from '../types'
+import type { EditState, ModelName, RiskDimension, Segment as SegmentType } from '../types'
+import { segmentRiskFor } from '../lib/segmentRisk'
 import Word from './Word'
 
 interface Props {
@@ -7,6 +8,7 @@ interface Props {
   active: boolean
   verified: boolean
   edits: Record<string, EditState>
+  dimension: RiskDimension
   onSeek: (seconds: number) => void
   onWordClick: (segId: number, wordIdx: number, rect: DOMRect) => void
   onToggleVerify: (segId: number) => void
@@ -18,16 +20,19 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-const RISK_BAR: Record<SegmentType['paraRisk'], string> = {
+const RISK_BAR: Record<'high' | 'med' | 'low', string> = {
   high: 'bg-risk-high',
   med: 'bg-risk-med',
   low: 'bg-border',
 }
 
-const SPEAKER_COLOR: Record<SegmentType['speaker'], string> = {
+// Known speaker labels get themed colours; anything else (e.g. "Speaker"
+// from a non-diarized Whisper pipeline) falls through to neutral ink.
+const SPEAKER_COLOR: Record<string, string> = {
   Officer: 'text-speaker-officer',
   Witness: 'text-speaker-witness',
 }
+const SPEAKER_COLOR_DEFAULT = 'text-ink'
 
 export default function Segment({
   segment,
@@ -35,13 +40,18 @@ export default function Segment({
   active,
   verified,
   edits,
+  dimension,
   onSeek,
   onWordClick,
   onToggleVerify,
 }: Props) {
   const words = segment.words[model] ?? []
 
-  const bar = verified ? 'bg-verified-bar' : RISK_BAR[segment.paraRisk]
+  // Aggregate the segment-level risk from words under the active dimension,
+  // so the left bar + "HIGH RISK" badge follow the toolbar Risk toggle.
+  const effectiveRisk = segmentRiskFor(segment, model, dimension)
+
+  const bar = verified ? 'bg-verified-bar' : RISK_BAR[effectiveRisk]
 
   const containerCls = verified
     ? 'bg-verified-bg ring-1 ring-verified-bar/40'
@@ -59,7 +69,9 @@ export default function Segment({
       <div className="flex-1 min-w-0">
         <header className="flex items-center gap-3 mb-1.5">
           <span
-            className={`text-[11px] font-semibold uppercase tracking-[0.15em] ${SPEAKER_COLOR[segment.speaker]}`}
+            className={`text-[11px] font-semibold uppercase tracking-[0.15em] ${
+              SPEAKER_COLOR[segment.speaker] ?? SPEAKER_COLOR_DEFAULT
+            }`}
           >
             {segment.speaker}
           </span>
@@ -67,7 +79,7 @@ export default function Segment({
             {formatTime(segment.start)}
           </span>
 
-          {segment.paraRisk === 'high' && !verified && (
+          {effectiveRisk === 'high' && !verified && (
             <span className="font-mono text-[10px] text-risk-high uppercase tracking-widest px-1.5 py-0.5 bg-risk-high-bg rounded-sm">
               High risk
             </span>
@@ -113,6 +125,7 @@ export default function Segment({
                   displayText={displayText}
                   edited={edit !== undefined && !edit.deleted}
                   deleted={edit?.deleted === true}
+                  dimension={dimension}
                   onClick={(rect) => onWordClick(segment.id, i, rect)}
                 />
                 {i < words.length - 1 ? ' ' : ''}

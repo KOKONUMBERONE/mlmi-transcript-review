@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { EditState, ModelName, Risk, Segment as SegmentType, Transcript } from '../types'
+import type { EditState, ModelName, Risk, RiskDimension, Segment as SegmentType, Transcript } from '../types'
+import { segmentRiskFor } from '../lib/segmentRisk'
 import Segment from './Segment'
 
 interface Props {
@@ -8,6 +9,7 @@ interface Props {
   currentTime: number
   edits: Record<string, EditState>
   verified: Record<number, boolean>
+  dimension: RiskDimension
   onSeek: (seconds: number) => void
   onWordClick: (segId: number, wordIdx: number, rect: DOMRect) => void
   onToggleVerify: (segId: number) => void
@@ -26,16 +28,24 @@ type SortMode = 'chrono' | 'risk'
 
 const RISK_RANK: Record<Risk, number> = { high: 0, med: 1, low: 2 }
 
-function applyFilter(segments: SegmentType[], filter: RiskFilter): SegmentType[] {
+function applyFilter(
+  segments: SegmentType[],
+  filter: RiskFilter,
+  riskOf: (s: SegmentType) => Risk,
+): SegmentType[] {
   if (filter === 'all') return segments
-  if (filter === 'high') return segments.filter((s) => s.paraRisk === 'high')
-  return segments.filter((s) => s.paraRisk !== 'low')
+  if (filter === 'high') return segments.filter((s) => riskOf(s) === 'high')
+  return segments.filter((s) => riskOf(s) !== 'low')
 }
 
-function applySort(segments: SegmentType[], mode: SortMode): SegmentType[] {
+function applySort(
+  segments: SegmentType[],
+  mode: SortMode,
+  riskOf: (s: SegmentType) => Risk,
+): SegmentType[] {
   if (mode === 'chrono') return segments
   return [...segments].sort((a, b) => {
-    const r = RISK_RANK[a.paraRisk] - RISK_RANK[b.paraRisk]
+    const r = RISK_RANK[riskOf(a)] - RISK_RANK[riskOf(b)]
     return r !== 0 ? r : a.start - b.start
   })
 }
@@ -46,6 +56,7 @@ export default function TranscriptView({
   currentTime,
   edits,
   verified,
+  dimension,
   onSeek,
   onWordClick,
   onToggleVerify,
@@ -73,9 +84,16 @@ export default function TranscriptView({
     return seg?.id ?? null
   }, [transcript, currentTime])
 
+  // Capture the active dimension's risk lookup so filter, sort and counts
+  // all agree with the segment-level bar shown on the left.
+  const riskOf = useMemo(
+    () => (s: SegmentType) => segmentRiskFor(s, model, dimension),
+    [model, dimension],
+  )
+
   const displaySegments = useMemo(
-    () => applySort(applyFilter(transcript.segments, filter), sort),
-    [transcript, filter, sort],
+    () => applySort(applyFilter(transcript.segments, filter, riskOf), sort, riskOf),
+    [transcript, filter, sort, riskOf],
   )
 
   const activeRef = useRef<HTMLDivElement>(null)
@@ -90,12 +108,12 @@ export default function TranscriptView({
     () =>
       transcript.segments.reduce(
         (acc, s) => {
-          acc[s.paraRisk] += 1
+          acc[riskOf(s)] += 1
           return acc
         },
         { high: 0, med: 0, low: 0 } as Record<Risk, number>,
       ),
-    [transcript],
+    [transcript, riskOf],
   )
 
   const isDefaultView = filter === 'all' && sort === 'chrono'
@@ -196,6 +214,7 @@ export default function TranscriptView({
                   active={segment.id === activeId}
                   verified={!!verified[segment.id]}
                   edits={edits}
+                  dimension={dimension}
                   onSeek={onSeek}
                   onWordClick={onWordClick}
                   onToggleVerify={onToggleVerify}

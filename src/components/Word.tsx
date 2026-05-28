@@ -1,23 +1,42 @@
-import type { Word as WordType } from '../types'
+import type { Risk, RiskDimension, Word as WordType } from '../types'
 
 interface Props {
   word: WordType
   displayText: string
   edited: boolean
   deleted: boolean
+  dimension: RiskDimension
   onClick: (rect: DOMRect) => void
 }
 
-export default function Word({ word, displayText, edited, deleted, onClick }: Props) {
+// Pick the risk value to colour by, based on the active display dimension.
+// Falls back to the upstream `risk` (uncertainty) if the prediction service
+// hasn't run yet — so the UI stays usable in offline / pre-fetch state.
+function riskFor(word: WordType, dimension: RiskDimension): Risk {
+  if (dimension === 'uncertainty') return word.risk
+  if (dimension === 'importance') return word.predicted_importance ?? word.risk
+  return word.combined_risk ?? word.risk
+}
+
+export default function Word({
+  word,
+  displayText,
+  edited,
+  deleted,
+  dimension,
+  onClick,
+}: Props) {
   if (!displayText) return null
+
+  const activeRisk = riskFor(word, dimension)
 
   const base =
     'relative inline-block rounded-sm px-0.5 cursor-pointer transition-colors hover:bg-surface-subtle'
 
   const risk =
-    word.risk === 'high'
+    activeRisk === 'high'
       ? 'bg-risk-high-bg text-risk-high underline decoration-risk-high decoration-dotted underline-offset-[3px] hover:bg-risk-high/15'
-      : word.risk === 'med'
+      : activeRisk === 'med'
       ? 'bg-risk-med-bg text-risk-med underline decoration-risk-med decoration-dotted underline-offset-[3px] hover:bg-risk-med/15'
       : ''
 
@@ -30,12 +49,15 @@ export default function Word({ word, displayText, edited, deleted, onClick }: Pr
     ? 'line-through decoration-2 text-ink-faint/70 bg-surface-muted ring-1 ring-border'
     : ''
 
+  // Tooltip names the dimension so reviewers know *why* a word is highlighted.
+  const dimLabel =
+    dimension === 'uncertainty' ? 'uncertainty' : dimension === 'importance' ? 'importance' : 'combined'
   const title = deleted
     ? `Marked deleted (original: ${word.text}) — click to restore`
     : edited
     ? `Edited (original: ${word.text})`
-    : word.risk !== 'low'
-    ? `${word.risk === 'high' ? 'High' : 'Medium'}-risk word — click to inspect`
+    : activeRisk !== 'low'
+    ? `${activeRisk === 'high' ? 'High' : 'Medium'} ${dimLabel} — click to inspect`
     : 'Click to inspect'
 
   return (

@@ -37,3 +37,5 @@ coverage/
 # Claude Code working files (project-local, not for the repo)
 .claude/
 CLAUDE_CODE_PROMPTS.md
+.vercel
+server/__pycache__/
