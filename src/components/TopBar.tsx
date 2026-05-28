@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import type { ModelName } from '../types'
+import type { ModelName, RiskDimension } from '../types'
 import type { AudioController } from '../state/useAudio'
 
 interface Props {
@@ -14,6 +14,15 @@ interface Props {
   onUploadAudio: (file: File) => void
   onUploadTranscript: (file: File) => void
   onSpeedChange?: (speed: number) => void
+  recording: boolean
+  recordingElapsedMs: number
+  recordingSupported: boolean
+  onToggleRecord: () => void
+  recordingDownloadUrl: string | null
+  recordingDownloadName: string | null
+  dimension: RiskDimension
+  onDimensionChange: (d: RiskDimension) => void
+  predicting: boolean
 }
 
 function formatTime(seconds: number): string {
@@ -31,6 +40,40 @@ function UploadIcon() {
   )
 }
 
+function MicIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.4">
+      <rect x="3.5" y="1" width="3" height="5" rx="1.5" />
+      <path d="M2 5.5a3 3 0 0 0 6 0" strokeLinecap="round" />
+      <path d="M5 8.5V9.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function StopIcon() {
+  return (
+    <svg width="9" height="9" viewBox="0 0 9 9" fill="currentColor">
+      <rect x="1" y="1" width="7" height="7" rx="0.5" />
+    </svg>
+  )
+}
+
+function DownloadIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M5 1.5V7M5 7 2.5 4.5M5 7 7.5 4.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M1.5 8.5h7" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function formatElapsed(ms: number): string {
+  const total = Math.floor(ms / 1000)
+  const m = Math.floor(total / 60)
+  const s = total % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
 export default function TopBar({
   model,
   availableModels,
@@ -43,6 +86,15 @@ export default function TopBar({
   onUploadAudio,
   onUploadTranscript,
   onSpeedChange,
+  recording,
+  recordingElapsedMs,
+  recordingSupported,
+  onToggleRecord,
+  recordingDownloadUrl,
+  recordingDownloadName,
+  dimension,
+  onDimensionChange,
+  predicting,
 }: Props) {
   const reviewerMissing = reviewer.trim() === ''
 
@@ -106,6 +158,54 @@ export default function TopBar({
           <UploadIcon />
           Transcript
         </button>
+
+        <button
+          onClick={onToggleRecord}
+          disabled={!recordingSupported}
+          className={[
+            'flex items-center gap-1 text-[11px] px-2 py-1 rounded border transition-colors',
+            recording
+              ? 'border-risk-high/40 text-risk-high bg-risk-high-bg hover:border-risk-high/60'
+              : 'border-border text-ink-muted hover:text-ink hover:border-border-strong disabled:opacity-40 disabled:hover:text-ink-muted disabled:hover:border-border',
+          ].join(' ')}
+          title={
+            recordingSupported
+              ? recording
+                ? 'Stop recording and load it as the current audio'
+                : 'Record audio from your microphone'
+              : 'Recording is not supported in this browser'
+          }
+        >
+          {recording ? (
+            <>
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-risk-high animate-pulse"
+                aria-hidden
+              />
+              <StopIcon />
+              <span className="font-mono tabular-nums">
+                {formatElapsed(recordingElapsedMs)}
+              </span>
+            </>
+          ) : (
+            <>
+              <MicIcon />
+              Record
+            </>
+          )}
+        </button>
+
+        {recordingDownloadUrl && recordingDownloadName && !recording && (
+          <a
+            href={recordingDownloadUrl}
+            download={recordingDownloadName}
+            className="flex items-center gap-1 text-[11px] text-ink-muted hover:text-ink px-2 py-1 rounded border border-border hover:border-border-strong transition-colors"
+            title="Save the recorded audio to disk (for external transcription)"
+          >
+            <DownloadIcon />
+            Save
+          </a>
+        )}
       </div>
 
       {/* Reviewer identity */}
@@ -193,6 +293,43 @@ export default function TopBar({
             ))}
           </select>
         </label>
+
+        <label
+          className="flex items-center gap-1.5"
+          title="Which risk signal drives the word highlights"
+        >
+          <span className="text-[10px] text-ink-faint uppercase tracking-widest">Risk</span>
+          <select
+            value={dimension}
+            onChange={(e) => onDimensionChange(e.target.value as RiskDimension)}
+            className="text-xs border border-border rounded px-2 py-1 bg-white text-ink hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
+          >
+            <option value="combined">Combined (2×2)</option>
+            <option value="uncertainty">Uncertainty</option>
+            <option value="importance">Importance</option>
+          </select>
+        </label>
+
+        {predicting && (
+          <span
+            className="flex items-center gap-1.5 text-[10px] text-ink-muted uppercase tracking-widest"
+            aria-live="polite"
+          >
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 10 10"
+              className="animate-spin"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            >
+              <circle cx="5" cy="5" r="3.5" strokeOpacity="0.25" />
+              <path d="M5 1.5a3.5 3.5 0 0 1 3.5 3.5" strokeLinecap="round" />
+            </svg>
+            scoring…
+          </span>
+        )}
       </div>
     </header>
   )

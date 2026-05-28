@@ -9,11 +9,15 @@ import { useAudio } from './state/useAudio'
 import { useKeyboardShortcuts } from './state/useKeyboardShortcuts'
 import { useFileDrop } from './state/useFileDrop'
 import { useEventLog } from './state/useEventLog'
+import { extensionForMime, useRecorder } from './state/useRecorder'
 import { validateTranscript } from './utils/validateTranscript'
+import { predictRisks, PredictError } from './lib/predictApi'
+import { segmentRiskFor } from './lib/segmentRisk'
 import type {
   EditState,
   HistoryEntry,
   ModelName,
+  RiskDimension,
   SeekTrigger,
   Transcript,
 } from './types'
@@ -37,7 +41,11 @@ function modelsOf(transcript: Transcript): ModelName[] {
 export default function App() {
   const [transcript, setTranscript] = useState<Transcript>(defaultTranscript)
   const [transcriptFilename, setTranscriptFilename] = useState<string | null>(null)
-  const [audioFile, setAudioFile] = useState<File | null>(null)
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
+  const [audioFilename, setAudioFilename] = useState<string | null>(null)
+  // Object URL for the "Download recording" affordance. Owned here so we can
+  // revoke it cleanly when a new recording arrives or the file changes.
+  const [recordingDownloadUrl, setRecordingDownloadUrl] = useState<string | null>(null)
 
   const availableModels = useMemo(() => modelsOf(transcript), [transcript])
   const [model, setModel] = useState<ModelName>(availableModels[0])
@@ -51,6 +59,11 @@ export default function App() {
   const [popup, setPopup] = useState<PopupAnchor | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [speed, setSpeed] = useState<number>(1)
+
+  // Which risk dimension drives word colouring. Default to the combined
+  // signal — that's the one the 2x2 policy is designed for.
+  const [dimension, setDimension] = useState<RiskDimension>('combined')
+  const [predicting, setPredicting] = useState<boolean>(false)
 
   // ---- Behavioural event log (ref-backed, no re-renders on log) ----
   const events = useEventLog()
@@ -74,18 +87,20 @@ export default function App() {
   }, [events, transcript, transcriptFilename])
 
   // ---- Audio with logging hooks ----
+  // Waveform markers reflect the *active* risk dimension, so toggling the
+  // toolbar switch repaints the audio strip too.
   const riskMarkers = useMemo(
     () =>
       transcript.segments.map((s) => ({
         segmentId: s.id,
         start: s.start,
         end: s.end,
-        risk: s.paraRisk,
+        risk: segmentRiskFor(s, model, dimension),
       })),
-    [transcript],
+    [transcript, model, dimension],
   )
 
-  const audio = useAudio(audioFile, transcript.audioDuration, {
+  const audio = useAudio(audioBlob, transcript.audioDuration, {
     onError: (msg) => setErrorMsg(msg),
     riskMarkers,
     onPlay: (position) => events.log('play', { audio_position: position }),
@@ -316,11 +331,48 @@ export default function App() {
   const handleAudioUpload = useCallback(
     (file: File) => {
       setErrorMsg(null)
-      setAudioFile(file)
+      setAudioBlob(file)
+      setAudioFilename(file.name)
+      setRecordingDownloadUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev)
+        return null
+      })
       events.log('audio_load', { audio_filename: file.name })
     },
     [events],
   )
+
+  const recorder = useRecorder({ onError: (msg) => setErrorMsg(msg) })
+
+  const handleRecordToggle = useCallback(async () => {
+    if (recorder.isRecording) {
+      const result = await recorder.stop()
+      if (!result) return
+      const { blob, mimeType } = result
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+      const ext = extensionForMime(mimeType)
+      const name = `recording-${ts}.${ext}`
+      setErrorMsg(null)
+      setAudioBlob(blob)
+      setAudioFilename(name)
+      setRecordingDownloadUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev)
+        return URL.createObjectURL(blob)
+      })
+      events.log('audio_load', { audio_filename: name })
+    } else {
+      setErrorMsg(null)
+      await recorder.start()
+    }
+  }, [recorder, events])
+
+  // Revoke the recording download URL on unmount.
+  useEffect(() => {
+    return () => {
+      if (recordingDownloadUrl) URL.revokeObjectURL(recordingDownloadUrl)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleTranscriptUpload = useCallback(
     async (file: File) => {
@@ -342,7 +394,8 @@ export default function App() {
         setTranscript(result.transcript)
         setTranscriptFilename(file.name)
         const next = modelsOf(result.transcript)
-        setModel(next[0])
+        const pickedModel = next[0]
+        setModel(pickedModel)
         setEdits({})
         setVerified({})
         setHistory([])
@@ -352,6 +405,23 @@ export default function App() {
           segment_count: result.transcript.segments.length,
           audio_duration: result.transcript.audioDuration,
         })
+
+        // Fire off importance prediction. If the local service is down we
+        // surface a clear error but leave the unannotated transcript loaded
+        // so the reviewer can still work in `uncertainty` view.
+        setPredicting(true)
+        try {
+          const annotated = await predictRisks(result.transcript, pickedModel)
+          setTranscript(annotated)
+        } catch (err) {
+          const msg =
+            err instanceof PredictError
+              ? err.message
+              : `Prediction failed: ${(err as Error).message}`
+          setErrorMsg(msg)
+        } finally {
+          setPredicting(false)
+        }
       } catch (e) {
         setErrorMsg(`${file.name}: ${(e as Error).message}`)
       }
@@ -400,13 +470,24 @@ export default function App() {
         availableModels={availableModels}
         onModelChange={handleModelChange}
         audio={audio}
-        audioFilename={audioFile?.name ?? null}
+        audioFilename={audioFilename}
         transcriptFilename={transcriptFilename}
         reviewer={reviewer}
         onReviewerChange={setReviewer}
         onUploadAudio={handleAudioUpload}
         onUploadTranscript={handleTranscriptUpload}
         onSpeedChange={handleSpeedChange}
+        recording={recorder.isRecording}
+        recordingElapsedMs={recorder.elapsedMs}
+        recordingSupported={recorder.supported}
+        onToggleRecord={handleRecordToggle}
+        recordingDownloadUrl={recordingDownloadUrl}
+        recordingDownloadName={
+          recordingDownloadUrl && audioFilename ? audioFilename : null
+        }
+        dimension={dimension}
+        onDimensionChange={setDimension}
+        predicting={predicting}
       />
 
       {errorMsg && (
@@ -432,6 +513,7 @@ export default function App() {
           currentTime={audio.currentTime}
           edits={edits}
           verified={verified}
+          dimension={dimension}
           onSeek={(t) => seekWithLog(t, 'segment')}
           onWordClick={openPopup}
           onToggleVerify={toggleVerify}
@@ -447,7 +529,7 @@ export default function App() {
           model={model}
           edits={edits}
           reviewer={reviewer}
-          audioFilename={audioFile?.name ?? null}
+          audioFilename={audioFilename}
           transcriptFilename={transcriptFilename}
           onExport={wrappedAuditExport}
         />

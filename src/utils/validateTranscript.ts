@@ -5,7 +5,6 @@ export type ValidationResult =
   | { ok: false; error: string }
 
 const RISKS = new Set(['high', 'med', 'low'])
-const SPEAKERS = new Set(['Officer', 'Witness'])
 
 function fail(error: string): ValidationResult {
   return { ok: false, error }
@@ -45,8 +44,10 @@ export function validateTranscript(value: unknown): ValidationResult {
     }
     seenIds.add(s.id as number)
 
-    if (typeof s.speaker !== 'string' || !SPEAKERS.has(s.speaker)) {
-      return fail(`${path}.speaker must be 'Officer' or 'Witness'.`)
+    // `speaker` can be any non-empty string — Whisper-only pipelines emit
+    // a generic "Speaker", diarized pipelines emit per-turn names.
+    if (typeof s.speaker !== 'string' || s.speaker.trim() === '') {
+      return fail(`${path}.speaker must be a non-empty string.`)
     }
     if (!isFiniteNumber(s.start) || !isFiniteNumber(s.end)) {
       return fail(`${path}.start and ${path}.end must be finite numbers.`)
