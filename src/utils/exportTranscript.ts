@@ -1,4 +1,4 @@
-import type { EditState, ModelName, Transcript } from '../types'
+import type { EditState, HistoryEntry, ModelName, Transcript } from '../types'
 
 interface ExportArgs {
   transcript: Transcript
@@ -8,6 +8,10 @@ interface ExportArgs {
   reviewer: string
   audioFilename: string | null
   transcriptFilename: string | null
+}
+
+interface ReportArgs extends ExportArgs {
+  history: HistoryEntry[]
 }
 
 function downloadBlob(filename: string, content: string, mime: string) {
@@ -175,4 +179,264 @@ export function exportTranscriptJson(args: ExportArgs): void {
     JSON.stringify(payload, null, 2),
     'application/json',
   )
+}
+
+// --------------------------------------------------------------------------
+// Human-readable single-file HTML report.
+//
+// One self-contained .html (all CSS/JS inlined, no external deps) intended for
+// non-technical readers. It bundles the two deliverables the reviewer's
+// supervisor asked for into a single file:
+//   1. the full, up-to-date transcript (with a "clean view <-> show changes"
+//      toggle, styled like familiar word-processor tracked changes), and
+//   2. a chronological change log — what was changed, when, by whom, and why,
+//      from the start of the session to now.
+// Open in any browser; print to PDF from there if a static copy is needed.
+// --------------------------------------------------------------------------
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+const KIND_LABEL: Record<HistoryEntry['kind'], string> = {
+  edit: 'Edited',
+  delete: 'Removed',
+  verify: 'Verified',
+  unverify: 'Un-verified',
+}
+
+function changeCell(entry: HistoryEntry): string {
+  const from = escapeHtml(entry.from || '∅')
+  const to = entry.to ? escapeHtml(entry.to) : ''
+  switch (entry.kind) {
+    case 'edit':
+      return `<span class="old">${from}</span> <span class="arrow">→</span> <span class="new">${to}</span>`
+    case 'delete':
+      return `<span class="old">${from}</span> <span class="arrow">→</span> <span class="removed">(removed)</span>`
+    case 'verify':
+      return '<span class="verified">Marked segment as verified</span>'
+    default:
+      return '<span class="unverified">Marked segment as not verified</span>'
+  }
+}
+
+export function exportTranscriptReportHtml(args: ReportArgs): void {
+  downloadBlob(
+    `transcript-report-${fileStem(args)}-${safeFsStamp()}.html`,
+    buildTranscriptReportHtml(args),
+    'text/html;charset=utf-8',
+  )
+}
+
+// Pure builder (no DOM side-effects) so the markup can be unit-tested.
+export function buildTranscriptReportHtml(args: ReportArgs): string {
+  const { transcript, model, edits, verified, reviewer, history } = args
+  const totalSegments = transcript.segments.length
+  const verifiedN = verifiedCount(verified)
+  const editCount = Object.keys(edits).length
+  const deletionCount = Object.values(edits).filter((e) => e.deleted).length
+
+  // Look-up tables so the change log can show where each change happened.
+  const segById = new Map(transcript.segments.map((s) => [s.id, s]))
+
+  // ---- Transcript body (edited words carry both old + new for the toggle) ----
+  const segmentsHtml = transcript.segments
+    .map((seg) => {
+      const words = seg.words[model] ?? []
+      const wordsHtml = words
+        .map((w, i) => {
+          const edit = edits[`${seg.id}-${i}`]
+          const original = escapeHtml(w.text)
+          if (edit?.deleted) {
+            return `<span class="w deleted"><span class="old">${original}</span></span>`
+          }
+          if (edit && edit.text !== w.text) {
+            return `<span class="w edited"><span class="old">${original}</span><span class="new">${escapeHtml(edit.text)}</span></span>`
+          }
+          return `<span class="w">${original}</span>`
+        })
+        .join(' ')
+      const verifiedTag = verified[seg.id]
+        ? '<span class="seg-verified">✓ verified</span>'
+        : ''
+      return `<div class="seg">
+        <div class="seg-head"><span class="seg-time">[${formatTime(seg.start)}]</span> <span class="seg-speaker">${escapeHtml(seg.speaker.toUpperCase())}</span>${verifiedTag}</div>
+        <div class="seg-body">${wordsHtml}</div>
+      </div>`
+    })
+    .join('\n')
+
+  // ---- Change log (chronological: oldest first) ----
+  const chronological = [...history].reverse()
+  const changeRows = chronological
+    .map((entry, idx) => {
+      const seg = segById.get(entry.segmentId)
+      const loc = seg
+        ? `[${formatTime(seg.start)}] ${escapeHtml(seg.speaker.toUpperCase())}`
+        : `segment ${entry.segmentId}`
+      const reason = entry.reason ? escapeHtml(entry.reason) : '<span class="muted">—</span>'
+      return `<tr>
+        <td class="num">${idx + 1}</td>
+        <td class="time">${escapeHtml(entry.timestamp)}</td>
+        <td>${escapeHtml(entry.reviewer)}</td>
+        <td class="loc">${loc}</td>
+        <td><span class="kind kind-${entry.kind}">${KIND_LABEL[entry.kind]}</span></td>
+        <td class="change">${changeCell(entry)}</td>
+        <td class="reason">${reason}</td>
+      </tr>`
+    })
+    .join('\n')
+
+  const changeLog = chronological.length
+    ? `<table class="changelog">
+        <thead><tr>
+          <th>#</th><th>When</th><th>Reviewer</th><th>Location</th><th>Action</th><th>Change</th><th>Reason</th>
+        </tr></thead>
+        <tbody>${changeRows}</tbody>
+      </table>`
+    : '<p class="empty">No changes were made — this is the original transcript as produced by the model.</p>'
+
+  const reviewerName = escapeHtml(reviewer.trim() || 'Unknown reviewer')
+  const caseName = escapeHtml(args.audioFilename ?? 'interview_2024-03-14_case447.wav')
+  const sourceLine = args.transcriptFilename
+    ? `<div><dt>Source file</dt><dd>${escapeHtml(args.transcriptFilename)}</dd></div>`
+    : ''
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reviewed transcript — ${caseName}</title>
+<style>
+  :root {
+    --ink: #1a1a1a; --muted: #6b7280; --faint: #9ca3af;
+    --line: #e5e7eb; --bg: #f8f9fa; --accent: #2563eb;
+    --add: #15803d; --del: #b91c1c; --verified: #047857;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink); line-height: 1.6; margin: 0; background: var(--bg);
+  }
+  .page { max-width: 820px; margin: 0 auto; padding: 40px 32px 80px; background: #fff; min-height: 100vh; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 40px 0 12px; padding-bottom: 6px; border-bottom: 2px solid var(--ink); }
+  .subtitle { color: var(--muted); font-size: 13px; margin: 0 0 24px; }
+
+  .summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 32px;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px; font-size: 13px; }
+  .summary dt { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+  .summary dd { margin: 0 0 8px; font-weight: 600; }
+
+  .legend { font-size: 12px; color: var(--muted); margin: 12px 0 0; display: flex; gap: 18px; flex-wrap: wrap; align-items: center; }
+  .legend .old { text-decoration: line-through; color: var(--del); }
+  .legend .new { color: var(--add); font-weight: 600; }
+
+  .toolbar { position: sticky; top: 0; background: rgba(255,255,255,.95); backdrop-filter: blur(4px);
+    padding: 10px 0; margin: 8px 0 0; border-bottom: 1px solid var(--line); z-index: 5; display: flex; align-items: center; gap: 12px; }
+  .toolbar button { font: inherit; font-size: 13px; padding: 6px 14px; border: 1px solid var(--line);
+    background: #fff; border-radius: 6px; cursor: pointer; }
+  .toolbar button.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .toolbar .hint { font-size: 12px; color: var(--faint); }
+
+  .seg { margin: 0 0 16px; }
+  .seg-head { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+  .seg-time { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--faint); }
+  .seg-speaker { font-weight: 700; color: var(--ink); letter-spacing: .03em; }
+  .seg-verified { color: var(--verified); font-weight: 600; margin-left: 8px; }
+  .seg-body { font-size: 15px; }
+
+  /* Edited / deleted word rendering, toggled by body.show-changes */
+  .w.edited .old, .w.deleted .old { display: none; }
+  .w.edited .new { border-bottom: 1.5px dotted var(--accent); }
+  body.show-changes .w.edited .old { display: inline; text-decoration: line-through; color: var(--del); margin-right: 3px; }
+  body.show-changes .w.edited .new { color: var(--add); font-weight: 600; border-bottom: none; }
+  body.show-changes .w.deleted { display: inline; }
+  body.show-changes .w.deleted .old { display: inline; text-decoration: line-through; color: var(--del); }
+  .w.deleted { display: none; }
+
+  table.changelog { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; }
+  .changelog th { text-align: left; background: var(--bg); border-bottom: 2px solid var(--line);
+    padding: 8px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .changelog td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .changelog .num { color: var(--faint); }
+  .changelog .time, .changelog .loc { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; color: var(--muted); }
+  .changelog .old { text-decoration: line-through; color: var(--del); }
+  .changelog .new { color: var(--add); font-weight: 600; }
+  .changelog .arrow { color: var(--faint); }
+  .changelog .removed { color: var(--del); font-weight: 600; }
+  .changelog .verified { color: var(--verified); }
+  .changelog .reason { color: var(--muted); font-style: italic; }
+  .kind { font-size: 11px; padding: 2px 7px; border-radius: 4px; white-space: nowrap; }
+  .kind-edit { background: #dbeafe; color: #1d4ed8; }
+  .kind-delete { background: #fee2e2; color: var(--del); }
+  .kind-verify { background: #d1fae5; color: var(--verified); }
+  .kind-unverify { background: #f3f4f6; color: var(--muted); }
+  .muted { color: var(--faint); }
+  .empty { color: var(--muted); font-style: italic; }
+  .footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 11px; color: var(--faint); }
+
+  @media print {
+    body { background: #fff; }
+    .toolbar { display: none; }
+    body.show-changes .page { } /* printed state follows whatever is on screen */
+    .page { max-width: none; padding: 0; }
+  }
+</style>
+</head>
+<body>
+  <div class="page">
+    <h1>Reviewed transcript</h1>
+    <p class="subtitle">A human-checked version of the automatic transcript, with a full record of every change.</p>
+
+    <dl class="summary">
+      <div><dt>Case</dt><dd>${caseName}</dd></div>
+      ${sourceLine}
+      <div><dt>Reviewer</dt><dd>${reviewerName}</dd></div>
+      <div><dt>Transcription model</dt><dd>${escapeHtml(model)}</dd></div>
+      <div><dt>Segments verified</dt><dd>${verifiedN} / ${totalSegments}</dd></div>
+      <div><dt>Changes made</dt><dd>${editCount} (${deletionCount} removed)</dd></div>
+      <div><dt>Exported</dt><dd>${escapeHtml(new Date().toLocaleString())}</dd></div>
+    </dl>
+
+    <p class="legend">
+      <span><strong>Legend:</strong></span>
+      <span><span class="old">old text</span> = original</span>
+      <span><span class="new">new text</span> = reviewer's correction</span>
+      <span>✓ verified = segment checked against audio</span>
+    </p>
+
+    <h2>Transcript</h2>
+    <div class="toolbar">
+      <button id="btn-clean" class="active" onclick="setView(false)">Clean version</button>
+      <button id="btn-changes" onclick="setView(true)">Show changes</button>
+      <span class="hint">Tip: print this page (Ctrl/Cmd+P) to save a PDF copy.</span>
+    </div>
+    ${segmentsHtml}
+
+    <h2>What was changed, and when</h2>
+    <p class="subtitle">Every edit, removal, and verification, in the order it happened.</p>
+    ${changeLog}
+
+    <div class="footer">
+      Generated by the transcript review tool · ${escapeHtml(new Date().toISOString())}
+    </div>
+  </div>
+  <script>
+    function setView(showChanges) {
+      document.body.classList.toggle('show-changes', showChanges);
+      document.getElementById('btn-clean').classList.toggle('active', !showChanges);
+      document.getElementById('btn-changes').classList.toggle('active', showChanges);
+    }
+  </script>
+</body>
+</html>`
+
+  return html
 }

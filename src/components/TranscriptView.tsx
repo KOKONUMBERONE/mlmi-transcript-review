@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { EditState, ModelName, Risk, RiskDimension, Segment as SegmentType, Transcript } from '../types'
-import { segmentRiskFor } from '../lib/segmentRisk'
+import type { EditState, FocusWordHit, ModelName, Risk, RiskDimension, Segment as SegmentType, Transcript } from '../types'
+import { segmentRiskWithFocus } from '../lib/segmentRisk'
 import Segment from './Segment'
 
 interface Props {
@@ -10,6 +10,10 @@ interface Props {
   edits: Record<string, EditState>
   verified: Record<number, boolean>
   dimension: RiskDimension
+  // Focus mode (2b): which segments hold a hit + a per-word marker lookup.
+  focusActive: boolean
+  focusSegmentIds: Set<number>
+  focusHitFor?: (segId: number, wordIdx: number) => FocusWordHit | undefined
   onSeek: (seconds: number) => void
   onWordClick: (segId: number, wordIdx: number, rect: DOMRect) => void
   onToggleVerify: (segId: number) => void
@@ -57,6 +61,9 @@ export default function TranscriptView({
   edits,
   verified,
   dimension,
+  focusActive,
+  focusSegmentIds,
+  focusHitFor,
   onSeek,
   onWordClick,
   onToggleVerify,
@@ -85,10 +92,13 @@ export default function TranscriptView({
   }, [transcript, currentTime])
 
   // Capture the active dimension's risk lookup so filter, sort and counts
-  // all agree with the segment-level bar shown on the left.
+  // all agree with the segment-level bar shown on the left. In focus mode a
+  // segment with a hit reads HIGH, so it surfaces under "High risk only" /
+  // "By risk" too.
   const riskOf = useMemo(
-    () => (s: SegmentType) => segmentRiskFor(s, model, dimension),
-    [model, dimension],
+    () => (s: SegmentType) =>
+      segmentRiskWithFocus(s, model, dimension, focusActive && focusSegmentIds.has(s.id)),
+    [model, dimension, focusActive, focusSegmentIds],
   )
 
   const displaySegments = useMemo(
@@ -215,6 +225,8 @@ export default function TranscriptView({
                   verified={!!verified[segment.id]}
                   edits={edits}
                   dimension={dimension}
+                  focused={focusActive && focusSegmentIds.has(segment.id)}
+                  focusHitFor={focusHitFor}
                   onSeek={onSeek}
                   onWordClick={onWordClick}
                   onToggleVerify={onToggleVerify}

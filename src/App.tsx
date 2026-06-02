@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import TopBar from './components/TopBar'
 import TranscriptView from './components/TranscriptView'
 import HistorySidebar from './components/HistorySidebar'
+import FocusPanel from './components/FocusPanel'
 import CandidatePopup, { type PopupAnchor } from './components/CandidatePopup'
 import ShortcutLegend from './components/ShortcutLegend'
-import { mockTranscript as defaultTranscript } from './data/mockTranscript'
+import defaultTranscriptJson from './data/defaultTranscript.json'
 import { useAudio } from './state/useAudio'
 import { useKeyboardShortcuts } from './state/useKeyboardShortcuts'
 import { useFileDrop } from './state/useFileDrop'
@@ -12,15 +13,29 @@ import { useEventLog } from './state/useEventLog'
 import { extensionForMime, useRecorder } from './state/useRecorder'
 import { validateTranscript } from './utils/validateTranscript'
 import { predictRisks, PredictError } from './lib/predictApi'
-import { segmentRiskFor } from './lib/segmentRisk'
+import { runFocus, runFocusAi, parseFocusInput, parseFocusQueries } from './lib/focusApi'
+import { segmentRiskWithFocus } from './lib/segmentRisk'
 import type {
   EditState,
+  FocusMode,
+  FocusResult,
+  FocusSnippet,
+  FocusWordHit,
   HistoryEntry,
   ModelName,
   RiskDimension,
   SeekTrigger,
   Transcript,
 } from './types'
+
+// Bundled default case (case447). The transcript ships in src/data; the audio
+// is served from public/ and fetched into a Blob on mount (same path uploads
+// take). Cast through unknown because the JSON carries extra raw-Whisper fields
+// (_whisper_prob, …) and a non-union model key ("Whisper (small)").
+const defaultTranscript = defaultTranscriptJson as unknown as Transcript
+// Served from public/ at the site root (Vite's default base is "/").
+const DEFAULT_AUDIO_URL = '/interview_case447_5min.mp3'
+const DEFAULT_AUDIO_NAME = 'interview_case447_5min.mp3'
 
 const UNKNOWN_REVIEWER = 'Unknown reviewer'
 
@@ -65,6 +80,48 @@ export default function App() {
   const [dimension, setDimension] = useState<RiskDimension>('combined')
   const [predicting, setPredicting] = useState<boolean>(false)
 
+  // ---- Case focus (2b) — retrieval overlay on top of the default scoring ----
+  const [focusText, setFocusText] = useState<string>('')
+  const [focusMode, setFocusMode] = useState<FocusMode>('lexical')
+  const [focusResult, setFocusResult] = useState<FocusResult | null>(null)
+  const [focusActive, setFocusActive] = useState<boolean>(false)
+  const [focusRunning, setFocusRunning] = useState<boolean>(false)
+
+  // Derive, from the retrieval result, the per-word marker lookup and the set
+  // of segments that hold any hit. The hit shown on a word is the
+  // highest-priority one (exact > alias > semantic, then score). Declared here
+  // (before the audio markers memo) so the waveform can also reflect focus.
+  const { focusHitMap, focusSegmentIds } = useMemo(() => {
+    const map = new Map<string, FocusWordHit>()
+    const segs = new Set<number>()
+    const PRIORITY = { exact: 3, alias: 2, semantic: 1, llm: 1 } as const
+    if (focusResult) {
+      for (const term of focusResult.terms) {
+        for (const s of term.snippets) {
+          segs.add(s.segment_id)
+          for (const idx of s.highlight_word_indices) {
+            const key = `${s.segment_id}-${idx}`
+            const hit: FocusWordHit = {
+              focus_label: term.focus_label,
+              match_type: s.match_type,
+              match_detail: s.match_detail,
+              focus_score: s.focus_score,
+              llm_reason: s.llm_reason,
+            }
+            const prev = map.get(key)
+            const better =
+              !prev ||
+              PRIORITY[hit.match_type] > PRIORITY[prev.match_type] ||
+              (PRIORITY[hit.match_type] === PRIORITY[prev.match_type] &&
+                hit.focus_score > prev.focus_score)
+            if (better) map.set(key, hit)
+          }
+        }
+      }
+    }
+    return { focusHitMap: map, focusSegmentIds: segs }
+  }, [focusResult])
+
   // ---- Behavioural event log (ref-backed, no re-renders on log) ----
   const events = useEventLog()
 
@@ -82,9 +139,47 @@ export default function App() {
     events.log('session_start', {
       audio_duration: transcript.audioDuration,
       segment_count: transcript.segments.length,
-      transcript_filename: transcriptFilename ?? '(bundled mock)',
+      transcript_filename: transcriptFilename ?? '(bundled case447)',
     })
   }, [events, transcript, transcriptFilename])
+
+  // ---- Bundled default case: load its audio + annotate it, once on mount ----
+  // The audio ships in public/ and is fetched into a Blob so it flows through
+  // exactly like an uploaded file. Annotation runs the 2a classifier so the
+  // combined/importance views work out of the box; if the local service is
+  // down we leave the unannotated transcript (uncertainty view) without a
+  // scary banner — startup stays clean, unlike a user-initiated upload.
+  const defaultLoadedRef = useRef(false)
+  useEffect(() => {
+    if (defaultLoadedRef.current) return
+    defaultLoadedRef.current = true
+
+    let cancelled = false
+    fetch(DEFAULT_AUDIO_URL)
+      .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(`audio HTTP ${r.status}`))))
+      .then((blob) => {
+        if (cancelled) return
+        setAudioBlob(blob)
+        setAudioFilename(DEFAULT_AUDIO_NAME)
+        events.log('audio_load', { audio_filename: DEFAULT_AUDIO_NAME })
+      })
+      .catch((e) => console.warn('Default audio not loaded:', (e as Error).message))
+
+    setPredicting(true)
+    predictRisks(defaultTranscript, modelsOf(defaultTranscript)[0])
+      .then((annotated) => {
+        if (!cancelled) setTranscript(annotated)
+      })
+      .catch((e) => console.warn('Default transcript not annotated:', (e as Error).message))
+      .finally(() => {
+        if (!cancelled) setPredicting(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ---- Audio with logging hooks ----
   // Waveform markers reflect the *active* risk dimension, so toggling the
@@ -95,9 +190,14 @@ export default function App() {
         segmentId: s.id,
         start: s.start,
         end: s.end,
-        risk: segmentRiskFor(s, model, dimension),
+        risk: segmentRiskWithFocus(
+          s,
+          model,
+          dimension,
+          focusActive && focusSegmentIds.has(s.id),
+        ),
       })),
-    [transcript, model, dimension],
+    [transcript, model, dimension, focusActive, focusSegmentIds],
   )
 
   const audio = useAudio(audioBlob, transcript.audioDuration, {
@@ -327,6 +427,68 @@ export default function App() {
     setModel(next)
   }
 
+  const focusHitFor = useCallback(
+    (segId: number, wordIdx: number): FocusWordHit | undefined =>
+      focusActive ? focusHitMap.get(`${segId}-${wordIdx}`) : undefined,
+    [focusActive, focusHitMap],
+  )
+
+  const handleRunFocus = useCallback(async () => {
+    // Lexical = structured items (label + aliases); AI = free-text queries.
+    const labels =
+      focusMode === 'ai'
+        ? parseFocusQueries(focusText)
+        : parseFocusInput(focusText).map((i) => i.label)
+    if (labels.length === 0) {
+      setFocusResult(null)
+      setFocusActive(false)
+      return
+    }
+    setErrorMsg(null)
+    setFocusRunning(true)
+    try {
+      const result =
+        focusMode === 'ai'
+          ? await runFocusAi(transcript, parseFocusQueries(focusText))
+          : await runFocus(transcript, parseFocusInput(focusText), model)
+      setFocusResult(result)
+      setFocusActive(true)
+      const hits = result.terms.reduce((n, t) => n + t.snippets.length, 0)
+      events.log('focus_apply', {
+        focus_terms: labels.join(', '),
+        focus_hits: hits,
+        focus_mode: focusMode,
+      })
+    } catch (err) {
+      const msg =
+        err instanceof PredictError
+          ? err.message
+          : `Focus retrieval failed: ${(err as Error).message}`
+      setErrorMsg(msg)
+    } finally {
+      setFocusRunning(false)
+    }
+  }, [focusMode, focusText, transcript, model, events])
+
+  const handleClearFocus = useCallback(() => {
+    setFocusActive(false)
+    setFocusResult(null)
+    events.log('focus_clear')
+  }, [events])
+
+  const handleFocusSnippetClick = useCallback(
+    (snippet: FocusSnippet, label: string) => {
+      events.log('focus_snippet_click', {
+        segment_id: snippet.segment_id,
+        focus_label: label,
+        focus_match_type: snippet.match_type,
+        focus_score: snippet.focus_score,
+      })
+      seekWithLog(snippet.segment_start, 'marker')
+    },
+    [events, seekWithLog],
+  )
+
   // ---- Upload handlers ----
   const handleAudioUpload = useCallback(
     (file: File) => {
@@ -400,6 +562,9 @@ export default function App() {
         setVerified({})
         setHistory([])
         setPopup(null)
+        // A new transcript invalidates any prior focus retrieval.
+        setFocusResult(null)
+        setFocusActive(false)
         events.log('transcript_load', {
           transcript_filename: file.name,
           segment_count: result.transcript.segments.length,
@@ -507,6 +672,18 @@ export default function App() {
       )}
 
       <div className="flex-1 flex overflow-hidden">
+        <FocusPanel
+          text={focusText}
+          onTextChange={setFocusText}
+          mode={focusMode}
+          onModeChange={setFocusMode}
+          onRun={handleRunFocus}
+          onClear={handleClearFocus}
+          running={focusRunning}
+          active={focusActive}
+          result={focusResult}
+          onSnippetClick={handleFocusSnippetClick}
+        />
         <TranscriptView
           transcript={transcript}
           model={model}
@@ -514,6 +691,9 @@ export default function App() {
           edits={edits}
           verified={verified}
           dimension={dimension}
+          focusActive={focusActive}
+          focusSegmentIds={focusSegmentIds}
+          focusHitFor={focusHitFor}
           onSeek={(t) => seekWithLog(t, 'segment')}
           onWordClick={openPopup}
           onToggleVerify={toggleVerify}

@@ -1,4 +1,4 @@
-import type { Risk, RiskDimension, Word as WordType } from '../types'
+import type { FocusWordHit, Risk, RiskDimension, Word as WordType } from '../types'
 
 interface Props {
   word: WordType
@@ -6,6 +6,9 @@ interface Props {
   edited: boolean
   deleted: boolean
   dimension: RiskDimension
+  // When set (focus mode, 2b), this word was retrieved for a focus term and is
+  // elevated to HIGH with a distinct violet marker layered on top.
+  focusHit?: FocusWordHit
   onClick: (rect: DOMRect) => void
 }
 
@@ -24,6 +27,7 @@ export default function Word({
   edited,
   deleted,
   dimension,
+  focusHit,
   onClick,
 }: Props) {
   if (!displayText) return null
@@ -33,8 +37,13 @@ export default function Word({
   const base =
     'relative inline-block rounded-sm px-0.5 cursor-pointer transition-colors hover:bg-surface-subtle'
 
-  const risk =
-    activeRisk === 'high'
+  // A focus hit elevates the word to HIGH but in the *violet* focus palette
+  // with a solid (not dotted) underline + ring, so the reviewer can tell a
+  // focus-driven HIGH from a default-HIGH. Falls through to the normal risk
+  // styling when focus mode is off / this word wasn't matched.
+  const risk = focusHit
+    ? 'bg-focus-bg text-focus underline decoration-focus decoration-2 underline-offset-[3px] ring-1 ring-focus/40 hover:bg-focus/15'
+    : activeRisk === 'high'
       ? 'bg-risk-high-bg text-risk-high underline decoration-risk-high decoration-dotted underline-offset-[3px] hover:bg-risk-high/15'
       : activeRisk === 'med'
       ? 'bg-risk-med-bg text-risk-med underline decoration-risk-med decoration-dotted underline-offset-[3px] hover:bg-risk-med/15'
@@ -56,6 +65,14 @@ export default function Word({
     ? `Marked deleted (original: ${word.text}) — click to restore`
     : edited
     ? `Edited (original: ${word.text})`
+    : focusHit
+    ? `Focus: ${focusHit.focus_label} (${focusHit.match_type}${
+        focusHit.match_detail && focusHit.match_detail !== 'literal'
+          ? `·${focusHit.match_detail}`
+          : ''
+      }, ${focusHit.focus_score.toFixed(2)}) — elevated to HIGH${
+        focusHit.llm_reason ? ` · ${focusHit.llm_reason}` : ''
+      }`
     : activeRisk !== 'low'
     ? `${activeRisk === 'high' ? 'High' : 'Medium'} ${dimLabel} — click to inspect`
     : 'Click to inspect'
@@ -70,6 +87,12 @@ export default function Word({
       }}
     >
       {displayText}
+      {focusHit && !edited && !deleted && (
+        <span
+          aria-hidden="true"
+          className="absolute -top-1 -left-1 w-1.5 h-1.5 rounded-full bg-focus ring-1 ring-white"
+        />
+      )}
       {edited && !deleted && (
         <svg
           aria-hidden="true"

@@ -27,6 +27,12 @@ export default {
           med: '#d97706',
           'med-bg': '#fffbeb',
         },
+        // Case-focus (2b) overlay — violet, distinct from the red/amber risk
+        // palette so a focus-driven HIGH reads differently from a default-HIGH.
+        focus: {
+          DEFAULT: '#7c3aed',
+          bg: '#f5f3ff',
+        },
         verified: {
           DEFAULT: '#166534',
           bg: '#f0fdf4',

@@ -114,9 +114,13 @@ export function useAudio(
       callbacksRef.current.onWaveformSeek?.(timeRef.current, newTime)
     })
     ws.on('error', (err) => {
-      callbacksRef.current.onError?.(
-        `Audio failed to load: ${err instanceof Error ? err.message : String(err)}`,
-      )
+      // A superseded load (new audio, re-mount, StrictMode double-invoke)
+      // aborts the in-flight one — not a real failure, so don't surface it.
+      const msg = err instanceof Error ? err.message : String(err)
+      const aborted =
+        (err instanceof Error && err.name === 'AbortError') || /abort/i.test(msg)
+      if (aborted) return
+      callbacksRef.current.onError?.(`Audio failed to load: ${msg}`)
     })
 
     regions.on('region-clicked', (region, e) => {
@@ -166,9 +170,14 @@ export function useAudio(
       })
       .catch((err) => {
         if (cancelled) return
-        callbacksRef.current.onError?.(
-          `Audio failed to load: ${err instanceof Error ? err.message : String(err)}`,
-        )
+        // A superseded load (new audio, re-mount, or StrictMode double-invoke)
+        // rejects the in-flight one with an abort — that is not a real failure,
+        // so don't surface it as an error banner.
+        const msg = err instanceof Error ? err.message : String(err)
+        const aborted =
+          (err instanceof Error && err.name === 'AbortError') || /abort/i.test(msg)
+        if (aborted) return
+        callbacksRef.current.onError?.(`Audio failed to load: ${msg}`)
         if (currentUrlRef.current === newUrl) {
           URL.revokeObjectURL(newUrl)
           currentUrlRef.current = prevUrl

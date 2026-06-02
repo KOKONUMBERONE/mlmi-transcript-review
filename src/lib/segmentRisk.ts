@@ -37,3 +37,20 @@ export function segmentRiskFor(
   }
   return BY_RANK[maxRank]
 }
+
+/**
+ * Focus-aware segment risk (2b overlay). A segment that contains a focus match
+ * reads HIGH regardless of the default dimension, so the left bar, the "By
+ * risk" sort and the header chips agree with the focus highlights. When focus
+ * is inactive this is exactly `segmentRiskFor`, so default behaviour is
+ * unchanged. The underlying 2a scores are never mutated — this is display only.
+ */
+export function segmentRiskWithFocus(
+  segment: Segment,
+  model: ModelName,
+  dimension: RiskDimension,
+  focused: boolean,
+): Risk {
+  if (focused) return 'high'
+  return segmentRiskFor(segment, model, dimension)
+}
