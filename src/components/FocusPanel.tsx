@@ -17,6 +17,9 @@ interface Props {
   running: boolean
   active: boolean
   result: FocusResult | null
+  /** Focus-only error (e.g. AI mode when Ollama isn't running). Shown inside
+   *  the panel so it never reads as a whole-app failure. */
+  error?: string | null
   onSnippetClick: (snippet: FocusSnippet, label: string) => void
 }
 
@@ -61,6 +64,7 @@ export default function FocusPanel({
   running,
   active,
   result,
+  error,
   onSnippetClick,
 }: Props) {
   const [showHelp, setShowHelp] = useState(false)
@@ -174,6 +178,23 @@ export default function FocusPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-3">
+        {error && (
+          <div className="mb-3 rounded border border-risk-med/30 bg-risk-med-bg px-2.5 py-2">
+            <p className="text-[11px] font-semibold text-risk-med">
+              {ai ? 'AI mode needs the local model' : 'Focus search unavailable'}
+            </p>
+            <p className="mt-1 text-[10px] text-ink-muted leading-snug break-words">
+              {error}
+            </p>
+            {ai && (
+              <p className="mt-1.5 text-[10px] text-ink-faint leading-snug">
+                The <span className="font-medium text-focus">Lexical</span> engine
+                works without it — switch the toggle above. Nothing else in the app
+                is affected.
+              </p>
+            )}
+          </div>
+        )}
         {!active || !result ? (
           <p className="py-8 px-2 text-center text-[11px] text-ink-faint italic leading-relaxed">
             Declare the people, objects, or topics that matter for this case.

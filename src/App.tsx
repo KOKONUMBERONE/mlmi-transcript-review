@@ -86,6 +86,11 @@ export default function App() {
   const [focusResult, setFocusResult] = useState<FocusResult | null>(null)
   const [focusActive, setFocusActive] = useState<boolean>(false)
   const [focusRunning, setFocusRunning] = useState<boolean>(false)
+  // Focus-only error (e.g. AI mode with Ollama not running). Kept separate from
+  // the global `errorMsg` banner so a missing local LLM degrades gracefully:
+  // it surfaces *inside* the Focus panel and never blocks lexical search or the
+  // rest of the app.
+  const [focusError, setFocusError] = useState<string | null>(null)
 
   // Derive, from the retrieval result, the per-word marker lookup and the set
   // of segments that hold any hit. The hit shown on a word is the
@@ -444,7 +449,7 @@ export default function App() {
       setFocusActive(false)
       return
     }
-    setErrorMsg(null)
+    setFocusError(null)
     setFocusRunning(true)
     try {
       const result =
@@ -464,7 +469,7 @@ export default function App() {
         err instanceof PredictError
           ? err.message
           : `Focus retrieval failed: ${(err as Error).message}`
-      setErrorMsg(msg)
+      setFocusError(msg)
     } finally {
       setFocusRunning(false)
     }
@@ -473,8 +478,17 @@ export default function App() {
   const handleClearFocus = useCallback(() => {
     setFocusActive(false)
     setFocusResult(null)
+    setFocusError(null)
     events.log('focus_clear')
   }, [events])
+
+  // Switching engine (lexical <-> ai) clears any stale error so the panel
+  // doesn't keep showing an "Ollama not running" note after you fall back to
+  // the lexical engine.
+  const handleFocusModeChange = useCallback((m: FocusMode) => {
+    setFocusMode(m)
+    setFocusError(null)
+  }, [])
 
   const handleFocusSnippetClick = useCallback(
     (snippet: FocusSnippet, label: string) => {
@@ -676,12 +690,13 @@ export default function App() {
           text={focusText}
           onTextChange={setFocusText}
           mode={focusMode}
-          onModeChange={setFocusMode}
+          onModeChange={handleFocusModeChange}
           onRun={handleRunFocus}
           onClear={handleClearFocus}
           running={focusRunning}
           active={focusActive}
           result={focusResult}
+          error={focusError}
           onSnippetClick={handleFocusSnippetClick}
         />
         <TranscriptView
