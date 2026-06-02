@@ -39,3 +39,7 @@ coverage/
 CLAUDE_CODE_PROMPTS.md
 .vercel
 server/__pycache__/
+
+.github/
+.venv/
+
