@@ -20,6 +20,76 @@ export interface Word {
 // Which signal the transcript view colours words by.
 export type RiskDimension = 'uncertainty' | 'importance' | 'combined'
 
+// ----- Component 2b: case-focused evidence retrieval (overlay) -----
+// A focus item the reviewer declares: a label plus optional reviewer-typed
+// aliases (surface variants). Aliases are never auto-generated — no LLM call.
+export interface FocusItem {
+  label: string
+  aliases: string[]
+}
+
+export type FocusMatchType = 'exact' | 'alias' | 'semantic' | 'llm'
+
+// Which retrieval engine the focus box uses. 'lexical' = the deterministic
+// exact/alias/pattern/expand/embedding path; 'ai' = a local LLM reads the whole
+// transcript in context. Both return the same FocusResult shape.
+export type FocusMode = 'lexical' | 'ai'
+
+// One retrieved evidence snippet for a focus term. `original_combined_risk`
+// preserves what 2a's default scoring showed, so the HIGH upgrade stays a
+// traceable overlay rather than silently overwriting the classifier.
+// How a literal hit matched: exact string, a morphological variant (stem), a
+// compound/prefix (partial), a sounds-alike name (phonetic), a typo/ASR slip
+// (fuzzy), or a built-in identifier pattern. null for pure semantic hits.
+export type FocusMatchDetail =
+  | 'literal'
+  | 'stem'
+  | 'partial'
+  | 'phonetic'
+  | 'fuzzy'
+  | 'pattern'
+  | 'expanded'
+
+export interface FocusSnippet {
+  segment_id: number
+  segment_start: number
+  match_type: FocusMatchType
+  match_detail?: FocusMatchDetail | null
+  focus_score: number
+  evidence: string
+  highlight_word_indices: number[]
+  highlight_spans: string[]
+  original_combined_risk: Risk
+  // AI mode only: the local LLM's relevance score (mirrors focus_score) and a
+  // short plain-English reason it judged this segment relevant.
+  llm_relevance_score?: number
+  llm_reason?: string
+}
+
+export interface FocusTermResult {
+  focus_label: string
+  query: string
+  // Words auto-derived from the transcript's own vocabulary that were merged
+  // into the search (e.g. "weapon" -> ["gun","knife"]). Empty when none.
+  auto_aliases: string[]
+  snippets: FocusSnippet[]
+}
+
+export interface FocusResult {
+  terms: FocusTermResult[]
+}
+
+// Per-word overlay used by the transcript view: which focus term marked this
+// word and how. Derived on the front-end from FocusResult — kept off `Word` so
+// the transcript's 2a scores are never overwritten.
+export interface FocusWordHit {
+  focus_label: string
+  match_type: FocusMatchType
+  match_detail?: FocusMatchDetail | null
+  focus_score: number
+  llm_reason?: string
+}
+
 // `speaker` is open-ended: pipelines that skip diarization emit a single
 // generic label (e.g. "Speaker"), pipelines that do diarization can emit
 // arbitrary names. The UI maps known labels (Officer/Witness) to themed
@@ -72,6 +142,9 @@ export type EventType =
   | 'export'
   | 'transcript_load'
   | 'audio_load'
+  | 'focus_apply'
+  | 'focus_clear'
+  | 'focus_snippet_click'
 
 export type SeekTrigger = 'waveform' | 'segment' | 'marker' | 'keyboard' | 'programmatic'
 
@@ -111,6 +184,13 @@ export interface LogEvent {
   transcript_filename?: string
   audio_filename?: string
   segment_count?: number
+  // Focus mode (2b):
+  focus_terms?: string      // comma-joined labels the reviewer ran
+  focus_label?: string      // which term a snippet click belongs to
+  focus_match_type?: FocusMatchType
+  focus_score?: number
+  focus_hits?: number       // total snippets returned across all terms
+  focus_mode?: FocusMode    // 'lexical' | 'ai'
 }
 
 export interface HistoryEntry {

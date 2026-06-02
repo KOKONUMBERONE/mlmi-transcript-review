@@ -1,5 +1,5 @@
-import type { EditState, ModelName, RiskDimension, Segment as SegmentType } from '../types'
-import { segmentRiskFor } from '../lib/segmentRisk'
+import type { EditState, FocusWordHit, ModelName, RiskDimension, Segment as SegmentType } from '../types'
+import { segmentRiskWithFocus } from '../lib/segmentRisk'
 import Word from './Word'
 
 interface Props {
@@ -9,6 +9,10 @@ interface Props {
   verified: boolean
   edits: Record<string, EditState>
   dimension: RiskDimension
+  // Focus mode (2b): whether this segment holds a focus hit, and a lookup for
+  // per-word focus markers. Both no-ops when focus is inactive.
+  focused: boolean
+  focusHitFor?: (segId: number, wordIdx: number) => FocusWordHit | undefined
   onSeek: (seconds: number) => void
   onWordClick: (segId: number, wordIdx: number, rect: DOMRect) => void
   onToggleVerify: (segId: number) => void
@@ -41,15 +45,18 @@ export default function Segment({
   verified,
   edits,
   dimension,
+  focused,
+  focusHitFor,
   onSeek,
   onWordClick,
   onToggleVerify,
 }: Props) {
   const words = segment.words[model] ?? []
 
-  // Aggregate the segment-level risk from words under the active dimension,
-  // so the left bar + "HIGH RISK" badge follow the toolbar Risk toggle.
-  const effectiveRisk = segmentRiskFor(segment, model, dimension)
+  // Aggregate the segment-level risk from words under the active dimension, so
+  // the left bar + "HIGH RISK" badge follow the toolbar Risk toggle. A focus
+  // hit forces the segment to HIGH (display only — 2a scores are untouched).
+  const effectiveRisk = segmentRiskWithFocus(segment, model, dimension, focused)
 
   const bar = verified ? 'bg-verified-bar' : RISK_BAR[effectiveRisk]
 
@@ -126,6 +133,7 @@ export default function Segment({
                   edited={edit !== undefined && !edit.deleted}
                   deleted={edit?.deleted === true}
                   dimension={dimension}
+                  focusHit={focusHitFor?.(segment.id, i)}
                   onClick={(rect) => onWordClick(segment.id, i, rect)}
                 />
                 {i < words.length - 1 ? ' ' : ''}

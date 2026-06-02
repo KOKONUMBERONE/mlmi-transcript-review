@@ -1,6 +1,10 @@
 import type { EditState, HistoryEntry, ModelName, Transcript } from '../types'
 import { exportHistoryAsCSV, exportHistoryAsJSON } from '../utils/exportHistory'
-import { exportTranscriptJson, exportTranscriptText } from '../utils/exportTranscript'
+import {
+  exportTranscriptJson,
+  exportTranscriptReportHtml,
+  exportTranscriptText,
+} from '../utils/exportTranscript'
 
 interface Props {
   history: HistoryEntry[]
@@ -121,8 +125,24 @@ export default function HistorySidebar({
           />
         </div>
 
-        {/* Export groups — two distinct deliverables. */}
+        {/* Export groups. The HTML report bundles both deliverables (final
+            transcript + full change log) into one reader-friendly file; the
+            CSV/JSON/TXT options below stay for analysis and archival. */}
         <div className="space-y-1.5">
+          <button
+            onClick={() => {
+              exportTranscriptReportHtml({ ...exportArgs, history })
+              onExport?.('report_html', totalSegments)
+            }}
+            title="A single, reader-friendly file with the full reviewed transcript and a complete log of what changed, when, and why."
+            className="w-full text-xs font-medium px-3 py-1.5 rounded bg-ink text-white hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
+          >
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M7 1v8m0 0L4 6m3 3l3-3" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M2 11v1a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-1" strokeLinecap="round" />
+            </svg>
+            Download report (HTML)
+          </button>
           <div className="flex items-center gap-1.5">
             <span
               className="text-[10px] text-ink-faint uppercase tracking-widest w-20 shrink-0"
