@@ -122,7 +122,7 @@ export default function TopBar({
         <input
           ref={audioInputRef}
           type="file"
-          accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac,.aac"
+          accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac,.aac,.webm,.mp4"
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0]

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 
-const AUDIO_EXT = /\.(wav|mp3|m4a|ogg|flac|aac)$/i
+// webm/mp4 included so in-browser recordings (Chromium emits webm, Safari mp4)
+// and dropped recordings are recognised as audio, not rejected as "unsupported".
+const AUDIO_EXT = /\.(wav|mp3|m4a|ogg|flac|aac|webm|mp4)$/i
 const JSON_EXT = /\.json$/i
 
 interface Args {

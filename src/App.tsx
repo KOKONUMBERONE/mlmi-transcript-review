@@ -14,6 +14,7 @@ import { extensionForMime, useRecorder } from './state/useRecorder'
 import { validateTranscript } from './utils/validateTranscript'
 import { predictRisks, PredictError } from './lib/predictApi'
 import { runFocus, runFocusAi, parseFocusInput, parseFocusQueries } from './lib/focusApi'
+import { transcribeAudio } from './lib/transcribeApi'
 import { segmentRiskWithFocus } from './lib/segmentRisk'
 import type {
   EditState,
@@ -79,6 +80,9 @@ export default function App() {
   // signal — that's the one the 2x2 policy is designed for.
   const [dimension, setDimension] = useState<RiskDimension>('combined')
   const [predicting, setPredicting] = useState<boolean>(false)
+  // True while the ASR service (:8001) is transcribing an uploaded/recorded
+  // audio file. Drives a progress banner — transcription runs on CPU and is slow.
+  const [transcribing, setTranscribing] = useState<boolean>(false)
 
   // ---- Case focus (2b) — retrieval overlay on top of the default scoring ----
   const [focusText, setFocusText] = useState<string>('')
@@ -504,6 +508,77 @@ export default function App() {
   )
 
   // ---- Upload handlers ----
+
+  // Shared "load this transcript into the app" path: validate, swap it in,
+  // reset reviewer state, then annotate it via the importance classifier.
+  // Used by manual JSON upload AND by auto-transcription of uploaded audio.
+  const applyTranscript = useCallback(
+    async (parsed: unknown, sourceName: string) => {
+      const result = validateTranscript(parsed)
+      if (!result.ok) {
+        setErrorMsg(`${sourceName}: ${result.error}`)
+        return
+      }
+      setTranscript(result.transcript)
+      setTranscriptFilename(sourceName)
+      const pickedModel = modelsOf(result.transcript)[0]
+      setModel(pickedModel)
+      setEdits({})
+      setVerified({})
+      setHistory([])
+      setPopup(null)
+      // A new transcript invalidates any prior focus retrieval.
+      setFocusResult(null)
+      setFocusActive(false)
+      events.log('transcript_load', {
+        transcript_filename: sourceName,
+        segment_count: result.transcript.segments.length,
+        audio_duration: result.transcript.audioDuration,
+      })
+
+      // Fire off importance prediction. If the local service is down we surface
+      // a clear error but leave the unannotated transcript loaded so the
+      // reviewer can still work in `uncertainty` view.
+      setPredicting(true)
+      try {
+        const annotated = await predictRisks(result.transcript, pickedModel)
+        setTranscript(annotated)
+      } catch (err) {
+        const msg =
+          err instanceof PredictError
+            ? err.message
+            : `Prediction failed: ${(err as Error).message}`
+        setErrorMsg(msg)
+      } finally {
+        setPredicting(false)
+      }
+    },
+    [events],
+  )
+
+  // Auto-transcribe an audio file via the ASR service (:8001), then load the
+  // resulting transcript. If the service is off, the audio still loaded for
+  // playback above and we surface a clear, non-fatal message — nothing breaks.
+  const transcribeAndApply = useCallback(
+    async (file: Blob) => {
+      setTranscribing(true)
+      try {
+        const transcript = await transcribeAudio(file)
+        const name = file instanceof File ? file.name : 'recording'
+        await applyTranscript(transcript, `${name} (auto-transcribed)`)
+      } catch (err) {
+        const msg =
+          err instanceof PredictError
+            ? err.message
+            : `Transcription failed: ${(err as Error).message}`
+        setErrorMsg(msg)
+      } finally {
+        setTranscribing(false)
+      }
+    },
+    [applyTranscript],
+  )
+
   const handleAudioUpload = useCallback(
     (file: File) => {
       setErrorMsg(null)
@@ -514,8 +589,10 @@ export default function App() {
         return null
       })
       events.log('audio_load', { audio_filename: file.name })
+      // Auto-transcribe the uploaded audio (ASR service on :8001).
+      void transcribeAndApply(file)
     },
-    [events],
+    [events, transcribeAndApply],
   )
 
   const recorder = useRecorder({ onError: (msg) => setErrorMsg(msg) })
@@ -536,11 +613,13 @@ export default function App() {
         return URL.createObjectURL(blob)
       })
       events.log('audio_load', { audio_filename: name })
+      // Auto-transcribe the recording, same as an uploaded file.
+      void transcribeAndApply(new File([blob], name, { type: mimeType }))
     } else {
       setErrorMsg(null)
       await recorder.start()
     }
-  }, [recorder, events])
+  }, [recorder, events, transcribeAndApply])
 
   // Revoke the recording download URL on unmount.
   useEffect(() => {
@@ -562,50 +641,12 @@ export default function App() {
           setErrorMsg(`${file.name}: invalid JSON.`)
           return
         }
-        const result = validateTranscript(parsed)
-        if (!result.ok) {
-          setErrorMsg(`${file.name}: ${result.error}`)
-          return
-        }
-        setTranscript(result.transcript)
-        setTranscriptFilename(file.name)
-        const next = modelsOf(result.transcript)
-        const pickedModel = next[0]
-        setModel(pickedModel)
-        setEdits({})
-        setVerified({})
-        setHistory([])
-        setPopup(null)
-        // A new transcript invalidates any prior focus retrieval.
-        setFocusResult(null)
-        setFocusActive(false)
-        events.log('transcript_load', {
-          transcript_filename: file.name,
-          segment_count: result.transcript.segments.length,
-          audio_duration: result.transcript.audioDuration,
-        })
-
-        // Fire off importance prediction. If the local service is down we
-        // surface a clear error but leave the unannotated transcript loaded
-        // so the reviewer can still work in `uncertainty` view.
-        setPredicting(true)
-        try {
-          const annotated = await predictRisks(result.transcript, pickedModel)
-          setTranscript(annotated)
-        } catch (err) {
-          const msg =
-            err instanceof PredictError
-              ? err.message
-              : `Prediction failed: ${(err as Error).message}`
-          setErrorMsg(msg)
-        } finally {
-          setPredicting(false)
-        }
+        await applyTranscript(parsed, file.name)
       } catch (e) {
         setErrorMsg(`${file.name}: ${(e as Error).message}`)
       }
     },
-    [events],
+    [applyTranscript],
   )
 
   const dragActive = useFileDrop({
@@ -668,6 +709,20 @@ export default function App() {
         onDimensionChange={setDimension}
         predicting={predicting}
       />
+
+      {transcribing && (
+        <div className="bg-focus-bg border-b border-focus/30 px-4 py-2 flex items-center gap-2">
+          <svg className="animate-spin shrink-0" width="13" height="13" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+            <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+          </svg>
+          <p className="text-xs text-focus">
+            <span className="font-semibold uppercase tracking-wider mr-2">Transcribing</span>
+            Running the ASR models on your audio — this can take a few minutes for
+            long recordings. You can keep listening while it works.
+          </p>
+        </div>
+      )}
 
       {errorMsg && (
         <div className="bg-risk-high-bg border-b border-risk-high/30 px-4 py-2 flex items-center justify-between gap-3">
