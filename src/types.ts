@@ -20,6 +20,16 @@ export interface Word {
 // Which signal the transcript view colours words by.
 export type RiskDimension = 'uncertainty' | 'importance' | 'combined'
 
+// The active highlight layer rendered in the transcript. 'none' = C1 (plain
+// text, no risk colouring); the three RiskDimension values colour as before.
+export type HighlightLayer = RiskDimension | 'none'
+
+// ----- User-study interface conditions (C1–C4) -----
+// Each condition is the shared review skeleton with a different highlight
+// layer (+ case focus for C4). The mapping condition → highlight layer lives
+// in src/core/conditions.ts (Phase 1).
+export type Condition = 'C1' | 'C2' | 'C3' | 'C4'
+
 // ----- Component 2b: case-focused evidence retrieval (overlay) -----
 // A focus item the reviewer declares: a label plus optional reviewer-typed
 // aliases (surface variants). Aliases are never auto-generated — no LLM call.
@@ -145,6 +155,10 @@ export type EventType =
   | 'focus_apply'
   | 'focus_clear'
   | 'focus_snippet_click'
+  | 'trial_start'
+  | 'trial_end'
+  | 'dimension_change'
+  | 'segment_view'
 
 export type SeekTrigger = 'waveform' | 'segment' | 'marker' | 'keyboard' | 'programmatic'
 
@@ -156,7 +170,14 @@ export interface LogEvent {
   reviewer: string
   model: string
   participant_id: string // study participant code, e.g. "P01" — "demo" if unset
-  condition: string      // study condition code, e.g. "A_plain" — "demo" if unset
+  condition: string      // study condition code, e.g. "C3" — "demo" if unset
+
+  // Trial context (set by the study trial runner; absent in the full build):
+  t_in_trial_ms?: number // ms since the current trial started
+  block?: number
+  trial_index?: number
+  difficulty?: string
+  stimulus_id?: string
 
   // Event-specific fields (all optional, flat for pandas):
   audio_position?: number
@@ -172,22 +193,30 @@ export interface LogEvent {
   segment_risk?: Risk
   word_index?: number
   word_text?: string
-  word_risk?: Risk
+  word_risk?: Risk             // uncertainty bin of the word
+  word_importance?: Risk       // 2a predicted_importance
+  word_combined_risk?: Risk    // 2x2 combined risk
+  word_proba_high?: number     // 2a P(importance=HIGH), continuous (for calibration)
   from_text?: string
   to_text?: string
   via?: 'candidate' | 'manual'
+  chosen_model?: string        // which ASR model produced the chosen candidate
   reason?: string
   filter?: string
   sort?: string
+  from_dimension?: RiskDimension
+  to_dimension?: RiskDimension
   export_kind?: string
   audio_duration?: number
   transcript_filename?: string
   audio_filename?: string
   segment_count?: number
+  time_budget_ms?: number   // fixed review time T for the trial
   // Focus mode (2b):
   focus_terms?: string      // comma-joined labels the reviewer ran
   focus_label?: string      // which term a snippet click belongs to
   focus_match_type?: FocusMatchType
+  focus_match_detail?: FocusMatchDetail
   focus_score?: number
   focus_hits?: number       // total snippets returned across all terms
   focus_mode?: FocusMode    // 'lexical' | 'ai'
@@ -199,6 +228,7 @@ export interface HistoryEntry {
   reviewer: string          // who made the change
   kind: 'edit' | 'delete' | 'verify' | 'unverify'
   segmentId: number
+  segmentIds?: number[]     // bulk verify/unverify: all affected segments (one summary entry)
   wordIndex?: number
   from?: string             // previous displayed text (or "(deleted)")
   to?: string               // new displayed text (omitted for delete)

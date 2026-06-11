@@ -1,6 +1,7 @@
 import type { EditState, HistoryEntry, ModelName, Transcript } from '../types'
 import { exportHistoryAsCSV, exportHistoryAsJSON } from '../utils/exportHistory'
 import {
+  exportSourceTranscriptJson,
   exportTranscriptJson,
   exportTranscriptReportHtml,
   exportTranscriptText,
@@ -19,6 +20,8 @@ interface Props {
   audioFilename: string | null
   transcriptFilename: string | null
   onExport?: (kind: string, count: number) => void
+  collapsed?: boolean
+  onToggleCollapse?: () => void
 }
 
 function formatAction(entry: HistoryEntry): React.ReactNode {
@@ -40,10 +43,19 @@ function formatAction(entry: HistoryEntry): React.ReactNode {
       </span>
     )
   }
+  const n = entry.segmentIds?.length
   if (entry.kind === 'verify') {
-    return <span className="text-verified font-medium">Verified segment</span>
+    return (
+      <span className="text-verified font-medium">
+        {n && n > 1 ? `Verified ${n} segments` : 'Verified segment'}
+      </span>
+    )
   }
-  return <span className="text-ink-muted font-medium">Un-verified segment</span>
+  return (
+    <span className="text-ink-muted font-medium">
+      {n && n > 1 ? `Un-verified ${n} segments` : 'Un-verified segment'}
+    </span>
+  )
 }
 
 const KIND_DOT: Record<HistoryEntry['kind'], string> = {
@@ -83,9 +95,33 @@ export default function HistorySidebar({
   audioFilename,
   transcriptFilename,
   onExport,
+  collapsed = false,
+  onToggleCollapse,
 }: Props) {
   const progress = totalSegments === 0 ? 0 : (verifiedCount / totalSegments) * 100
   const hasHistory = history.length > 0
+
+  if (collapsed) {
+    return (
+      <aside className="w-9 shrink-0 border-l border-border bg-white flex flex-col items-center gap-3 py-3">
+        <button
+          onClick={onToggleCollapse}
+          title="Expand audit trail"
+          className="text-ink-muted hover:text-ink p-1 rounded hover:bg-surface-muted"
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M7.5 2.5 4 6l3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+        <span className="[writing-mode:vertical-rl] text-[10px] text-ink-faint uppercase tracking-[0.2em]">
+          Audit trail
+        </span>
+        <span className="font-mono text-[10px] text-ink-faint tabular-nums">
+          {verifiedCount}/{totalSegments}
+        </span>
+      </aside>
+    )
+  }
 
   const exportArgs = {
     transcript,
@@ -100,13 +136,26 @@ export default function HistorySidebar({
   return (
     <aside className="w-80 shrink-0 border-l border-border bg-white overflow-y-auto flex flex-col">
       <div className="px-4 py-3 border-b border-border sticky top-0 bg-white z-10">
-        <div className="flex items-baseline justify-between mb-2">
+        <div className="flex items-center justify-between mb-2">
           <p className="text-[10px] text-ink-faint uppercase tracking-[0.2em]">
             Audit trail
           </p>
-          <p className="text-[10px] font-mono text-ink-faint tabular-nums">
-            {history.length} {history.length === 1 ? 'entry' : 'entries'}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-[10px] font-mono text-ink-faint tabular-nums">
+              {history.length} {history.length === 1 ? 'entry' : 'entries'}
+            </p>
+            {onToggleCollapse && (
+              <button
+                onClick={onToggleCollapse}
+                title="Collapse audit trail"
+                className="text-ink-faint hover:text-ink p-0.5 rounded hover:bg-surface-muted"
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M4.5 2.5 8 6l-3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex items-baseline justify-between mb-1">
@@ -170,9 +219,9 @@ export default function HistorySidebar({
           <div className="flex items-center gap-1.5">
             <span
               className="text-[10px] text-ink-faint uppercase tracking-widest w-20 shrink-0"
-              title="The reviewed transcript itself, with all edits and deletions applied."
+              title="The reviewed transcript itself, with all edits and deletions applied (active model only)."
             >
-              Transcript
+              Reviewed
             </span>
             <ExportButton
               label="TXT"
@@ -186,6 +235,21 @@ export default function HistorySidebar({
               onClick={() => {
                 exportTranscriptJson(exportArgs)
                 onExport?.('transcript_json', totalSegments)
+              }}
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span
+              className="text-[10px] text-ink-faint uppercase tracking-widest w-20 shrink-0"
+              title="The original multi-model pipeline output, unedited. Re-upload it later to reuse this audio without re-transcribing."
+            >
+              Original
+            </span>
+            <ExportButton
+              label="JSON"
+              onClick={() => {
+                exportSourceTranscriptJson(exportArgs)
+                onExport?.('transcript_source_json', totalSegments)
               }}
             />
           </div>
@@ -226,8 +290,13 @@ export default function HistorySidebar({
 
               <div className="flex items-baseline gap-2 pl-3.5">
                 <span className="font-mono text-[10px] text-ink-faint shrink-0">
-                  seg {entry.segmentId}
-                  {entry.wordIndex !== undefined ? ` · #${entry.wordIndex + 1}` : ''}
+                  {entry.segmentIds && entry.segmentIds.length > 1
+                    ? `segs ${entry.segmentIds.slice(0, 6).join(', ')}${
+                        entry.segmentIds.length > 6 ? '…' : ''
+                      }`
+                    : `seg ${entry.segmentId}${
+                        entry.wordIndex !== undefined ? ` · #${entry.wordIndex + 1}` : ''
+                      }`}
                 </span>
                 <div className="text-ink leading-snug">{formatAction(entry)}</div>
               </div>

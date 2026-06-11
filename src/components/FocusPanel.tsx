@@ -21,6 +21,10 @@ interface Props {
    *  the panel so it never reads as a whole-app failure. */
   error?: string | null
   onSnippetClick: (snippet: FocusSnippet, label: string) => void
+  /** Study build: focus terms are experimenter-preset — make the box read-only. */
+  readOnly?: boolean
+  collapsed?: boolean
+  onToggleCollapse?: () => void
 }
 
 // Distinct from the risk palette (red/amber): focus uses violet so a
@@ -66,23 +70,61 @@ export default function FocusPanel({
   result,
   error,
   onSnippetClick,
+  readOnly = false,
+  collapsed = false,
+  onToggleCollapse,
 }: Props) {
   const [showHelp, setShowHelp] = useState(false)
   const hits = totalHits(result)
   const ai = mode === 'ai'
 
+  if (collapsed) {
+    return (
+      <aside className="w-9 shrink-0 border-r border-border bg-white flex flex-col items-center gap-3 py-3">
+        <button
+          onClick={onToggleCollapse}
+          title="Expand case focus"
+          className="text-ink-muted hover:text-focus p-1 rounded hover:bg-surface-muted"
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M4.5 2.5 8 6l-3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+        <span className="[writing-mode:vertical-rl] text-[10px] text-focus uppercase tracking-[0.2em] font-semibold">
+          Case focus
+        </span>
+        {active && (
+          <span className="font-mono text-[10px] text-ink-faint tabular-nums">{hits}</span>
+        )}
+      </aside>
+    )
+  }
+
   return (
     <aside className="w-80 shrink-0 border-r border-border bg-white overflow-y-auto flex flex-col">
       <div className="px-4 py-3 border-b border-border sticky top-0 bg-white z-10">
-        <div className="flex items-baseline justify-between mb-2">
+        <div className="flex items-center justify-between mb-2">
           <p className="text-[10px] text-focus uppercase tracking-[0.2em] font-semibold">
             Case focus
           </p>
-          {active && (
-            <p className="text-[10px] font-mono text-ink-faint tabular-nums">
-              {hits} {hits === 1 ? 'hit' : 'hits'}
-            </p>
-          )}
+          <div className="flex items-center gap-2">
+            {active && (
+              <p className="text-[10px] font-mono text-ink-faint tabular-nums">
+                {hits} {hits === 1 ? 'hit' : 'hits'}
+              </p>
+            )}
+            {onToggleCollapse && (
+              <button
+                onClick={onToggleCollapse}
+                title="Collapse case focus"
+                className="text-ink-faint hover:text-ink p-0.5 rounded hover:bg-surface-muted"
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M7.5 2.5 4 6l3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Retrieval-engine toggle: deterministic lexical vs local-LLM. */}
@@ -106,6 +148,7 @@ export default function FocusPanel({
         <textarea
           value={text}
           onChange={(e) => onTextChange(e.target.value)}
+          readOnly={readOnly}
           onKeyDown={(e) => {
             // Cmd/Ctrl+Enter runs focus without forcing a button hunt.
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {

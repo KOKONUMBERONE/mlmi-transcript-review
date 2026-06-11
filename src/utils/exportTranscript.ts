@@ -182,6 +182,19 @@ export function exportTranscriptJson(args: ExportArgs): void {
 }
 
 // --------------------------------------------------------------------------
+// Original (source) transcript — the full multi-model pipeline output exactly
+// as loaded, with every model branch and the predicted_* fields, unedited.
+// Schema-valid, so the Upload Transcript button accepts it: re-load this later
+// to reuse the same audio without re-running the ASR models.
+export function exportSourceTranscriptJson(args: ExportArgs): void {
+  downloadBlob(
+    `transcript-source-${fileStem(args)}-${safeFsStamp()}.json`,
+    JSON.stringify(args.transcript, null, 2),
+    'application/json',
+  )
+}
+
+// --------------------------------------------------------------------------
 // Human-readable single-file HTML report.
 //
 // One self-contained .html (all CSS/JS inlined, no external deps) intended for
@@ -219,9 +232,13 @@ function changeCell(entry: HistoryEntry): string {
     case 'delete':
       return `<span class="old">${from}</span> <span class="arrow">→</span> <span class="removed">(removed)</span>`
     case 'verify':
-      return '<span class="verified">Marked segment as verified</span>'
+      return `<span class="verified">Marked ${
+        entry.segmentIds && entry.segmentIds.length > 1 ? `${entry.segmentIds.length} segments` : 'segment'
+      } as verified</span>`
     default:
-      return '<span class="unverified">Marked segment as not verified</span>'
+      return `<span class="unverified">Marked ${
+        entry.segmentIds && entry.segmentIds.length > 1 ? `${entry.segmentIds.length} segments` : 'segment'
+      } as not verified</span>`
   }
 }
 
@@ -276,9 +293,12 @@ export function buildTranscriptReportHtml(args: ReportArgs): string {
   const changeRows = chronological
     .map((entry, idx) => {
       const seg = segById.get(entry.segmentId)
-      const loc = seg
-        ? `[${formatTime(seg.start)}] ${escapeHtml(seg.speaker.toUpperCase())}`
-        : `segment ${entry.segmentId}`
+      const loc =
+        entry.segmentIds && entry.segmentIds.length > 1
+          ? `${entry.segmentIds.length} segments`
+          : seg
+            ? `[${formatTime(seg.start)}] ${escapeHtml(seg.speaker.toUpperCase())}`
+            : `segment ${entry.segmentId}`
       const reason = entry.reason ? escapeHtml(entry.reason) : '<span class="muted">—</span>'
       return `<tr>
         <td class="num">${idx + 1}</td>

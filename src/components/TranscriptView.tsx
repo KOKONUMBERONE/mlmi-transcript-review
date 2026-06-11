@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { EditState, FocusWordHit, ModelName, Risk, RiskDimension, Segment as SegmentType, Transcript } from '../types'
+import type { EditState, FocusWordHit, HighlightLayer, ModelName, Risk, Segment as SegmentType, Transcript } from '../types'
 import { segmentRiskWithFocus } from '../lib/segmentRisk'
 import Segment from './Segment'
 
@@ -9,7 +9,9 @@ interface Props {
   currentTime: number
   edits: Record<string, EditState>
   verified: Record<number, boolean>
-  dimension: RiskDimension
+  dimension: HighlightLayer
+  // C1 hides the risk chips + Show/Order controls (plain text, no risk shown).
+  showViewControls?: boolean
   // Focus mode (2b): which segments hold a hit + a per-word marker lookup.
   focusActive: boolean
   focusSegmentIds: Set<number>
@@ -17,8 +19,12 @@ interface Props {
   onSeek: (seconds: number) => void
   onWordClick: (segId: number, wordIdx: number, rect: DOMRect) => void
   onToggleVerify: (segId: number) => void
+  onBulkVerify?: (segIds: number[], value: boolean) => void
   onFilterChange?: (filter: string) => void
   onSortChange?: (sort: string) => void
+  // Fires when a segment scrolls ≥60% into view (complements segment_focus,
+  // which only fires from audio playback). Must be a *stable* callback.
+  onSegmentView?: (segId: number, start: number, risk: Risk) => void
 }
 
 const RISK_CHIP: Record<Risk, string> = {
@@ -61,17 +67,24 @@ export default function TranscriptView({
   edits,
   verified,
   dimension,
+  showViewControls = true,
   focusActive,
   focusSegmentIds,
   focusHitFor,
   onSeek,
   onWordClick,
   onToggleVerify,
+  onBulkVerify,
   onFilterChange,
   onSortChange,
+  onSegmentView,
 }: Props) {
   const [filter, setFilter] = useState<RiskFilter>('all')
   const [sort, setSort] = useState<SortMode>('chrono')
+  // Multi-select for bulk verify. Local UI state; selection never writes to the
+  // audit trail — only the explicit Verify/Un-verify action does.
+  const [selected, setSelected] = useState<Set<number>>(() => new Set())
+  const selectAnchorRef = useRef<number | null>(null)
 
   const setFilterAndLog = (next: RiskFilter) => {
     setFilter(next)
@@ -106,13 +119,62 @@ export default function TranscriptView({
     [transcript, filter, sort, riskOf],
   )
 
+  // Toggle a segment's selection; shift-click selects the range (in shown order)
+  // from the previous anchor to here.
+  const toggleSelect = (segId: number, opts?: { range?: boolean }) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      const anchor = selectAnchorRef.current
+      if (opts?.range && anchor != null && anchor !== segId) {
+        const ids = displaySegments.map((s) => s.id)
+        const a = ids.indexOf(anchor)
+        const b = ids.indexOf(segId)
+        if (a !== -1 && b !== -1) {
+          const [lo, hi] = a < b ? [a, b] : [b, a]
+          for (const id of ids.slice(lo, hi + 1)) next.add(id)
+          selectAnchorRef.current = segId
+          return next
+        }
+      }
+      if (next.has(segId)) next.delete(segId)
+      else next.add(segId)
+      selectAnchorRef.current = segId
+      return next
+    })
+  }
+
   const activeRef = useRef<HTMLDivElement>(null)
+  const scrollRootRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     if (activeRef.current) {
       activeRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
   }, [activeId])
+
+  // Emit segment_view when a segment scrolls ≥60% into view, capturing reading
+  // attention even when the reviewer never plays that part of the audio.
+  useEffect(() => {
+    if (!onSegmentView) return
+    const root = scrollRootRef.current
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue
+          const el = e.target as HTMLElement
+          onSegmentView(
+            Number(el.dataset.segmentId),
+            Number(el.dataset.segmentStart),
+            (el.dataset.segmentRisk ?? 'low') as Risk,
+          )
+        }
+      },
+      { root, threshold: 0.6 },
+    )
+    const nodes = (root ?? document).querySelectorAll('[data-segment-id]')
+    nodes.forEach((n) => obs.observe(n))
+    return () => obs.disconnect()
+  }, [onSegmentView, displaySegments])
 
   const counts = useMemo(
     () =>
@@ -129,7 +191,7 @@ export default function TranscriptView({
   const isDefaultView = filter === 'all' && sort === 'chrono'
 
   return (
-    <main className="flex-1 overflow-y-auto">
+    <main ref={scrollRootRef} className="flex-1 overflow-y-auto">
       <div className="max-w-3xl mx-auto px-8 py-6">
         <div className="mb-6 pb-4 border-b border-border">
           <div className="flex items-baseline justify-between mb-3">
@@ -139,7 +201,8 @@ export default function TranscriptView({
             <p className="font-mono text-[11px] text-ink-faint">{model}</p>
           </div>
 
-          {/* Risk chips + view controls. */}
+          {/* Risk chips + view controls (hidden in C1 — plain text). */}
+          {showViewControls && (
           <div className="flex flex-wrap items-center gap-2 text-[11px]">
             <span className="text-ink-faint uppercase tracking-widest text-[10px]">
               Risk
@@ -180,9 +243,10 @@ export default function TranscriptView({
               </label>
             </span>
           </div>
+          )}
 
           {/* View-state indicator. */}
-          {!isDefaultView && (
+          {showViewControls && !isDefaultView && (
             <div className="mt-3 flex items-center gap-2">
               <span className="inline-flex items-center gap-2 text-[11px] text-risk-med bg-risk-med-bg border border-risk-med/30 rounded-sm px-2 py-0.5">
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -208,6 +272,50 @@ export default function TranscriptView({
               </button>
             </div>
           )}
+
+          {onBulkVerify && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+              <span className="text-ink-faint uppercase tracking-widest text-[10px]">Select</span>
+              <button
+                onClick={() => setSelected(new Set(displaySegments.map((s) => s.id)))}
+                className="px-2 py-0.5 rounded border border-border text-ink-muted bg-white hover:border-ink-muted hover:text-ink transition-colors"
+                title="Select every currently-shown segment"
+              >
+                All shown
+              </button>
+              <button
+                onClick={() => setSelected(new Set())}
+                disabled={selected.size === 0}
+                className="px-2 py-0.5 rounded border border-border text-ink-muted bg-white hover:border-ink-muted hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                None
+              </button>
+              <span className="font-mono tabular-nums text-ink-muted ml-1">{selected.size} selected</span>
+              <button
+                onClick={() => {
+                  onBulkVerify([...selected], true)
+                  setSelected(new Set())
+                }}
+                disabled={selected.size === 0}
+                className="ml-1 px-2 py-0.5 rounded border border-verified/50 text-verified bg-white hover:bg-verified-bg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                title="Verify the selected segments"
+              >
+                ✓ Verify
+              </button>
+              <button
+                onClick={() => {
+                  onBulkVerify([...selected], false)
+                  setSelected(new Set())
+                }}
+                disabled={selected.size === 0}
+                className="px-2 py-0.5 rounded border border-border text-ink-muted bg-white hover:border-ink-muted hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                title="Un-verify the selected segments"
+              >
+                Un-verify
+              </button>
+              <span className="text-ink-faint hidden md:inline">· tick the box left of a segment; shift-click for a range</span>
+            </div>
+          )}
         </div>
 
         <div className="space-y-1">
@@ -217,7 +325,13 @@ export default function TranscriptView({
             </p>
           ) : (
             displaySegments.map((segment) => (
-              <div key={segment.id} ref={segment.id === activeId ? activeRef : null}>
+              <div
+                key={segment.id}
+                ref={segment.id === activeId ? activeRef : null}
+                data-segment-id={segment.id}
+                data-segment-start={segment.start}
+                data-segment-risk={riskOf(segment)}
+              >
                 <Segment
                   segment={segment}
                   model={model}
@@ -230,6 +344,8 @@ export default function TranscriptView({
                   onSeek={onSeek}
                   onWordClick={onWordClick}
                   onToggleVerify={onToggleVerify}
+                  selected={selected.has(segment.id)}
+                  onToggleSelect={onBulkVerify ? toggleSelect : undefined}
                 />
               </div>
             ))

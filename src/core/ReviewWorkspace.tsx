@@ -1,33 +1,38 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import TopBar from './components/TopBar'
-import TranscriptView from './components/TranscriptView'
-import HistorySidebar from './components/HistorySidebar'
-import FocusPanel from './components/FocusPanel'
-import CandidatePopup, { type PopupAnchor } from './components/CandidatePopup'
-import ShortcutLegend from './components/ShortcutLegend'
-import defaultTranscriptJson from './data/defaultTranscript.json'
-import { useAudio } from './state/useAudio'
-import { useKeyboardShortcuts } from './state/useKeyboardShortcuts'
-import { useFileDrop } from './state/useFileDrop'
-import { useEventLog } from './state/useEventLog'
-import { extensionForMime, useRecorder } from './state/useRecorder'
-import { validateTranscript } from './utils/validateTranscript'
-import { predictRisks, PredictError } from './lib/predictApi'
-import { runFocus, runFocusAi, parseFocusInput, parseFocusQueries } from './lib/focusApi'
-import { transcribeAudio } from './lib/transcribeApi'
-import { segmentRiskWithFocus } from './lib/segmentRisk'
+import TopBar from '../components/TopBar'
+import TranscriptView from '../components/TranscriptView'
+import HistorySidebar from '../components/HistorySidebar'
+import FocusPanel from '../components/FocusPanel'
+import CandidatePopup, { type PopupAnchor } from '../components/CandidatePopup'
+import ShortcutLegend from '../components/ShortcutLegend'
+import defaultTranscriptJson from '../data/defaultTranscript.json'
+import { useAudio } from '../state/useAudio'
+import { useKeyboardShortcuts } from '../state/useKeyboardShortcuts'
+import { useFileDrop } from '../state/useFileDrop'
+import type { EventLog } from '../state/useEventLog'
+import { extensionForMime, useRecorder } from '../state/useRecorder'
+import { validateTranscript } from '../utils/validateTranscript'
+import { predictRisks, PredictError } from '../lib/predictApi'
+import { runFocus, runFocusAi, parseFocusInput, parseFocusQueries } from '../lib/focusApi'
+import { transcribeAudio } from '../lib/transcribeApi'
+import { segmentRiskWithFocus } from '../lib/segmentRisk'
 import type {
+  Condition,
   EditState,
   FocusMode,
   FocusResult,
   FocusSnippet,
   FocusWordHit,
+  HighlightLayer,
   HistoryEntry,
   ModelName,
+  Risk,
   RiskDimension,
   SeekTrigger,
   Transcript,
-} from './types'
+} from '../types'
+import type { WorkspaceConfig } from './config'
+import { CONDITION_CONFIG } from './conditions'
 
 // Bundled default case (case447). The transcript ships in src/data; the audio
 // is served from public/ and fetched into a Blob on mount (same path uploads
@@ -54,7 +59,41 @@ function modelsOf(transcript: Transcript): ModelName[] {
   return first ? (Object.keys(first.words) as ModelName[]) : []
 }
 
-export default function App() {
+// Trial context injected by the study trial runner (Phase 3). Drives the locked
+// condition, resets review state per trial, and bounds the per-trial event clock.
+export interface TrialContext {
+  key: string
+  block: number
+  trialIndex: number
+  condition: Condition
+  difficulty: string
+  stimulusId: string
+  timeBudgetMs: number
+  focusTerms?: string
+}
+
+export default function ReviewWorkspace({
+  config,
+  events,
+  lockedCondition,
+  trial,
+  interactionLocked = false,
+  participantOverride,
+}: {
+  config: WorkspaceConfig
+  // Behavioural event log, created by the shell (AppFull/AppStudy) so it
+  // survives across study trials and is reachable for export on the done screen.
+  events: EventLog
+  // Study build: the condition (C1–C4) selected by the experimenter / trial
+  // runner. Locks the highlight layer + focus. Ignored by the full build.
+  lockedCondition?: Condition
+  // Study trial runner: per-trial context + whether the fixed-time window has
+  // closed (interaction disabled).
+  trial?: TrialContext
+  interactionLocked?: boolean
+  // Study: participant code from the experimenter setup (stamped on every event).
+  participantOverride?: string
+}) {
   const [transcript, setTranscript] = useState<Transcript>(defaultTranscript)
   const [transcriptFilename, setTranscriptFilename] = useState<string | null>(null)
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
@@ -62,6 +101,9 @@ export default function App() {
   // Object URL for the "Download recording" affordance. Owned here so we can
   // revoke it cleanly when a new recording arrives or the file changes.
   const [recordingDownloadUrl, setRecordingDownloadUrl] = useState<string | null>(null)
+  // UI: collapsible side panels.
+  const [focusCollapsed, setFocusCollapsed] = useState(false)
+  const [auditCollapsed, setAuditCollapsed] = useState(false)
 
   const availableModels = useMemo(() => modelsOf(transcript), [transcript])
   const [model, setModel] = useState<ModelName>(availableModels[0])
@@ -131,14 +173,25 @@ export default function App() {
     return { focusHitMap: map, focusSegmentIds: segs }
   }, [focusResult])
 
-  // ---- Behavioural event log (ref-backed, no re-renders on log) ----
-  const events = useEventLog()
+  // ---- Behavioural event log (lifted to the shell so it survives across study
+  // trials; passed in via props.events) ----
 
-  // Mirror reviewer/model into the event-log context so every event carries
-  // the latest values without us threading them through every call site.
+  // Mirror identity + the effective condition into the event-log context so
+  // every row carries the latest values without prop-drilling. In study the
+  // condition is C1–C4 (trial/locked); in full it's the researcher free-text.
+  const logCondition =
+    config.mode === 'study'
+      ? trial?.condition ?? lockedCondition ?? config.condition ?? 'C3'
+      : condition
+  const logParticipant = participantOverride ?? participantId
   useEffect(() => {
-    events.setContext({ reviewer, model, participantId, condition })
-  }, [reviewer, model, participantId, condition, events])
+    events.setContext({
+      reviewer,
+      model,
+      participantId: logParticipant,
+      condition: logCondition,
+    })
+  }, [reviewer, model, logParticipant, logCondition, events])
 
   // Emit session_start exactly once, after the first transcript is in place.
   const sessionStartedRef = useRef(false)
@@ -162,6 +215,7 @@ export default function App() {
   useEffect(() => {
     if (defaultLoadedRef.current) return
     defaultLoadedRef.current = true
+    if (!config.loadDefaultCase) return
 
     let cancelled = false
     fetch(DEFAULT_AUDIO_URL)
@@ -174,21 +228,81 @@ export default function App() {
       })
       .catch((e) => console.warn('Default audio not loaded:', (e as Error).message))
 
-    setPredicting(true)
-    predictRisks(defaultTranscript, modelsOf(defaultTranscript)[0])
-      .then((annotated) => {
-        if (!cancelled) setTranscript(annotated)
-      })
-      .catch((e) => console.warn('Default transcript not annotated:', (e as Error).message))
-      .finally(() => {
-        if (!cancelled) setPredicting(false)
-      })
+    if (config.livePredict) {
+      setPredicting(true)
+      predictRisks(defaultTranscript, modelsOf(defaultTranscript)[0])
+        .then((annotated) => {
+          if (!cancelled) setTranscript(annotated)
+        })
+        .catch((e) => console.warn('Default transcript not annotated:', (e as Error).message))
+        .finally(() => {
+          if (!cancelled) setPredicting(false)
+        })
+    }
 
     return () => {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // ---- Active highlight layer + focus availability (C1–C4) ----
+  // Full build: the reviewer's free RiskDimension toggle drives colouring.
+  // Study build: the active condition locks the highlight layer and whether
+  // case focus exists at all.
+  const effectiveCondition: Condition =
+    trial?.condition ?? lockedCondition ?? config.condition ?? 'C3'
+  const conditionCfg = CONDITION_CONFIG[effectiveCondition]
+  const activeHighlight: HighlightLayer = config.allowFreeDimension
+    ? dimension
+    : conditionCfg.highlight
+  const focusEnabled = config.allowFreeDimension ? true : conditionCfg.focus
+  // Focus only paints when it's enabled *and* a retrieval has actually run.
+  const showFocus = focusEnabled && focusActive
+
+  // Study build warns before leaving so a tab close can't silently drop a
+  // recruited session (the event log is also backed up to localStorage).
+  useEffect(() => {
+    if (config.mode !== 'study') return
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [config.mode])
+
+  // ---- Trial runner integration (study) ----
+  // On a new trial: reset review state, stamp the trial context + per-trial
+  // clock, and mark trial_start. On time-up (interactionLocked): mark trial_end.
+  const trialKeyRef = useRef<string | null>(null)
+  const trialEndedRef = useRef(false)
+  useEffect(() => {
+    if (!trial || trialKeyRef.current === trial.key) return
+    trialKeyRef.current = trial.key
+    trialEndedRef.current = false
+    setEdits({})
+    setVerified({})
+    setHistory([])
+    setPopup(null)
+    setFocusResult(null)
+    setFocusActive(false)
+    setFocusError(null)
+    setFocusText(trial.focusTerms ?? '')
+    events.setTrial({
+      block: trial.block,
+      trialIndex: trial.trialIndex,
+      condition: trial.condition,
+      difficulty: trial.difficulty,
+      stimulusId: trial.stimulusId,
+    })
+    events.log('trial_start', { time_budget_ms: trial.timeBudgetMs })
+  }, [trial, events])
+  useEffect(() => {
+    if (!trial || !interactionLocked || trialEndedRef.current) return
+    trialEndedRef.current = true
+    events.log('trial_end', {})
+  }, [interactionLocked, trial, events])
 
   // ---- Audio with logging hooks ----
   // Waveform markers reflect the *active* risk dimension, so toggling the
@@ -202,11 +316,11 @@ export default function App() {
         risk: segmentRiskWithFocus(
           s,
           model,
-          dimension,
-          focusActive && focusSegmentIds.has(s.id),
+          activeHighlight,
+          showFocus && focusSegmentIds.has(s.id),
         ),
       })),
-    [transcript, model, dimension, focusActive, focusSegmentIds],
+    [transcript, model, activeHighlight, showFocus, focusSegmentIds],
   )
 
   const audio = useAudio(audioBlob, transcript.audioDuration, {
@@ -291,6 +405,9 @@ export default function App() {
       word_index: wordIdx,
       word_text: word?.text,
       word_risk: word?.risk,
+      word_importance: word?.predicted_importance,
+      word_combined_risk: word?.combined_risk,
+      word_proba_high: word?.predicted_proba?.high,
     })
     events.log('popup_open', { segment_id: segId, word_index: wordIdx })
     setPopup({ segId, wordIdx, rect })
@@ -306,10 +423,13 @@ export default function App() {
     setPopup(null)
   }
 
-  const originalTextAt = (segId: number, wordIdx: number): string => {
+  const wordAt = (segId: number, wordIdx: number) => {
     const segment = transcript.segments.find((s) => s.id === segId)
-    return segment?.words[model]?.[wordIdx]?.text ?? ''
+    return segment?.words[model]?.[wordIdx]
   }
+
+  const originalTextAt = (segId: number, wordIdx: number): string =>
+    wordAt(segId, wordIdx)?.text ?? ''
 
   const applyEdit = (newText: string, reason?: string) => {
     if (!popup) return
@@ -335,6 +455,16 @@ export default function App() {
       }
     }
     const via: 'candidate' | 'manual' = candidates.has(newText) ? 'candidate' : 'manual'
+    // Which ASR model(s) produced the chosen candidate — a token-level "this
+    // model was right" label for the consensus/combine analysis. undefined for
+    // manual corrections.
+    const chosenModel =
+      via === 'candidate'
+        ? availableModels
+            .filter((m) => segment?.words[m]?.[popup.wordIdx]?.text === newText)
+            .join('|') || undefined
+        : undefined
+    const origWord = segment?.words[model]?.[popup.wordIdx]
 
     setEdits((prev) => ({
       ...prev,
@@ -355,6 +485,11 @@ export default function App() {
       from_text: fromDisplay,
       to_text: newText,
       via,
+      chosen_model: chosenModel,
+      word_risk: origWord?.risk,
+      word_importance: origWord?.predicted_importance,
+      word_combined_risk: origWord?.combined_risk,
+      word_proba_high: origWord?.predicted_proba?.high,
       reason,
     })
 
@@ -388,10 +523,15 @@ export default function App() {
       reason,
     })
 
+    const delWord = wordAt(popup.segId, popup.wordIdx)
     events.log('word_delete', {
       segment_id: popup.segId,
       word_index: popup.wordIdx,
       word_text: displayedText,
+      word_risk: delWord?.risk,
+      word_importance: delWord?.predicted_importance,
+      word_combined_risk: delWord?.combined_risk,
+      word_proba_high: delWord?.predicted_proba?.high,
       reason,
     })
 
@@ -402,26 +542,57 @@ export default function App() {
     setPopup(null)
   }
 
-  const toggleVerify = useCallback(
-    (segId: number) => {
+  // Bulk verify/unverify a set of segments in one go (used by "Verify all
+  // shown" / "Clear all" and shift-click range). Writes one audit entry per
+  // changed segment (chain-of-custody) sharing a timestamp, + one event each.
+  // Bulk verify/unverify the given segments. Writes ONE summary audit entry
+  // (segmentIds) so the trail doesn't balloon, plus a per-segment behavioural
+  // event for analysis. Side effects are kept OUTSIDE the setVerified updater so
+  // React StrictMode's double-invoked updater can't double-log.
+  const verifyMany = useCallback(
+    (segIds: number[], value: boolean) => {
+      const changed = segIds.filter((id) => !!verified[id] !== value)
+      if (changed.length === 0) return
       setVerified((prev) => {
-        const next = !prev[segId]
-        setHistory((h) => [
-          {
-            id: nextEntryId(),
-            timestamp: nowStamp(),
-            reviewer: currentReviewer(),
-            kind: next ? 'verify' : 'unverify',
-            segmentId: segId,
-          },
-          ...h,
-        ])
-        events.log(next ? 'verify' : 'unverify', { segment_id: segId })
-        return { ...prev, [segId]: next }
+        const next = { ...prev }
+        for (const id of changed) next[id] = value
+        return next
       })
+      setHistory((h) => [
+        {
+          id: nextEntryId(),
+          timestamp: nowStamp(),
+          reviewer: currentReviewer(),
+          kind: value ? 'verify' : 'unverify',
+          segmentId: changed[0],
+          segmentIds: changed,
+        },
+        ...h,
+      ])
+      for (const id of changed) events.log(value ? 'verify' : 'unverify', { segment_id: id })
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [reviewer, events],
+    [verified, reviewer, events],
+  )
+
+  const toggleVerify = useCallback(
+    (segId: number) => {
+      const next = !verified[segId]
+      setVerified((prev) => ({ ...prev, [segId]: next }))
+      setHistory((h) => [
+        {
+          id: nextEntryId(),
+          timestamp: nowStamp(),
+          reviewer: currentReviewer(),
+          kind: next ? 'verify' : 'unverify',
+          segmentId: segId,
+        },
+        ...h,
+      ])
+      events.log(next ? 'verify' : 'unverify', { segment_id: segId })
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [verified, reviewer, events],
   )
 
   // ---- Speed + model dropdowns ----
@@ -436,10 +607,31 @@ export default function App() {
     setModel(next)
   }
 
+  // Full build: reviewer freely switches the risk view. Study build: the Risk
+  // dropdown is hidden, so this fires only if the manipulation is somehow
+  // changed mid-trial — a contamination signal to filter on in analysis.
+  const handleDimensionChange = (next: RiskDimension) => {
+    events.log('dimension_change', { from_dimension: dimension, to_dimension: next })
+    setDimension(next)
+  }
+
+  // Stable so TranscriptView's IntersectionObserver isn't rebuilt every render
+  // (events.log is stable across renders; the events object identity is not).
+  const handleSegmentView = useCallback(
+    (segId: number, start: number, risk: Risk) =>
+      events.log('segment_view', {
+        segment_id: segId,
+        segment_start: start,
+        segment_risk: risk,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  )
+
   const focusHitFor = useCallback(
     (segId: number, wordIdx: number): FocusWordHit | undefined =>
-      focusActive ? focusHitMap.get(`${segId}-${wordIdx}`) : undefined,
-    [focusActive, focusHitMap],
+      showFocus ? focusHitMap.get(`${segId}-${wordIdx}`) : undefined,
+    [showFocus, focusHitMap],
   )
 
   const handleRunFocus = useCallback(async () => {
@@ -500,6 +692,7 @@ export default function App() {
         segment_id: snippet.segment_id,
         focus_label: label,
         focus_match_type: snippet.match_type,
+        focus_match_detail: snippet.match_detail ?? undefined,
         focus_score: snippet.focus_score,
       })
       seekWithLog(snippet.segment_start, 'marker')
@@ -539,21 +732,23 @@ export default function App() {
       // Fire off importance prediction. If the local service is down we surface
       // a clear error but leave the unannotated transcript loaded so the
       // reviewer can still work in `uncertainty` view.
-      setPredicting(true)
-      try {
-        const annotated = await predictRisks(result.transcript, pickedModel)
-        setTranscript(annotated)
-      } catch (err) {
-        const msg =
-          err instanceof PredictError
-            ? err.message
-            : `Prediction failed: ${(err as Error).message}`
-        setErrorMsg(msg)
-      } finally {
-        setPredicting(false)
+      if (config.livePredict) {
+        setPredicting(true)
+        try {
+          const annotated = await predictRisks(result.transcript, pickedModel)
+          setTranscript(annotated)
+        } catch (err) {
+          const msg =
+            err instanceof PredictError
+              ? err.message
+              : `Prediction failed: ${(err as Error).message}`
+          setErrorMsg(msg)
+        } finally {
+          setPredicting(false)
+        }
       }
     },
-    [events],
+    [events, config],
   )
 
   // Auto-transcribe an audio file via the ASR service (:8001), then load the
@@ -579,6 +774,17 @@ export default function App() {
     [applyTranscript],
   )
 
+  // Run the ASR models on the currently-loaded audio. Explicit (not on upload)
+  // so a saved transcript can be paired with its audio without re-transcribing.
+  const handleTranscribe = useCallback(() => {
+    if (!audioBlob || transcribing) return
+    const file =
+      audioBlob instanceof File
+        ? audioBlob
+        : new File([audioBlob], audioFilename ?? 'recording')
+    void transcribeAndApply(file)
+  }, [audioBlob, audioFilename, transcribing, transcribeAndApply])
+
   const handleAudioUpload = useCallback(
     (file: File) => {
       setErrorMsg(null)
@@ -589,10 +795,10 @@ export default function App() {
         return null
       })
       events.log('audio_load', { audio_filename: file.name })
-      // Auto-transcribe the uploaded audio (ASR service on :8001).
-      void transcribeAndApply(file)
+      // Audio is loaded for playback only — running the ASR models is a
+      // separate, explicit "Transcribe" action.
     },
-    [events, transcribeAndApply],
+    [events],
   )
 
   const recorder = useRecorder({ onError: (msg) => setErrorMsg(msg) })
@@ -613,13 +819,12 @@ export default function App() {
         return URL.createObjectURL(blob)
       })
       events.log('audio_load', { audio_filename: name })
-      // Auto-transcribe the recording, same as an uploaded file.
-      void transcribeAndApply(new File([blob], name, { type: mimeType }))
+      // Loaded for playback; use the Transcribe button to run the ASR models.
     } else {
       setErrorMsg(null)
       await recorder.start()
     }
-  }, [recorder, events, transcribeAndApply])
+  }, [recorder, events])
 
   // Revoke the recording download URL on unmount.
   useEffect(() => {
@@ -684,7 +889,11 @@ export default function App() {
   const totalSegments = transcript.segments.length
 
   return (
-    <div className="relative h-full flex flex-col bg-surface-muted">
+    <div
+      className={`relative h-full flex flex-col bg-surface-muted${
+        interactionLocked ? ' pointer-events-none select-none opacity-60' : ''
+      }`}
+    >
       <TopBar
         model={model}
         availableModels={availableModels}
@@ -706,8 +915,15 @@ export default function App() {
           recordingDownloadUrl && audioFilename ? audioFilename : null
         }
         dimension={dimension}
-        onDimensionChange={setDimension}
+        onDimensionChange={handleDimensionChange}
         predicting={predicting}
+        showRiskSelect={config.allowFreeDimension}
+        allowUpload={config.allowUpload}
+        allowRecord={config.allowRecord}
+        allowTranscribe={config.allowAutoTranscribe}
+        canTranscribe={!!audioBlob}
+        transcribing={transcribing}
+        onTranscribe={handleTranscribe}
       />
 
       {transcribing && (
@@ -741,34 +957,42 @@ export default function App() {
       )}
 
       <div className="flex-1 flex overflow-hidden">
-        <FocusPanel
-          text={focusText}
-          onTextChange={setFocusText}
-          mode={focusMode}
-          onModeChange={handleFocusModeChange}
-          onRun={handleRunFocus}
-          onClear={handleClearFocus}
-          running={focusRunning}
-          active={focusActive}
-          result={focusResult}
-          error={focusError}
-          onSnippetClick={handleFocusSnippetClick}
-        />
+        {focusEnabled && (
+          <FocusPanel
+            text={focusText}
+            onTextChange={setFocusText}
+            mode={focusMode}
+            onModeChange={handleFocusModeChange}
+            onRun={handleRunFocus}
+            onClear={handleClearFocus}
+            running={focusRunning}
+            active={focusActive}
+            result={focusResult}
+            error={focusError}
+            readOnly={!config.allowFocusFreeInput}
+            collapsed={focusCollapsed}
+            onToggleCollapse={() => setFocusCollapsed((v) => !v)}
+            onSnippetClick={handleFocusSnippetClick}
+          />
+        )}
         <TranscriptView
           transcript={transcript}
           model={model}
           currentTime={audio.currentTime}
           edits={edits}
           verified={verified}
-          dimension={dimension}
-          focusActive={focusActive}
+          dimension={activeHighlight}
+          showViewControls={activeHighlight !== 'none'}
+          focusActive={showFocus}
           focusSegmentIds={focusSegmentIds}
           focusHitFor={focusHitFor}
           onSeek={(t) => seekWithLog(t, 'segment')}
           onWordClick={openPopup}
           onToggleVerify={toggleVerify}
+          onBulkVerify={verifyMany}
           onFilterChange={(filter) => events.log('filter_change', { filter })}
           onSortChange={(sort) => events.log('sort_change', { sort })}
+          onSegmentView={handleSegmentView}
         />
         <HistorySidebar
           history={history}
@@ -782,6 +1006,8 @@ export default function App() {
           audioFilename={audioFilename}
           transcriptFilename={transcriptFilename}
           onExport={wrappedAuditExport}
+          collapsed={auditCollapsed}
+          onToggleCollapse={() => setAuditCollapsed((v) => !v)}
         />
       </div>
 

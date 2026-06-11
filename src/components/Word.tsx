@@ -1,11 +1,11 @@
-import type { FocusWordHit, Risk, RiskDimension, Word as WordType } from '../types'
+import type { FocusWordHit, HighlightLayer, Risk, Word as WordType } from '../types'
 
 interface Props {
   word: WordType
   displayText: string
   edited: boolean
   deleted: boolean
-  dimension: RiskDimension
+  dimension: HighlightLayer
   // When set (focus mode, 2b), this word was retrieved for a focus term and is
   // elevated to HIGH with a distinct violet marker layered on top.
   focusHit?: FocusWordHit
@@ -15,7 +15,8 @@ interface Props {
 // Pick the risk value to colour by, based on the active display dimension.
 // Falls back to the upstream `risk` (uncertainty) if the prediction service
 // hasn't run yet — so the UI stays usable in offline / pre-fetch state.
-function riskFor(word: WordType, dimension: RiskDimension): Risk {
+function riskFor(word: WordType, dimension: HighlightLayer): Risk {
+  if (dimension === 'none') return 'low' // C1: plain text, no colouring
   if (dimension === 'uncertainty') return word.risk
   if (dimension === 'importance') return word.predicted_importance ?? word.risk
   return word.combined_risk ?? word.risk

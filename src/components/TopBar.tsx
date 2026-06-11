@@ -23,6 +23,17 @@ interface Props {
   dimension: RiskDimension
   onDimensionChange: (d: RiskDimension) => void
   predicting: boolean
+  // Study build gates: hide the free risk toggle and the upload/record
+  // controls when the condition is locked by the experiment.
+  showRiskSelect?: boolean
+  allowUpload?: boolean
+  allowRecord?: boolean
+  // "Transcribe" runs the ASR service on the currently-loaded audio. Decoupled
+  // from the Audio button (which now only loads audio for playback).
+  allowTranscribe?: boolean
+  canTranscribe?: boolean
+  transcribing?: boolean
+  onTranscribe?: () => void
 }
 
 function formatTime(seconds: number): string {
@@ -95,6 +106,13 @@ export default function TopBar({
   dimension,
   onDimensionChange,
   predicting,
+  showRiskSelect = true,
+  allowUpload = true,
+  allowRecord = true,
+  allowTranscribe = false,
+  canTranscribe = false,
+  transcribing = false,
+  onTranscribe,
 }: Props) {
   const reviewerMissing = reviewer.trim() === ''
 
@@ -117,7 +135,8 @@ export default function TopBar({
         </span>
       </div>
 
-      {/* Upload controls */}
+      {/* Upload + record controls (hidden when the study build locks them). */}
+      {(allowUpload || allowRecord) && (
       <div className="flex items-center gap-1">
         <input
           ref={audioInputRef}
@@ -158,6 +177,32 @@ export default function TopBar({
           <UploadIcon />
           Transcript
         </button>
+
+        {allowTranscribe && (
+          <button
+            onClick={onTranscribe}
+            disabled={!canTranscribe || transcribing}
+            className="flex items-center gap-1 text-[11px] px-2 py-1 rounded border transition-colors border-focus/40 text-focus bg-focus-bg hover:border-focus/60 disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-white disabled:text-ink-muted disabled:border-border"
+            title={canTranscribe ? 'Run the ASR models on the loaded audio' : 'Load an audio file first'}
+          >
+            {transcribing ? (
+              <>
+                <svg className="animate-spin" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <circle cx="5" cy="5" r="3.5" strokeOpacity="0.25" />
+                  <path d="M5 1.5a3.5 3.5 0 0 1 3.5 3.5" strokeLinecap="round" />
+                </svg>
+                Transcribing…
+              </>
+            ) : (
+              <>
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.3">
+                  <path d="M2 4v2M4 2.5v5M6 1.5v7M8 3.5v3" strokeLinecap="round" />
+                </svg>
+                Transcribe
+              </>
+            )}
+          </button>
+        )}
 
         <button
           onClick={onToggleRecord}
@@ -207,6 +252,7 @@ export default function TopBar({
           </a>
         )}
       </div>
+      )}
 
       {/* Reviewer identity */}
       <label className="flex items-center gap-1.5" title="Recorded on every audit-trail entry">
@@ -294,6 +340,7 @@ export default function TopBar({
           </select>
         </label>
 
+        {showRiskSelect && (
         <label
           className="flex items-center gap-1.5"
           title="Which risk signal drives the word highlights"
@@ -309,6 +356,7 @@ export default function TopBar({
             <option value="importance">Importance</option>
           </select>
         </label>
+        )}
 
         {predicting && (
           <span

@@ -1,4 +1,4 @@
-import type { EditState, FocusWordHit, ModelName, RiskDimension, Segment as SegmentType } from '../types'
+import type { EditState, FocusWordHit, HighlightLayer, ModelName, Segment as SegmentType } from '../types'
 import { segmentRiskWithFocus } from '../lib/segmentRisk'
 import Word from './Word'
 
@@ -8,7 +8,7 @@ interface Props {
   active: boolean
   verified: boolean
   edits: Record<string, EditState>
-  dimension: RiskDimension
+  dimension: HighlightLayer
   // Focus mode (2b): whether this segment holds a focus hit, and a lookup for
   // per-word focus markers. Both no-ops when focus is inactive.
   focused: boolean
@@ -16,6 +16,9 @@ interface Props {
   onSeek: (seconds: number) => void
   onWordClick: (segId: number, wordIdx: number, rect: DOMRect) => void
   onToggleVerify: (segId: number) => void
+  // Multi-select for bulk verify: tick state + toggler (shift-click = range).
+  selected?: boolean
+  onToggleSelect?: (segId: number, opts?: { range?: boolean }) => void
 }
 
 function formatTime(seconds: number): string {
@@ -50,6 +53,8 @@ export default function Segment({
   onSeek,
   onWordClick,
   onToggleVerify,
+  selected = false,
+  onToggleSelect,
 }: Props) {
   const words = segment.words[model] ?? []
 
@@ -71,6 +76,28 @@ export default function Segment({
       onClick={() => onSeek(segment.start)}
       className={`group flex gap-3 rounded-md cursor-pointer transition-colors px-3 py-2 -mx-3 ${containerCls}`}
     >
+      {onToggleSelect && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggleSelect(segment.id, { range: e.shiftKey })
+          }}
+          title="Select for bulk verify (shift-click for a range)"
+          aria-pressed={selected}
+          className={[
+            'shrink-0 mt-0.5 w-4 h-4 rounded border flex items-center justify-center transition-colors',
+            selected
+              ? 'bg-ink border-ink text-white'
+              : 'border-border-strong bg-white hover:border-ink-muted opacity-60 group-hover:opacity-100',
+          ].join(' ')}
+        >
+          {selected && (
+            <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M2.5 6.5 5 9l4.5-5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </button>
+      )}
       <div className={`w-[3px] rounded-full shrink-0 ${bar}`} />
 
       <div className="flex-1 min-w-0">

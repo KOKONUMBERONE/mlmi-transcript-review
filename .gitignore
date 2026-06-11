@@ -26,6 +26,8 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+# Build-mode selector for the user-study build (no secrets — needed by build:study).
+!.env.study
 
 # Test / coverage
 coverage/

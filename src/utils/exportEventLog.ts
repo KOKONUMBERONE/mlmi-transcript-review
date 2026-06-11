@@ -23,8 +23,15 @@ function csvEscape(value: unknown): string {
 // in insertion order at the end.
 const KNOWN_COLUMNS = [
   't_ms',
+  't_in_trial_ms',
   't_iso',
   'type',
+  'participant_id',
+  'condition',
+  'block',
+  'trial_index',
+  'difficulty',
+  'stimulus_id',
   'reviewer',
   'model',
   'segment_id',
@@ -33,6 +40,9 @@ const KNOWN_COLUMNS = [
   'word_index',
   'word_text',
   'word_risk',
+  'word_importance',
+  'word_combined_risk',
+  'word_proba_high',
   'audio_position',
   'from_position',
   'to_position',
@@ -44,14 +54,25 @@ const KNOWN_COLUMNS = [
   'from_text',
   'to_text',
   'via',
+  'chosen_model',
   'reason',
   'filter',
   'sort',
+  'from_dimension',
+  'to_dimension',
   'export_kind',
   'audio_duration',
   'transcript_filename',
   'audio_filename',
   'segment_count',
+  'time_budget_ms',
+  'focus_terms',
+  'focus_label',
+  'focus_match_type',
+  'focus_match_detail',
+  'focus_score',
+  'focus_hits',
+  'focus_mode',
 ] as const
 
 function summary(events: LogEvent[]): Record<string, unknown> {
@@ -72,7 +93,7 @@ function safeStamp(): string {
 export function exportEventLogAsJSON(events: LogEvent[]): void {
   const payload = {
     exported_at: new Date().toISOString(),
-    schema_version: 1,
+    schema_version: 2,
     summary: summary(events),
     events,
   }

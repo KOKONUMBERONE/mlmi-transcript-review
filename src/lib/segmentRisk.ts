@@ -1,4 +1,4 @@
-import type { ModelName, Risk, RiskDimension, Segment } from '../types'
+import type { HighlightLayer, ModelName, Risk, Segment } from '../types'
 
 const RANK: Record<Risk, number> = { low: 0, med: 1, high: 2 }
 const BY_RANK: Risk[] = ['low', 'med', 'high']
@@ -18,8 +18,10 @@ const BY_RANK: Risk[] = ['low', 'med', 'high']
 export function segmentRiskFor(
   segment: Segment,
   model: ModelName,
-  dimension: RiskDimension,
+  dimension: HighlightLayer,
 ): Risk {
+  // C1 (plain text): no risk colouring at all.
+  if (dimension === 'none') return 'low'
   // Fall back to upstream paraRisk for uncertainty when the segment hasn't
   // been re-emitted by the prediction service yet — preserves existing
   // behaviour exactly when nothing else is available.
@@ -48,7 +50,7 @@ export function segmentRiskFor(
 export function segmentRiskWithFocus(
   segment: Segment,
   model: ModelName,
-  dimension: RiskDimension,
+  dimension: HighlightLayer,
   focused: boolean,
 ): Risk {
   if (focused) return 'high'
