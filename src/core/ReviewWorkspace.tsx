@@ -3,6 +3,7 @@ import TopBar from '../components/TopBar'
 import TranscriptView from '../components/TranscriptView'
 import HistorySidebar from '../components/HistorySidebar'
 import FocusPanel from '../components/FocusPanel'
+import OutlineModal from '../components/OutlineModal'
 import CandidatePopup, { type PopupAnchor } from '../components/CandidatePopup'
 import ShortcutLegend from '../components/ShortcutLegend'
 import defaultTranscriptJson from '../data/defaultTranscript.json'
@@ -13,23 +14,34 @@ import type { EventLog } from '../state/useEventLog'
 import { extensionForMime, useRecorder } from '../state/useRecorder'
 import { validateTranscript } from '../utils/validateTranscript'
 import { predictRisks, PredictError } from '../lib/predictApi'
-import { runFocus, runFocusAi, parseFocusInput, parseFocusQueries } from '../lib/focusApi'
+import {
+  runFocus,
+  runFocusAi,
+  mergeFocusResults,
+  parseFocusInput,
+  parseFocusQueries,
+} from '../lib/focusApi'
+import { runOutline } from '../lib/outlineApi'
 import { transcribeAudio } from '../lib/transcribeApi'
 import { segmentRiskWithFocus } from '../lib/segmentRisk'
 import type {
   Condition,
   EditState,
-  FocusMode,
   FocusResult,
   FocusSnippet,
   FocusWordHit,
   HighlightLayer,
   HistoryEntry,
   ModelName,
+  OutlineChapter,
+  OutlinePart,
+  OutlineResult,
   Risk,
   RiskDimension,
   SeekTrigger,
+  Segment,
   Transcript,
+  Word,
 } from '../types'
 import type { WorkspaceConfig } from './config'
 import { CONDITION_CONFIG } from './conditions'
@@ -57,6 +69,19 @@ const nextEntryId = () => `${Date.now()}-${++entryCounter}`
 function modelsOf(transcript: Transcript): ModelName[] {
   const first = transcript.segments[0]
   return first ? (Object.keys(first.words) as ModelName[]) : []
+}
+
+// Segment-level paraRisk = max uncertainty across its words (recomputed after
+// a structural split/merge).
+const RISK_RANK: Record<Risk, number> = { low: 0, med: 1, high: 2 }
+const RISK_BY_RANK: Risk[] = ['low', 'med', 'high']
+function segMaxRisk(words: Word[] | undefined): Risk {
+  let r = 0
+  for (const w of words ?? []) {
+    const k = RISK_RANK[w.risk]
+    if (k > r) r = k
+  }
+  return RISK_BY_RANK[r]
 }
 
 // Trial context injected by the study trial runner (Phase 3). Drives the locked
@@ -95,15 +120,19 @@ export default function ReviewWorkspace({
   participantOverride?: string
 }) {
   const [transcript, setTranscript] = useState<Transcript>(defaultTranscript)
+  // Pristine snapshot of the loaded transcript (raw pipeline output) so the
+  // "Original (JSON)" export stays untouched by manual split/merge/sentence edits.
+  const originalTranscriptRef = useRef<Transcript>(defaultTranscript)
   const [transcriptFilename, setTranscriptFilename] = useState<string | null>(null)
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
   const [audioFilename, setAudioFilename] = useState<string | null>(null)
   // Object URL for the "Download recording" affordance. Owned here so we can
   // revoke it cleanly when a new recording arrives or the file changes.
   const [recordingDownloadUrl, setRecordingDownloadUrl] = useState<string | null>(null)
-  // UI: collapsible side panels.
+  // UI: collapsible side panels + shift-click range-verify anchor.
   const [focusCollapsed, setFocusCollapsed] = useState(false)
   const [auditCollapsed, setAuditCollapsed] = useState(false)
+  const verifyAnchorRef = useRef<number | null>(null)
 
   const availableModels = useMemo(() => modelsOf(transcript), [transcript])
   const [model, setModel] = useState<ModelName>(availableModels[0])
@@ -112,6 +141,10 @@ export default function ReviewWorkspace({
   const [condition, setCondition] = useState<string>('')
 
   const [edits, setEdits] = useState<Record<string, EditState>>({})
+  // #1 whole-sentence rewrites, keyed by segment id (supersede per-word edits).
+  const [segmentTextEdits, setSegmentTextEdits] = useState<
+    Record<number, { text: string; reason?: string }>
+  >({})
   const [verified, setVerified] = useState<Record<number, boolean>>({})
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [popup, setPopup] = useState<PopupAnchor | null>(null)
@@ -126,17 +159,32 @@ export default function ReviewWorkspace({
   // audio file. Drives a progress banner — transcription runs on CPU and is slow.
   const [transcribing, setTranscribing] = useState<boolean>(false)
 
+  // ---- Outline sub-page: whether the centre modal is open ----
+  const [outlineOpen, setOutlineOpen] = useState(false)
+
   // ---- Case focus (2b) — retrieval overlay on top of the default scoring ----
+  // The "Find" box runs ONE unified search: lexical first (fast, deterministic)
+  // then, in the full build, a local-LLM pass enriches/extends it in the
+  // background (no Lexical/AI toggle — the engines collaborate).
   const [focusText, setFocusText] = useState<string>('')
-  const [focusMode, setFocusMode] = useState<FocusMode>('lexical')
   const [focusResult, setFocusResult] = useState<FocusResult | null>(null)
   const [focusActive, setFocusActive] = useState<boolean>(false)
   const [focusRunning, setFocusRunning] = useState<boolean>(false)
-  // Focus-only error (e.g. AI mode with Ollama not running). Kept separate from
-  // the global `errorMsg` banner so a missing local LLM degrades gracefully:
-  // it surfaces *inside* the Focus panel and never blocks lexical search or the
-  // rest of the app.
+  // True while the background AI pass is still merging into the lexical result.
+  const [aiEnriching, setAiEnriching] = useState<boolean>(false)
+  // Guards the async AI merge: a stale run (user re-searched / cleared) must not
+  // clobber the current result.
+  const focusRunIdRef = useRef(0)
+  // Focus-only error (e.g. the AI pass when Ollama isn't running). Kept separate
+  // from the global `errorMsg` banner so a missing local LLM degrades
+  // gracefully: it surfaces *inside* the panel and never blocks lexical search
+  // or the rest of the app.
   const [focusError, setFocusError] = useState<string | null>(null)
+
+  // ---- Outline (long-transcript chapters) — local-LLM navigation overlay ----
+  const [outlineResult, setOutlineResult] = useState<OutlineResult | null>(null)
+  const [outlineRunning, setOutlineRunning] = useState<boolean>(false)
+  const [outlineError, setOutlineError] = useState<string | null>(null)
 
   // Derive, from the retrieval result, the per-word marker lookup and the set
   // of segments that hold any hit. The hit shown on a word is the
@@ -232,7 +280,10 @@ export default function ReviewWorkspace({
       setPredicting(true)
       predictRisks(defaultTranscript, modelsOf(defaultTranscript)[0])
         .then((annotated) => {
-          if (!cancelled) setTranscript(annotated)
+          if (!cancelled) {
+            setTranscript(annotated)
+            originalTranscriptRef.current = annotated
+          }
         })
         .catch((e) => console.warn('Default transcript not annotated:', (e as Error).message))
         .finally(() => {
@@ -289,6 +340,8 @@ export default function ReviewWorkspace({
     setFocusActive(false)
     setFocusError(null)
     setFocusText(trial.focusTerms ?? '')
+    setOutlineResult(null)
+    setOutlineError(null)
     events.setTrial({
       block: trial.block,
       trialIndex: trial.trialIndex,
@@ -576,7 +629,21 @@ export default function ReviewWorkspace({
   )
 
   const toggleVerify = useCallback(
-    (segId: number) => {
+    (segId: number, opts?: { range?: boolean }) => {
+      const anchor = verifyAnchorRef.current
+      // Shift-click verifies the range (transcript order) from the last anchor.
+      if (opts?.range && anchor != null && anchor !== segId) {
+        const ids = transcript.segments.map((s) => s.id)
+        const a = ids.indexOf(anchor)
+        const b = ids.indexOf(segId)
+        if (a !== -1 && b !== -1) {
+          const [lo, hi] = a < b ? [a, b] : [b, a]
+          verifyMany(ids.slice(lo, hi + 1), true)
+          verifyAnchorRef.current = segId
+          return
+        }
+      }
+      verifyAnchorRef.current = segId
       const next = !verified[segId]
       setVerified((prev) => ({ ...prev, [segId]: next }))
       setHistory((h) => [
@@ -592,8 +659,145 @@ export default function ReviewWorkspace({
       events.log(next ? 'verify' : 'unverify', { segment_id: segId })
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [verified, reviewer, events],
+    [verified, reviewer, events, transcript, verifyMany],
   )
+
+  // ---- #1 whole-sentence edit ----
+  const editSentence = (segId: number, text: string) => {
+    const seg = transcript.segments.find((s) => s.id === segId)
+    if (!seg) return
+    const segWords = seg.words[model] ?? []
+    const oldFull =
+      segmentTextEdits[segId]?.text ??
+      segWords
+        .map((w, i) => {
+          const e = edits[`${segId}-${i}`]
+          if (e?.deleted) return ''
+          return e ? e.text : w.text
+        })
+        .filter(Boolean)
+        .join(' ')
+    if (text === oldFull) return
+    setSegmentTextEdits((prev) => ({ ...prev, [segId]: { text } }))
+    // Clear per-word edits for this segment — the rewrite supersedes them.
+    setEdits((prev) => {
+      const next: Record<string, EditState> = {}
+      for (const [k, v] of Object.entries(prev)) {
+        if (!k.startsWith(`${segId}-`)) next[k] = v
+      }
+      return next
+    })
+    logEntry({ kind: 'edit', segmentId: segId, from: oldFull, to: text })
+    events.log('edit_apply', { segment_id: segId, from_text: oldFull, to_text: text, via: 'manual' })
+  }
+
+  // ---- #2 structural edits (split / merge / change speaker) ----
+  const splitSegment = (segId: number, wordIdx: number) => {
+    const segs = transcript.segments
+    const idx = segs.findIndex((s) => s.id === segId)
+    if (idx === -1 || wordIdx <= 0) return
+    const seg = segs[idx]
+    const total = (seg.words[model] ?? []).length
+    if (wordIdx >= total) return
+    const newId = Math.max(...segs.map((s) => s.id)) + 1
+    const boundary = seg.start + (wordIdx / total) * (seg.end - seg.start)
+    const wordsA: Record<string, Word[]> = {}
+    const wordsB: Record<string, Word[]> = {}
+    for (const m of Object.keys(seg.words)) {
+      wordsA[m] = (seg.words[m] ?? []).slice(0, wordIdx)
+      wordsB[m] = (seg.words[m] ?? []).slice(wordIdx)
+    }
+    const segA: Segment = { ...seg, end: boundary, words: wordsA, paraRisk: segMaxRisk(wordsA[model]) }
+    const segB: Segment = {
+      id: newId,
+      speaker: seg.speaker,
+      start: boundary,
+      end: seg.end,
+      paraRisk: segMaxRisk(wordsB[model]),
+      words: wordsB,
+    }
+    setTranscript({
+      ...transcript,
+      segments: [...segs.slice(0, idx), segA, segB, ...segs.slice(idx + 1)],
+    })
+    // Remap edits: A keeps indices < wordIdx; B reindexed under the new id.
+    setEdits((prev) => {
+      const next: Record<string, EditState> = {}
+      for (const [k, v] of Object.entries(prev)) {
+        const m = /^(\d+)-(\d+)$/.exec(k)
+        if (!m || Number(m[1]) !== segId) {
+          next[k] = v
+          continue
+        }
+        const widx = Number(m[2])
+        if (widx < wordIdx) next[`${segId}-${widx}`] = v
+        else next[`${newId}-${widx - wordIdx}`] = v
+      }
+      return next
+    })
+    setVerified((prev) => ({ ...prev, [newId]: false }))
+    setSegmentTextEdits((prev) => {
+      const n = { ...prev }
+      delete n[segId]
+      return n
+    })
+    logEntry({ kind: 'split', segmentId: segId, to: `→ new seg ${newId}` })
+    events.log('segment_split', { segment_id: segId })
+    setPopup(null)
+  }
+
+  const mergeWithNext = (segId: number) => {
+    const segs = transcript.segments
+    const idx = segs.findIndex((s) => s.id === segId)
+    if (idx === -1 || idx >= segs.length - 1) return
+    const a = segs[idx]
+    const b = segs[idx + 1]
+    const aLen = (a.words[model] ?? []).length
+    const mergedWords: Record<string, Word[]> = {}
+    for (const m of new Set([...Object.keys(a.words), ...Object.keys(b.words)])) {
+      mergedWords[m] = [...(a.words[m] ?? []), ...(b.words[m] ?? [])]
+    }
+    const merged: Segment = { ...a, end: b.end, words: mergedWords, paraRisk: segMaxRisk(mergedWords[model]) }
+    setTranscript({
+      ...transcript,
+      segments: [...segs.slice(0, idx), merged, ...segs.slice(idx + 2)],
+    })
+    // Remap edits: A's stay; B's `${b.id}-k` -> `${a.id}-(aLen+k)`.
+    setEdits((prev) => {
+      const next: Record<string, EditState> = {}
+      for (const [k, v] of Object.entries(prev)) {
+        const m = /^(\d+)-(\d+)$/.exec(k)
+        if (m && Number(m[1]) === b.id) next[`${a.id}-${aLen + Number(m[2])}`] = v
+        else next[k] = v
+      }
+      return next
+    })
+    setVerified((prev) => {
+      const n = { ...prev }
+      delete n[b.id]
+      return n
+    })
+    setSegmentTextEdits((prev) => {
+      const n = { ...prev }
+      delete n[a.id]
+      delete n[b.id]
+      return n
+    })
+    logEntry({ kind: 'merge', segmentId: a.id, to: `+ seg ${b.id}` })
+    events.log('segment_merge', { segment_id: a.id })
+  }
+
+  const changeSpeaker = (segId: number, speaker: string) => {
+    const seg = transcript.segments.find((s) => s.id === segId)
+    if (!seg || seg.speaker === speaker) return
+    const old = seg.speaker
+    setTranscript({
+      ...transcript,
+      segments: transcript.segments.map((s) => (s.id === segId ? { ...s, speaker } : s)),
+    })
+    logEntry({ kind: 'speaker', segmentId: segId, from: old, to: speaker })
+    events.log('speaker_change', { segment_id: segId, from_text: old, to_text: speaker })
+  }
 
   // ---- Speed + model dropdowns ----
   const handleSpeedChange = (newSpeed: number) => {
@@ -634,31 +838,32 @@ export default function ReviewWorkspace({
     [showFocus, focusHitMap],
   )
 
+  // Unified "Find": lexical first (fast, deterministic) then, in the full
+  // build, a local-LLM pass enriches/extends it in the background. The lexical
+  // result paints immediately; the AI pass merges in when it returns (and only
+  // if this is still the latest run). Study (allowFocusFreeInput=false) stays
+  // lexical-only so the C4 manipulation is deterministic/frozen.
   const handleRunFocus = useCallback(async () => {
-    // Lexical = structured items (label + aliases); AI = free-text queries.
-    const labels =
-      focusMode === 'ai'
-        ? parseFocusQueries(focusText)
-        : parseFocusInput(focusText).map((i) => i.label)
-    if (labels.length === 0) {
+    const items = parseFocusInput(focusText)
+    if (items.length === 0) {
       setFocusResult(null)
       setFocusActive(false)
       return
     }
+    const runId = ++focusRunIdRef.current
     setFocusError(null)
     setFocusRunning(true)
+    let lexical: FocusResult | null = null
     try {
-      const result =
-        focusMode === 'ai'
-          ? await runFocusAi(transcript, parseFocusQueries(focusText))
-          : await runFocus(transcript, parseFocusInput(focusText), model)
-      setFocusResult(result)
+      lexical = await runFocus(transcript, items, model)
+      if (focusRunIdRef.current !== runId) return
+      setFocusResult(lexical)
       setFocusActive(true)
-      const hits = result.terms.reduce((n, t) => n + t.snippets.length, 0)
+      const hits = lexical.terms.reduce((n, t) => n + t.snippets.length, 0)
       events.log('focus_apply', {
-        focus_terms: labels.join(', '),
+        focus_terms: items.map((i) => i.label).join(', '),
         focus_hits: hits,
-        focus_mode: focusMode,
+        focus_mode: 'merged',
       })
     } catch (err) {
       const msg =
@@ -666,25 +871,105 @@ export default function ReviewWorkspace({
           ? err.message
           : `Focus retrieval failed: ${(err as Error).message}`
       setFocusError(msg)
-    } finally {
       setFocusRunning(false)
+      return
     }
-  }, [focusMode, focusText, transcript, model, events])
+    setFocusRunning(false)
+
+    // Full build only: enrich with the local LLM in the background. A failure
+    // here (Ollama down) only sets the panel error; the lexical hits stay.
+    if (!config.allowFocusFreeInput) return
+    setAiEnriching(true)
+    try {
+      const ai = await runFocusAi(transcript, parseFocusQueries(focusText))
+      if (focusRunIdRef.current !== runId) return
+      const merged = mergeFocusResults(lexical, ai)
+      setFocusResult(merged)
+      const hits = merged.terms.reduce((n, t) => n + t.snippets.length, 0)
+      events.log('focus_apply', { focus_hits: hits, focus_mode: 'merged' })
+    } catch (err) {
+      if (focusRunIdRef.current !== runId) return
+      const msg =
+        err instanceof PredictError
+          ? err.message
+          : `AI focus failed: ${(err as Error).message}`
+      setFocusError(msg)
+    } finally {
+      if (focusRunIdRef.current === runId) setAiEnriching(false)
+    }
+  }, [focusText, transcript, model, events, config.allowFocusFreeInput])
 
   const handleClearFocus = useCallback(() => {
+    focusRunIdRef.current++ // invalidate any in-flight AI merge
     setFocusActive(false)
     setFocusResult(null)
     setFocusError(null)
+    setAiEnriching(false)
     events.log('focus_clear')
   }, [events])
 
-  // Switching engine (lexical <-> ai) clears any stale error so the panel
-  // doesn't keep showing an "Ollama not running" note after you fall back to
-  // the lexical engine.
-  const handleFocusModeChange = useCallback((m: FocusMode) => {
-    setFocusMode(m)
-    setFocusError(null)
-  }, [])
+  // Outline: ask the local LLM to chapter the whole transcript (cached/frozen
+  // server-side). On-demand because it is expensive over long recordings.
+  const handleRunOutline = useCallback(async () => {
+    setOutlineError(null)
+    setOutlineRunning(true)
+    try {
+      const result = await runOutline(transcript, model)
+      setOutlineResult(result)
+      const chapterCount = result.parts.reduce((n, p) => n + p.chapters.length, 0)
+      events.log('outline_run', {
+        part_count: result.parts.length,
+        chapter_count: chapterCount,
+      })
+    } catch (err) {
+      const msg =
+        err instanceof PredictError
+          ? err.message
+          : `Outline failed: ${(err as Error).message}`
+      setOutlineError(msg)
+    } finally {
+      setOutlineRunning(false)
+    }
+  }, [transcript, model, events])
+
+  // Open the outline sub-page; generate on first open (cached afterwards).
+  const handleOpenOutline = useCallback(() => {
+    setOutlineOpen(true)
+    events.log('outline_open')
+    if (!outlineResult && !outlineRunning) handleRunOutline()
+  }, [events, outlineResult, outlineRunning, handleRunOutline])
+
+  // Jump to a Part / Chapter: seek, log, and close the modal so the reviewer
+  // lands on that passage in the transcript.
+  const handlePartClick = useCallback(
+    (part: OutlinePart) => {
+      events.log('outline_part_click', {
+        chapter_id: part.id,
+        chapter_title: part.title,
+        chapter_start: part.segment_start,
+        chapter_end: part.segment_end,
+        segment_id: part.start_id,
+      })
+      seekWithLog(part.segment_start, 'marker')
+      setOutlineOpen(false)
+    },
+    [events, seekWithLog],
+  )
+
+  const handleChapterClick = useCallback(
+    (chapter: OutlineChapter) => {
+      events.log('outline_chapter_click', {
+        chapter_id: chapter.id,
+        chapter_title: chapter.title,
+        chapter_start: chapter.segment_start,
+        chapter_end: chapter.segment_end,
+        segment_id: chapter.start_id,
+      })
+      seekWithLog(chapter.segment_start, 'marker')
+      setOutlineOpen(false)
+    },
+    [events, seekWithLog],
+  )
 
   const handleFocusSnippetClick = useCallback(
     (snippet: FocusSnippet, label: string) => {
@@ -713,16 +998,20 @@ export default function ReviewWorkspace({
         return
       }
       setTranscript(result.transcript)
+      originalTranscriptRef.current = result.transcript
       setTranscriptFilename(sourceName)
       const pickedModel = modelsOf(result.transcript)[0]
       setModel(pickedModel)
       setEdits({})
+      setSegmentTextEdits({})
       setVerified({})
       setHistory([])
       setPopup(null)
-      // A new transcript invalidates any prior focus retrieval.
+      // A new transcript invalidates any prior focus retrieval + outline.
       setFocusResult(null)
       setFocusActive(false)
+      setOutlineResult(null)
+      setOutlineError(null)
       events.log('transcript_load', {
         transcript_filename: sourceName,
         segment_count: result.transcript.segments.length,
@@ -737,6 +1026,7 @@ export default function ReviewWorkspace({
         try {
           const annotated = await predictRisks(result.transcript, pickedModel)
           setTranscript(annotated)
+          originalTranscriptRef.current = annotated
         } catch (err) {
           const msg =
             err instanceof PredictError
@@ -924,6 +1214,8 @@ export default function ReviewWorkspace({
         canTranscribe={!!audioBlob}
         transcribing={transcribing}
         onTranscribe={handleTranscribe}
+        allowOutline={config.allowOutline}
+        onOpenOutline={handleOpenOutline}
       />
 
       {transcribing && (
@@ -961,11 +1253,10 @@ export default function ReviewWorkspace({
           <FocusPanel
             text={focusText}
             onTextChange={setFocusText}
-            mode={focusMode}
-            onModeChange={handleFocusModeChange}
             onRun={handleRunFocus}
             onClear={handleClearFocus}
             running={focusRunning}
+            aiEnriching={aiEnriching}
             active={focusActive}
             result={focusResult}
             error={focusError}
@@ -990,6 +1281,10 @@ export default function ReviewWorkspace({
           onWordClick={openPopup}
           onToggleVerify={toggleVerify}
           onBulkVerify={verifyMany}
+          segmentTextEdits={segmentTextEdits}
+          onEditSentence={editSentence}
+          onMergeNext={mergeWithNext}
+          onChangeSpeaker={changeSpeaker}
           onFilterChange={(filter) => events.log('filter_change', { filter })}
           onSortChange={(sort) => events.log('sort_change', { sort })}
           onSegmentView={handleSegmentView}
@@ -1002,6 +1297,8 @@ export default function ReviewWorkspace({
           transcript={transcript}
           model={model}
           edits={edits}
+          segmentTextEdits={segmentTextEdits}
+          sourceTranscript={originalTranscriptRef.current}
           reviewer={reviewer}
           audioFilename={audioFilename}
           transcriptFilename={transcriptFilename}
@@ -1033,6 +1330,21 @@ export default function ReviewWorkspace({
           onApply={applyEdit}
           onDelete={deleteWord}
           onClose={closePopup}
+          onSplit={() => splitSegment(popup.segId, popup.wordIdx)}
+        />
+      )}
+
+      {config.allowOutline && outlineOpen && (
+        <OutlineModal
+          result={outlineResult}
+          running={outlineRunning}
+          error={outlineError}
+          audioDuration={transcript.audioDuration}
+          currentTime={audio.currentTime}
+          onRegenerate={handleRunOutline}
+          onClose={() => setOutlineOpen(false)}
+          onPartClick={handlePartClick}
+          onChapterClick={handleChapterClick}
         />
       )}
 

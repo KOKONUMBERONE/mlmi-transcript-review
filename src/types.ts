@@ -89,6 +89,41 @@ export interface FocusResult {
   terms: FocusTermResult[]
 }
 
+// ----- Long-transcript outline (centre "Outline" sub-page / modal) -----
+// A navigable, two-level "table of contents" for a (possibly hours-long)
+// transcript. The local LLM groups consecutive segments into fine CHAPTERS,
+// then a synthesis pass groups those into a handful of coarse PARTS and writes
+// an overall summary. It is a navigation overlay only — the transcript is never
+// mutated; clicking a part/chapter just seeks the audio to its `segment_start`.
+export interface OutlineChapter {
+  id: number              // 1-based chapter index (across the whole outline)
+  start_id: number        // first segment id in the chapter
+  end_id: number          // last segment id in the chapter
+  segment_start: number   // seconds — start of the first segment
+  segment_end: number     // seconds — end of the last segment
+  title: string           // short topic label (≤ ~8 words)
+  gist: string            // 1–2 line summary of what is discussed
+}
+
+// A coarse top-level section grouping several consecutive chapters. Carries the
+// longer narrative description; the number of parts is duration-adaptive so even
+// a 3-hour recording stays skimmable.
+export interface OutlinePart {
+  id: number              // 1-based part index
+  start_id: number        // first segment id in the part
+  end_id: number          // last segment id in the part
+  segment_start: number   // seconds — start of the part
+  segment_end: number     // seconds — end of the part
+  title: string           // section title
+  description: string     // 2–3 sentence description of the section
+  chapters: OutlineChapter[]
+}
+
+export interface OutlineResult {
+  summary: string         // 3–6 sentence overview of the whole recording
+  parts: OutlinePart[]
+}
+
 // Per-word overlay used by the transcript view: which focus term marked this
 // word and how. Derived on the front-end from FocusResult — kept off `Word` so
 // the transcript's 2a scores are never overwritten.
@@ -159,6 +194,13 @@ export type EventType =
   | 'trial_end'
   | 'dimension_change'
   | 'segment_view'
+  | 'segment_split'
+  | 'segment_merge'
+  | 'speaker_change'
+  | 'outline_run'
+  | 'outline_open'
+  | 'outline_part_click'
+  | 'outline_chapter_click'
 
 export type SeekTrigger = 'waveform' | 'segment' | 'marker' | 'keyboard' | 'programmatic'
 
@@ -219,14 +261,21 @@ export interface LogEvent {
   focus_match_detail?: FocusMatchDetail
   focus_score?: number
   focus_hits?: number       // total snippets returned across all terms
-  focus_mode?: FocusMode    // 'lexical' | 'ai'
+  focus_mode?: FocusMode | 'merged'  // 'lexical' | 'ai' | 'merged' (lexical+AI)
+  // Outline (long-transcript two-level chapters):
+  part_count?: number       // top-level Parts returned by an outline_run
+  chapter_count?: number    // fine chapters returned by an outline_run
+  chapter_id?: number       // which part/chapter a click belongs to (chapter_* reused for parts)
+  chapter_title?: string
+  chapter_start?: number    // seconds
+  chapter_end?: number      // seconds
 }
 
 export interface HistoryEntry {
   id: string
   timestamp: string         // HH:MM:SS — second-precision
   reviewer: string          // who made the change
-  kind: 'edit' | 'delete' | 'verify' | 'unverify'
+  kind: 'edit' | 'delete' | 'verify' | 'unverify' | 'split' | 'merge' | 'speaker'
   segmentId: number
   segmentIds?: number[]     // bulk verify/unverify: all affected segments (one summary entry)
   wordIndex?: number

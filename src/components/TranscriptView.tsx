@@ -18,8 +18,13 @@ interface Props {
   focusHitFor?: (segId: number, wordIdx: number) => FocusWordHit | undefined
   onSeek: (seconds: number) => void
   onWordClick: (segId: number, wordIdx: number, rect: DOMRect) => void
-  onToggleVerify: (segId: number) => void
+  onToggleVerify: (segId: number, opts?: { range?: boolean }) => void
   onBulkVerify?: (segIds: number[], value: boolean) => void
+  // #1 whole-sentence edit + #2 structural edits, threaded to each Segment.
+  segmentTextEdits?: Record<number, { text: string; reason?: string }>
+  onEditSentence?: (segId: number, text: string) => void
+  onMergeNext?: (segId: number) => void
+  onChangeSpeaker?: (segId: number, speaker: string) => void
   onFilterChange?: (filter: string) => void
   onSortChange?: (sort: string) => void
   // Fires when a segment scrolls ≥60% into view (complements segment_focus,
@@ -75,16 +80,16 @@ export default function TranscriptView({
   onWordClick,
   onToggleVerify,
   onBulkVerify,
+  segmentTextEdits,
+  onEditSentence,
+  onMergeNext,
+  onChangeSpeaker,
   onFilterChange,
   onSortChange,
   onSegmentView,
 }: Props) {
   const [filter, setFilter] = useState<RiskFilter>('all')
   const [sort, setSort] = useState<SortMode>('chrono')
-  // Multi-select for bulk verify. Local UI state; selection never writes to the
-  // audit trail — only the explicit Verify/Un-verify action does.
-  const [selected, setSelected] = useState<Set<number>>(() => new Set())
-  const selectAnchorRef = useRef<number | null>(null)
 
   const setFilterAndLog = (next: RiskFilter) => {
     setFilter(next)
@@ -118,30 +123,6 @@ export default function TranscriptView({
     () => applySort(applyFilter(transcript.segments, filter, riskOf), sort, riskOf),
     [transcript, filter, sort, riskOf],
   )
-
-  // Toggle a segment's selection; shift-click selects the range (in shown order)
-  // from the previous anchor to here.
-  const toggleSelect = (segId: number, opts?: { range?: boolean }) => {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      const anchor = selectAnchorRef.current
-      if (opts?.range && anchor != null && anchor !== segId) {
-        const ids = displaySegments.map((s) => s.id)
-        const a = ids.indexOf(anchor)
-        const b = ids.indexOf(segId)
-        if (a !== -1 && b !== -1) {
-          const [lo, hi] = a < b ? [a, b] : [b, a]
-          for (const id of ids.slice(lo, hi + 1)) next.add(id)
-          selectAnchorRef.current = segId
-          return next
-        }
-      }
-      if (next.has(segId)) next.delete(segId)
-      else next.add(segId)
-      selectAnchorRef.current = segId
-      return next
-    })
-  }
 
   const activeRef = useRef<HTMLDivElement>(null)
   const scrollRootRef = useRef<HTMLElement>(null)
@@ -275,45 +256,22 @@ export default function TranscriptView({
 
           {onBulkVerify && (
             <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
-              <span className="text-ink-faint uppercase tracking-widest text-[10px]">Select</span>
+              <span className="text-ink-faint uppercase tracking-widest text-[10px]">Verify</span>
               <button
-                onClick={() => setSelected(new Set(displaySegments.map((s) => s.id)))}
+                onClick={() => onBulkVerify(displaySegments.map((s) => s.id), true)}
+                className="px-2 py-0.5 rounded border border-verified/50 text-verified bg-white hover:bg-verified-bg transition-colors"
+                title="Verify every currently-shown segment"
+              >
+                ✓ All shown{filter !== 'all' ? ` (${displaySegments.length})` : ''}
+              </button>
+              <button
+                onClick={() => onBulkVerify(displaySegments.map((s) => s.id), false)}
                 className="px-2 py-0.5 rounded border border-border text-ink-muted bg-white hover:border-ink-muted hover:text-ink transition-colors"
-                title="Select every currently-shown segment"
+                title="Un-verify every currently-shown segment"
               >
-                All shown
+                Un-verify all shown
               </button>
-              <button
-                onClick={() => setSelected(new Set())}
-                disabled={selected.size === 0}
-                className="px-2 py-0.5 rounded border border-border text-ink-muted bg-white hover:border-ink-muted hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                None
-              </button>
-              <span className="font-mono tabular-nums text-ink-muted ml-1">{selected.size} selected</span>
-              <button
-                onClick={() => {
-                  onBulkVerify([...selected], true)
-                  setSelected(new Set())
-                }}
-                disabled={selected.size === 0}
-                className="ml-1 px-2 py-0.5 rounded border border-verified/50 text-verified bg-white hover:bg-verified-bg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                title="Verify the selected segments"
-              >
-                ✓ Verify
-              </button>
-              <button
-                onClick={() => {
-                  onBulkVerify([...selected], false)
-                  setSelected(new Set())
-                }}
-                disabled={selected.size === 0}
-                className="px-2 py-0.5 rounded border border-border text-ink-muted bg-white hover:border-ink-muted hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                title="Un-verify the selected segments"
-              >
-                Un-verify
-              </button>
-              <span className="text-ink-faint hidden md:inline">· tick the box left of a segment; shift-click for a range</span>
+              <span className="text-ink-faint hidden md:inline">· or Shift-click a segment's Verify to select a range</span>
             </div>
           )}
         </div>
@@ -344,8 +302,13 @@ export default function TranscriptView({
                   onSeek={onSeek}
                   onWordClick={onWordClick}
                   onToggleVerify={onToggleVerify}
-                  selected={selected.has(segment.id)}
-                  onToggleSelect={onBulkVerify ? toggleSelect : undefined}
+                  textOverride={segmentTextEdits?.[segment.id]?.text}
+                  onEditSentence={onEditSentence}
+                  onMergeNext={onMergeNext}
+                  canMergeNext={
+                    transcript.segments[transcript.segments.length - 1]?.id !== segment.id
+                  }
+                  onChangeSpeaker={onChangeSpeaker}
                 />
               </div>
             ))

@@ -17,6 +17,8 @@ interface Props {
   onApply: (newText: string, reason?: string) => void
   onDelete: (reason?: string) => void
   onClose: () => void
+  // #2: split this segment so that this word starts a new segment.
+  onSplit?: () => void
 }
 
 export default function CandidatePopup({
@@ -29,6 +31,7 @@ export default function CandidatePopup({
   onApply,
   onDelete,
   onClose,
+  onSplit,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const [manual, setManual] = useState('')
@@ -160,6 +163,20 @@ export default function CandidatePopup({
         <p className="text-[10px] text-ink-faint italic text-center">
           Currently marked as deleted. Pick a candidate or type a correction to restore.
         </p>
+      )}
+
+      {/* Split the segment so this word begins a new segment. */}
+      {!isDeleted && onSplit && anchor.wordIdx > 0 && (
+        <button
+          onClick={onSplit}
+          title="Start a new segment at this word"
+          className="mt-2 w-full flex items-center justify-center gap-1.5 text-xs px-2 py-1.5 rounded border border-border text-ink-muted hover:text-ink hover:border-ink-muted transition-colors"
+        >
+          <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3">
+            <path d="M6 1.5v9M3.5 4 6 1.5 8.5 4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Split segment before this word
+        </button>
       )}
 
       <p className="mt-2 text-[10px] text-ink-faint italic">

@@ -73,6 +73,12 @@ const KNOWN_COLUMNS = [
   'focus_score',
   'focus_hits',
   'focus_mode',
+  'part_count',
+  'chapter_count',
+  'chapter_id',
+  'chapter_title',
+  'chapter_start',
+  'chapter_end',
 ] as const
 
 function summary(events: LogEvent[]): Record<string, unknown> {

@@ -41,3 +41,5 @@ coverage/
 CLAUDE_CODE_PROMPTS.md
 .vercel
 server/__pycache__/
+# Local LLM outline cache (full build only; regenerated on demand, not frozen).
+server/.outline_cache/

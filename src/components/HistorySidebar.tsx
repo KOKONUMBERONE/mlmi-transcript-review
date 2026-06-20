@@ -16,6 +16,10 @@ interface Props {
   transcript: Transcript
   model: ModelName
   edits: Record<string, EditState>
+  segmentTextEdits?: Record<number, { text: string; reason?: string }>
+  // Pristine raw transcript for the "Original (JSON)" export (manual structural
+  // edits live in `transcript`, not here).
+  sourceTranscript?: Transcript
   reviewer: string
   audioFilename: string | null
   transcriptFilename: string | null
@@ -43,6 +47,22 @@ function formatAction(entry: HistoryEntry): React.ReactNode {
       </span>
     )
   }
+  if (entry.kind === 'split') {
+    return <span className="text-amber-700 font-medium">Split segment {entry.to}</span>
+  }
+  if (entry.kind === 'merge') {
+    return <span className="text-amber-700 font-medium">Merged {entry.to}</span>
+  }
+  if (entry.kind === 'speaker') {
+    return (
+      <span className="font-medium text-ink">
+        Speaker:{' '}
+        <span className="line-through text-ink-faint">{entry.from}</span>
+        <span className="mx-1.5 text-ink-faint">→</span>
+        {entry.to}
+      </span>
+    )
+  }
   const n = entry.segmentIds?.length
   if (entry.kind === 'verify') {
     return (
@@ -63,6 +83,9 @@ const KIND_DOT: Record<HistoryEntry['kind'], string> = {
   delete: 'bg-risk-high',
   verify: 'bg-verified-bar',
   unverify: 'bg-border-strong',
+  split: 'bg-amber-400',
+  merge: 'bg-amber-400',
+  speaker: 'bg-purple-400',
 }
 
 interface ExportButtonProps {
@@ -91,6 +114,8 @@ export default function HistorySidebar({
   transcript,
   model,
   edits,
+  segmentTextEdits,
+  sourceTranscript,
   reviewer,
   audioFilename,
   transcriptFilename,
@@ -127,6 +152,7 @@ export default function HistorySidebar({
     transcript,
     model,
     edits,
+    segmentTextEdits,
     verified,
     reviewer,
     audioFilename,
@@ -248,7 +274,7 @@ export default function HistorySidebar({
             <ExportButton
               label="JSON"
               onClick={() => {
-                exportSourceTranscriptJson(exportArgs)
+                exportSourceTranscriptJson({ ...exportArgs, transcript: sourceTranscript ?? transcript })
                 onExport?.('transcript_source_json', totalSegments)
               }}
             />
