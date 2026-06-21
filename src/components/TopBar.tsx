@@ -38,6 +38,10 @@ interface Props {
   // whole recording). Full build only — the study uses short, frozen clips.
   allowOutline?: boolean
   onOpenOutline?: () => void
+  // Track-changes view toggle (full build only; study keeps it always on).
+  allowChangeToggle?: boolean
+  showChanges?: boolean
+  onToggleChanges?: () => void
 }
 
 function formatTime(seconds: number): string {
@@ -127,6 +131,9 @@ export default function TopBar({
   onTranscribe,
   allowOutline = false,
   onOpenOutline,
+  allowChangeToggle = false,
+  showChanges = true,
+  onToggleChanges,
 }: Props) {
   const reviewerMissing = reviewer.trim() === ''
 
@@ -382,6 +389,24 @@ export default function TopBar({
             <option value="importance">Importance</option>
           </select>
         </label>
+        )}
+
+        {allowChangeToggle && (
+          <button
+            onClick={onToggleChanges}
+            title={showChanges ? 'Hide reviewer changes (clean read)' : 'Show reviewer changes'}
+            className={[
+              'flex items-center gap-1.5 text-[11px] px-2 py-1 rounded border transition-colors',
+              showChanges
+                ? 'border-change-ins/50 text-change-ins bg-change-ins-bg'
+                : 'border-border text-ink-muted bg-white hover:border-border-strong',
+            ].join(' ')}
+          >
+            <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3">
+              <path d="M8.5 1.5 10.5 3.5 4 10 1.5 10.5 2 8z" strokeLinejoin="round" />
+            </svg>
+            {showChanges ? 'Changes: on' : 'Changes: off'}
+          </button>
         )}
 
         {predicting && (

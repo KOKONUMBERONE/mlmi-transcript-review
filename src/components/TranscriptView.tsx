@@ -30,6 +30,9 @@ interface Props {
   // Fires when a segment scrolls ≥60% into view (complements segment_focus,
   // which only fires from audio playback). Must be a *stable* callback.
   onSegmentView?: (segId: number, start: number, risk: Risk) => void
+  // Track-changes view + per-segment "<reviewer> · <hh:mm>" of the last edit.
+  showChanges?: boolean
+  editInfo?: Record<number, { reviewer: string; time: string }>
 }
 
 const RISK_CHIP: Record<Risk, string> = {
@@ -87,6 +90,8 @@ export default function TranscriptView({
   onFilterChange,
   onSortChange,
   onSegmentView,
+  showChanges = true,
+  editInfo,
 }: Props) {
   const [filter, setFilter] = useState<RiskFilter>('all')
   const [sort, setSort] = useState<SortMode>('chrono')
@@ -173,7 +178,7 @@ export default function TranscriptView({
 
   return (
     <main ref={scrollRootRef} className="flex-1 overflow-y-auto">
-      <div className="max-w-3xl mx-auto px-8 py-6">
+      <div className="max-w-5xl mx-auto px-8 py-5">
         <div className="mb-6 pb-4 border-b border-border">
           <div className="flex items-baseline justify-between mb-3">
             <h1 className="text-[11px] text-ink-faint uppercase tracking-[0.2em]">
@@ -309,6 +314,12 @@ export default function TranscriptView({
                     transcript.segments[transcript.segments.length - 1]?.id !== segment.id
                   }
                   onChangeSpeaker={onChangeSpeaker}
+                  showChanges={showChanges}
+                  editLabel={
+                    editInfo?.[segment.id]
+                      ? `${editInfo[segment.id].reviewer} · ${editInfo[segment.id].time}`
+                      : undefined
+                  }
                 />
               </div>
             ))

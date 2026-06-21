@@ -84,13 +84,13 @@ export default function FocusPanel({
         <button
           onClick={onToggleCollapse}
           title="Expand find panel"
-          className="text-ink-muted hover:text-focus p-1 rounded hover:bg-surface-muted"
+          className="text-ink-muted hover:text-brand p-1 rounded hover:bg-surface-muted"
         >
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
             <path d="M4.5 2.5 8 6l-3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
-        <span className="[writing-mode:vertical-rl] text-[10px] text-focus uppercase tracking-[0.2em] font-semibold">
+        <span className="[writing-mode:vertical-rl] text-[10px] text-brand uppercase tracking-[0.2em] font-semibold">
           Find
         </span>
         {active && (
@@ -104,7 +104,7 @@ export default function FocusPanel({
     <aside className="w-80 shrink-0 border-r border-border bg-white overflow-y-auto flex flex-col">
       <div className="px-4 py-3 border-b border-border sticky top-0 bg-white z-10">
         <div className="flex items-center justify-between mb-2">
-          <p className="text-[10px] text-focus uppercase tracking-[0.2em] font-semibold">
+          <p className="text-[10px] text-brand uppercase tracking-[0.2em] font-semibold">
             Find
           </p>
           <div className="flex items-center gap-2">
@@ -193,7 +193,7 @@ function FindControls({
         }}
         rows={3}
         placeholder={'weapon: gun, knife\nsilver hatchback\nwho paid for the taxi'}
-        className="w-full text-[13px] leading-snug border border-border rounded px-2 py-1.5 bg-white resize-y placeholder:text-ink-faint/60 focus:outline-none focus:ring-1 focus:ring-focus/50 focus:border-focus/50"
+        className="w-full text-[13px] leading-snug border border-border rounded px-2 py-1.5 bg-white resize-y placeholder:text-ink-faint/60 focus:outline-none focus:ring-1 focus:ring-brand/50 focus:border-brand/50"
       />
 
       <div className="mt-1 flex items-center justify-between">
@@ -205,8 +205,8 @@ function FindControls({
           how to enter terms
         </button>
         {aiEnriching && (
-          <span className="text-[10px] text-focus/80 flex items-center gap-1">
-            <span className="inline-block w-2 h-2 rounded-full border border-focus/60 border-t-transparent animate-spin" />
+          <span className="text-[10px] text-brand/80 flex items-center gap-1">
+            <span className="inline-block w-2 h-2 rounded-full border border-brand/60 border-t-transparent animate-spin" />
             AI refining…
           </span>
         )}
@@ -229,7 +229,7 @@ function FindControls({
         <button
           onClick={onRun}
           disabled={running || text.trim() === ''}
-          className="flex-1 text-xs font-medium px-3 py-1.5 rounded bg-focus text-white hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+          className="flex-1 text-xs font-medium px-3 py-1.5 rounded bg-brand text-white hover:bg-brand-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {running ? 'Searching…' : 'Find'}
         </button>

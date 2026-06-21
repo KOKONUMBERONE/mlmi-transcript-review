@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { EditState, HistoryEntry, ModelName, Transcript } from '../types'
 import { exportHistoryAsCSV, exportHistoryAsJSON } from '../utils/exportHistory'
 import {
@@ -12,6 +13,8 @@ interface Props {
   verified: Record<number, boolean>
   verifiedCount: number
   totalSegments: number
+  // High-risk segments still unverified (null when no risk layer is shown, e.g. C1).
+  highRiskRemaining?: number | null
   // Data needed to produce the reviewed-transcript exports:
   transcript: Transcript
   model: ModelName
@@ -48,10 +51,10 @@ function formatAction(entry: HistoryEntry): React.ReactNode {
     )
   }
   if (entry.kind === 'split') {
-    return <span className="text-amber-700 font-medium">Split segment {entry.to}</span>
+    return <span className="text-ink-muted font-medium">Split segment {entry.to}</span>
   }
   if (entry.kind === 'merge') {
-    return <span className="text-amber-700 font-medium">Merged {entry.to}</span>
+    return <span className="text-ink-muted font-medium">Merged {entry.to}</span>
   }
   if (entry.kind === 'speaker') {
     return (
@@ -78,14 +81,16 @@ function formatAction(entry: HistoryEntry): React.ReactNode {
   )
 }
 
+// Dots follow the same discipline: blue = reviewer change, red = delete,
+// green = verified, gray = un-verify / neutral structural edits.
 const KIND_DOT: Record<HistoryEntry['kind'], string> = {
-  edit: 'bg-blue-400',
+  edit: 'bg-change-ins',
   delete: 'bg-risk-high',
   verify: 'bg-verified-bar',
   unverify: 'bg-border-strong',
-  split: 'bg-amber-400',
-  merge: 'bg-amber-400',
-  speaker: 'bg-purple-400',
+  split: 'bg-change-ins',
+  merge: 'bg-change-ins',
+  speaker: 'bg-change-ins',
 }
 
 interface ExportButtonProps {
@@ -111,6 +116,7 @@ export default function HistorySidebar({
   verified,
   verifiedCount,
   totalSegments,
+  highRiskRemaining,
   transcript,
   model,
   edits,
@@ -125,13 +131,16 @@ export default function HistorySidebar({
 }: Props) {
   const progress = totalSegments === 0 ? 0 : (verifiedCount / totalSegments) * 100
   const hasHistory = history.length > 0
+  // Exports are a secondary task — collapsed by default so the panel reads as a
+  // reviewer work panel (progress + recent changes), not an export console.
+  const [exportOpen, setExportOpen] = useState(false)
 
   if (collapsed) {
     return (
       <aside className="w-9 shrink-0 border-l border-border bg-white flex flex-col items-center gap-3 py-3">
         <button
           onClick={onToggleCollapse}
-          title="Expand audit trail"
+          title="Expand review panel"
           className="text-ink-muted hover:text-ink p-1 rounded hover:bg-surface-muted"
         >
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -139,7 +148,7 @@ export default function HistorySidebar({
           </svg>
         </button>
         <span className="[writing-mode:vertical-rl] text-[10px] text-ink-faint uppercase tracking-[0.2em]">
-          Audit trail
+          Review
         </span>
         <span className="font-mono text-[10px] text-ink-faint tabular-nums">
           {verifiedCount}/{totalSegments}
@@ -160,31 +169,25 @@ export default function HistorySidebar({
   }
 
   return (
-    <aside className="w-80 shrink-0 border-l border-border bg-white overflow-y-auto flex flex-col">
-      <div className="px-4 py-3 border-b border-border sticky top-0 bg-white z-10">
+    <aside className="w-80 shrink-0 border-l border-border bg-white overflow-hidden flex flex-col">
+      {/* Review progress — the reviewer's "how much is left" panel. */}
+      <div className="px-4 py-3 border-b border-border shrink-0">
         <div className="flex items-center justify-between mb-2">
-          <p className="text-[10px] text-ink-faint uppercase tracking-[0.2em]">
-            Audit trail
-          </p>
-          <div className="flex items-center gap-2">
-            <p className="text-[10px] font-mono text-ink-faint tabular-nums">
-              {history.length} {history.length === 1 ? 'entry' : 'entries'}
-            </p>
-            {onToggleCollapse && (
-              <button
-                onClick={onToggleCollapse}
-                title="Collapse audit trail"
-                className="text-ink-faint hover:text-ink p-0.5 rounded hover:bg-surface-muted"
-              >
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M4.5 2.5 8 6l-3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-            )}
-          </div>
+          <p className="text-[10px] text-ink-faint uppercase tracking-[0.2em]">Review</p>
+          {onToggleCollapse && (
+            <button
+              onClick={onToggleCollapse}
+              title="Collapse review panel"
+              className="text-ink-faint hover:text-ink p-0.5 rounded hover:bg-surface-muted"
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M4.5 2.5 8 6l-3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
         </div>
 
-        <div className="flex items-baseline justify-between mb-1">
+        <div className="flex items-baseline justify-between mb-1 gap-2">
           <p className="text-xs text-ink">
             Verified{' '}
             <span className="font-mono tabular-nums font-medium">
@@ -192,94 +195,31 @@ export default function HistorySidebar({
             </span>{' '}
             segments
           </p>
+          {highRiskRemaining != null && (
+            <span
+              className={`text-[11px] font-medium shrink-0 ${
+                highRiskRemaining > 0 ? 'text-risk-high' : 'text-verified'
+              }`}
+              title="High-risk segments still unverified"
+            >
+              {highRiskRemaining > 0 ? `${highRiskRemaining} high-risk left` : 'high-risk done'}
+            </span>
+          )}
         </div>
-        <div className="h-1 bg-surface-subtle rounded-full overflow-hidden mb-3">
+        <div className="h-1 bg-surface-subtle rounded-full overflow-hidden">
           <div
             className="h-full bg-verified-bar transition-all duration-300"
             style={{ width: `${progress}%` }}
           />
         </div>
+      </div>
 
-        {/* Export groups. The HTML report bundles both deliverables (final
-            transcript + full change log) into one reader-friendly file; the
-            CSV/JSON/TXT options below stay for analysis and archival. */}
-        <div className="space-y-1.5">
-          <button
-            onClick={() => {
-              exportTranscriptReportHtml({ ...exportArgs, history })
-              onExport?.('report_html', totalSegments)
-            }}
-            title="A single, reader-friendly file with the full reviewed transcript and a complete log of what changed, when, and why."
-            className="w-full text-xs font-medium px-3 py-1.5 rounded bg-ink text-white hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
-          >
-            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M7 1v8m0 0L4 6m3 3l3-3" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M2 11v1a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-1" strokeLinecap="round" />
-            </svg>
-            Download report (HTML)
-          </button>
-          <div className="flex items-center gap-1.5">
-            <span
-              className="text-[10px] text-ink-faint uppercase tracking-widest w-20 shrink-0"
-              title="Chronological log of every edit, deletion, and verification."
-            >
-              Audit log
-            </span>
-            <ExportButton
-              label="CSV"
-              disabled={!hasHistory}
-              onClick={() => {
-                exportHistoryAsCSV(history)
-                onExport?.('audit_csv', history.length)
-              }}
-            />
-            <ExportButton
-              label="JSON"
-              disabled={!hasHistory}
-              onClick={() => {
-                exportHistoryAsJSON(history)
-                onExport?.('audit_json', history.length)
-              }}
-            />
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span
-              className="text-[10px] text-ink-faint uppercase tracking-widest w-20 shrink-0"
-              title="The reviewed transcript itself, with all edits and deletions applied (active model only)."
-            >
-              Reviewed
-            </span>
-            <ExportButton
-              label="TXT"
-              onClick={() => {
-                exportTranscriptText(exportArgs)
-                onExport?.('transcript_txt', totalSegments)
-              }}
-            />
-            <ExportButton
-              label="JSON"
-              onClick={() => {
-                exportTranscriptJson(exportArgs)
-                onExport?.('transcript_json', totalSegments)
-              }}
-            />
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span
-              className="text-[10px] text-ink-faint uppercase tracking-widest w-20 shrink-0"
-              title="The original multi-model pipeline output, unedited. Re-upload it later to reuse this audio without re-transcribing."
-            >
-              Original
-            </span>
-            <ExportButton
-              label="JSON"
-              onClick={() => {
-                exportSourceTranscriptJson({ ...exportArgs, transcript: sourceTranscript ?? transcript })
-                onExport?.('transcript_source_json', totalSegments)
-              }}
-            />
-          </div>
-        </div>
+      {/* Recent changes */}
+      <div className="px-4 pt-3 pb-1 flex items-center justify-between shrink-0">
+        <p className="text-[10px] text-ink-faint uppercase tracking-[0.2em]">Recent changes</p>
+        <p className="text-[10px] font-mono text-ink-faint tabular-nums">
+          {history.length} {history.length === 1 ? 'entry' : 'entries'}
+        </p>
       </div>
 
       {!hasHistory ? (
@@ -296,7 +236,7 @@ export default function HistorySidebar({
           </p>
         </div>
       ) : (
-        <ol className="flex-1">
+        <ol className="flex-1 overflow-y-auto min-h-0">
           {history.map((entry) => (
             <li
               key={entry.id}
@@ -336,6 +276,61 @@ export default function HistorySidebar({
           ))}
         </ol>
       )}
+
+      {/* Export — secondary task, collapsed by default so the panel reads as a
+          reviewer work panel, not an export console. */}
+      <div className="border-t border-border px-4 py-2 shrink-0">
+        <button
+          onClick={() => setExportOpen((v) => !v)}
+          className="w-full flex items-center justify-between text-[10px] text-ink-faint uppercase tracking-[0.2em] hover:text-ink"
+        >
+          <span>Export</span>
+          <svg
+            width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5"
+            className={`transition-transform ${exportOpen ? 'rotate-90' : ''}`}
+          >
+            <path d="M4.5 2.5 8 6l-3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+        {exportOpen && (
+          <div className="mt-2 space-y-1.5">
+            <button
+              onClick={() => {
+                exportTranscriptReportHtml({ ...exportArgs, history })
+                onExport?.('report_html', totalSegments)
+              }}
+              title="A single, reader-friendly file with the full reviewed transcript and a complete log of what changed, when, and why."
+              className="w-full text-xs font-medium px-3 py-1.5 rounded bg-brand text-white hover:bg-brand-dark transition-colors flex items-center justify-center gap-1.5"
+            >
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M7 1v8m0 0L4 6m3 3l3-3" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M2 11v1a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-1" strokeLinecap="round" />
+              </svg>
+              Download report (HTML)
+            </button>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-ink-faint uppercase tracking-widest w-20 shrink-0" title="Chronological log of every edit, deletion, and verification.">
+                Audit log
+              </span>
+              <ExportButton label="CSV" disabled={!hasHistory} onClick={() => { exportHistoryAsCSV(history); onExport?.('audit_csv', history.length) }} />
+              <ExportButton label="JSON" disabled={!hasHistory} onClick={() => { exportHistoryAsJSON(history); onExport?.('audit_json', history.length) }} />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-ink-faint uppercase tracking-widest w-20 shrink-0" title="The reviewed transcript itself, with all edits and deletions applied (active model only).">
+                Reviewed
+              </span>
+              <ExportButton label="TXT" onClick={() => { exportTranscriptText(exportArgs); onExport?.('transcript_txt', totalSegments) }} />
+              <ExportButton label="JSON" onClick={() => { exportTranscriptJson(exportArgs); onExport?.('transcript_json', totalSegments) }} />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-ink-faint uppercase tracking-widest w-20 shrink-0" title="The original multi-model pipeline output, unedited. Re-upload it later to reuse this audio without re-transcribing.">
+                Original
+              </span>
+              <ExportButton label="JSON" onClick={() => { exportSourceTranscriptJson({ ...exportArgs, transcript: sourceTranscript ?? transcript }); onExport?.('transcript_source_json', totalSegments) }} />
+            </div>
+          </div>
+        )}
+      </div>
     </aside>
   )
 }

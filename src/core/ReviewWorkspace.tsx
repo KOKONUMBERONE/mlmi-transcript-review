@@ -133,6 +133,12 @@ export default function ReviewWorkspace({
   const [focusCollapsed, setFocusCollapsed] = useState(false)
   const [auditCollapsed, setAuditCollapsed] = useState(false)
   const verifyAnchorRef = useRef<number | null>(null)
+  // Track-changes view. Always on in the study (constant across C1–C4); the
+  // full build defaults it on but lets the reviewer switch to a clean read.
+  const [showChanges, setShowChanges] = useState(true)
+  // The standing "AI-generated" notice can be dismissed (session-level — it
+  // reappears on reload so the legal reminder is never permanently gone).
+  const [warningDismissed, setWarningDismissed] = useState(false)
 
   const availableModels = useMemo(() => modelsOf(transcript), [transcript])
   const [model, setModel] = useState<ModelName>(availableModels[0])
@@ -1178,12 +1184,51 @@ export default function ReviewWorkspace({
   const verifiedCount = Object.values(verified).filter(Boolean).length
   const totalSegments = transcript.segments.length
 
+  // How many high-risk segments are still unverified — the reviewer's "how much
+  // dangerous stuff is left" signal. null when no risk layer is shown (C1).
+  const highRiskRemaining = useMemo<number | null>(() => {
+    if (activeHighlight === 'none') return null
+    return transcript.segments.reduce((n, s) => {
+      const r = segmentRiskWithFocus(s, model, activeHighlight, showFocus && focusSegmentIds.has(s.id))
+      return r === 'high' && !verified[s.id] ? n + 1 : n
+    }, 0)
+  }, [transcript, model, activeHighlight, showFocus, focusSegmentIds, verified])
+
+  // Latest edit per segment (reviewer + hh:mm) for the "edited · who · time"
+  // tag. History is newest-first, so the first hit per segment is the latest.
+  const editInfo = useMemo(() => {
+    const map: Record<number, { reviewer: string; time: string }> = {}
+    for (const h of history) {
+      if (h.segmentId == null || map[h.segmentId]) continue
+      if (h.kind === 'verify' || h.kind === 'unverify') continue
+      map[h.segmentId] = { reviewer: h.reviewer, time: h.timestamp.slice(0, 5) }
+    }
+    return map
+  }, [history])
+
   return (
     <div
-      className={`relative h-full flex flex-col bg-surface-muted${
+      className={`relative h-full flex flex-col bg-surface${
         interactionLocked ? ' pointer-events-none select-none opacity-60' : ''
       }`}
     >
+      {/* Echo-style brand banner (no police logo). */}
+      <div className="flex items-center gap-3 px-5 h-9 bg-brand text-white shrink-0">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+          <path d="M4 2.5h6l2.5 2.5v8.5H4z" strokeLinejoin="round" />
+          <path d="M9.5 2.5V5h2.5M6 8h4M6 10.5h4" strokeLinecap="round" />
+        </svg>
+        <span className="text-[13px] font-semibold tracking-wide">Transcript review</span>
+        {config.mode === 'study' && (
+          <span className="text-[11px] bg-white/15 border border-white/25 rounded-full px-2.5 py-0.5 font-medium">
+            Condition {effectiveCondition}
+          </span>
+        )}
+        <span className="ml-auto text-[11px] text-brand-active/90 hidden sm:inline">
+          AI-assisted · human-verified
+        </span>
+      </div>
+
       <TopBar
         model={model}
         availableModels={availableModels}
@@ -1216,6 +1261,9 @@ export default function ReviewWorkspace({
         onTranscribe={handleTranscribe}
         allowOutline={config.allowOutline}
         onOpenOutline={handleOpenOutline}
+        allowChangeToggle={config.allowChangeToggle}
+        showChanges={showChanges}
+        onToggleChanges={() => setShowChanges((v) => !v)}
       />
 
       {transcribing && (
@@ -1244,6 +1292,28 @@ export default function ReviewWorkspace({
             aria-label="Dismiss error"
           >
             ✕
+          </button>
+        </div>
+      )}
+
+      {/* Standing reminder that the transcript is machine-generated. Dismissible
+          (reappears on reload, so the legal notice is never permanently gone). */}
+      {!warningDismissed && (
+        <div className="bg-warning-bg border-l-4 border-warning-border pl-4 pr-2 py-1.5 shrink-0 flex items-start gap-2">
+          <p className="text-[11px] text-warning leading-snug flex-1">
+            <span className="font-semibold">AI-generated transcript.</span> Check it
+            carefully before relying on it — it isn't evidential until a person has
+            reviewed and confirmed it.
+          </p>
+          <button
+            onClick={() => setWarningDismissed(true)}
+            aria-label="Dismiss notice"
+            title="Dismiss"
+            className="shrink-0 text-warning/70 hover:text-warning p-0.5 rounded hover:bg-warning-border/10"
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" strokeLinecap="round" />
+            </svg>
           </button>
         </div>
       )}
@@ -1288,12 +1358,15 @@ export default function ReviewWorkspace({
           onFilterChange={(filter) => events.log('filter_change', { filter })}
           onSortChange={(sort) => events.log('sort_change', { sort })}
           onSegmentView={handleSegmentView}
+          showChanges={showChanges}
+          editInfo={editInfo}
         />
         <HistorySidebar
           history={history}
           verified={verified}
           verifiedCount={verifiedCount}
           totalSegments={totalSegments}
+          highRiskRemaining={highRiskRemaining}
           transcript={transcript}
           model={model}
           edits={edits}

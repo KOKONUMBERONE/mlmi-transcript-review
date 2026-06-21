@@ -26,18 +26,16 @@ interface Props {
   onMergeNext?: (segId: number) => void
   canMergeNext?: boolean
   onChangeSpeaker?: (segId: number, speaker: string) => void
+  // Track-changes view (threaded to each Word). Default on.
+  showChanges?: boolean
+  // "<reviewer> · <hh:mm>" of the latest change in this segment, if any.
+  editLabel?: string
 }
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60)
   const s = Math.floor(seconds % 60)
   return `${m}:${s.toString().padStart(2, '0')}`
-}
-
-const RISK_BAR: Record<'high' | 'med' | 'low', string> = {
-  high: 'bg-risk-high',
-  med: 'bg-risk-med',
-  low: 'bg-border',
 }
 
 // Known speaker labels get themed colours; anything else (e.g. "Speaker"
@@ -65,8 +63,15 @@ export default function Segment({
   onMergeNext,
   canMergeNext = false,
   onChangeSpeaker,
+  showChanges = true,
+  editLabel,
 }: Props) {
   const words = segment.words[model] ?? []
+
+  // Has the reviewer changed anything in this segment? Drives the change-bar
+  // + "edited" tag so a touched segment is obvious at a glance.
+  const hasEdits =
+    textOverride != null || words.some((_, i) => edits[`${segment.id}-${i}`] !== undefined)
 
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
@@ -91,13 +96,14 @@ export default function Segment({
   // hit forces the segment to HIGH (display only — 2a scores are untouched).
   const effectiveRisk = segmentRiskWithFocus(segment, model, dimension, focused)
 
-  const bar = verified ? 'bg-verified-bar' : RISK_BAR[effectiveRisk]
-
+  // No left bar — segment-level risk is shown only by the HIGH RISK badge, and
+  // word-level risk by the coloured words (so red lands on the words that matter,
+  // not the whole segment). active/verified keep just a faint background tint.
   const containerCls = verified
-    ? 'bg-verified-bg ring-1 ring-verified-bar/40'
+    ? 'bg-verified-bg/50 ring-1 ring-verified-bar/30'
     : active
-    ? 'bg-amber-50 ring-1 ring-amber-300'
-    : 'hover:bg-white hover:ring-1 hover:ring-border'
+    ? 'bg-brand-active/50 ring-1 ring-brand/25'
+    : 'hover:bg-surface-muted hover:ring-1 hover:ring-border'
 
   const startEdit = () => {
     setDraft(fullText)
@@ -117,12 +123,10 @@ export default function Segment({
   return (
     <article
       onClick={() => onSeek(segment.start)}
-      className={`group flex gap-3 rounded-md cursor-pointer transition-colors px-3 py-2 -mx-3 ${containerCls}`}
+      className={`group flex gap-3 rounded-md cursor-pointer transition-colors px-3 py-1.5 -mx-3 ${containerCls}`}
     >
-      <div className={`w-[3px] rounded-full shrink-0 ${bar}`} />
-
       <div className="flex-1 min-w-0">
-        <header className="flex items-center gap-3 mb-1.5">
+        <header className="flex items-center gap-3 mb-0.5">
           {editingSpeaker ? (
             <input
               autoFocus
@@ -161,13 +165,18 @@ export default function Segment({
           </span>
 
           {effectiveRisk === 'high' && !verified && (
-            <span className="font-mono text-[10px] text-risk-high uppercase tracking-widest px-1.5 py-0.5 bg-risk-high-bg rounded-sm">
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-white uppercase tracking-wide px-1.5 py-0.5 bg-risk-high rounded">
+              <svg width="9" height="9" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                <path d="M6 1 11 11H1z" />
+                <rect x="5.3" y="4.5" width="1.4" height="3.2" fill="#fff" />
+                <rect x="5.3" y="8.4" width="1.4" height="1.4" fill="#fff" />
+              </svg>
               High risk
             </span>
           )}
 
           {active && (
-            <span className="font-mono text-[10px] text-amber-700 uppercase tracking-widest">
+            <span className="font-mono text-[10px] text-brand uppercase tracking-widest">
               ▸ playing
             </span>
           )}
@@ -178,7 +187,21 @@ export default function Segment({
             </span>
           )}
 
+          {hasEdits && (
+            <span
+              className="inline-flex items-center gap-1 text-[10px] text-change-ins bg-change-ins-bg border border-change-ins/40 rounded-full px-1.5 py-0.5 leading-none"
+              title="Reviewer-edited segment"
+            >
+              <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.4">
+                <path d="M8.5 1.5 10.5 3.5 4 10 1.5 10.5 2 8z" strokeLinejoin="round" />
+              </svg>
+              edited{editLabel ? ` · ${editLabel}` : ''}
+            </span>
+          )}
+
           <span className="ml-auto flex items-center gap-1">
+            {/* Edit a whole sentence — high-frequency, so it's always visible
+                (but quiet). Merge is rarer, so it only appears on hover. */}
             {onEditSentence && !editing && (
               <button
                 onClick={(e) => {
@@ -186,9 +209,9 @@ export default function Segment({
                   startEdit()
                 }}
                 title="Edit the whole sentence"
-                className="text-[11px] px-1.5 py-0.5 rounded border border-border text-ink-muted bg-white hover:border-ink-muted hover:text-ink transition-colors opacity-60 group-hover:opacity-100"
+                className="text-ink-muted hover:text-ink p-1 rounded hover:bg-surface-muted transition-colors"
               >
-                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3">
                   <path d="M8.5 1.5 10.5 3.5 4 10 1.5 10.5 2 8z" strokeLinejoin="round" />
                 </svg>
               </button>
@@ -200,25 +223,33 @@ export default function Segment({
                   onMergeNext(segment.id)
                 }}
                 title="Merge with the next segment"
-                className="text-[11px] px-1.5 py-0.5 rounded border border-border text-ink-muted bg-white hover:border-ink-muted hover:text-ink transition-colors opacity-60 group-hover:opacity-100"
+                className="text-ink-faint hover:text-ink p-1 rounded hover:bg-surface-muted opacity-0 group-hover:opacity-100 transition-opacity"
               >
-                Merge ↓
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3">
+                  <path d="M6 1.5V7M3.5 4.5 6 7l2.5-2.5" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M2 10h8" strokeLinecap="round" />
+                </svg>
               </button>
             )}
+            {/* Verify — kept quiet by default (a column of solid buttons drowns
+                the transcript); it goes solid navy only on the segment you're
+                on or hovering. Verified is a calm green. */}
             <button
               onClick={(e) => {
                 e.stopPropagation()
                 onToggleVerify(segment.id, { range: e.shiftKey })
               }}
-              title="Shift-click to verify a range"
+              title="Mark this segment checked. Shift-click to verify a range."
               className={[
-                'text-[11px] px-2 py-0.5 rounded border transition-colors opacity-60 group-hover:opacity-100',
+                'text-[11px] font-medium px-2.5 py-1 rounded transition-colors',
                 verified
-                  ? 'border-verified text-verified bg-white hover:bg-verified-bg opacity-100'
-                  : 'border-border text-ink-muted bg-white hover:border-ink-muted hover:text-ink',
+                  ? 'border border-verified/40 text-verified bg-verified-bg/60'
+                  : active
+                  ? 'bg-brand text-white hover:bg-brand-dark shadow-sm'
+                  : 'border border-border text-ink-muted bg-white group-hover:border-brand group-hover:text-brand',
               ].join(' ')}
             >
-              {verified ? 'Un-verify' : 'Verify'}
+              {verified ? '✓ Verified' : 'Verify'}
             </button>
           </span>
         </header>
@@ -230,13 +261,13 @@ export default function Segment({
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               rows={3}
-              className="w-full text-[15px] leading-snug border border-border rounded px-2 py-1.5 resize-y focus:outline-none focus:ring-1 focus:ring-border-strong"
+              className="w-full text-[14px] leading-snug border border-border rounded px-2 py-1.5 resize-y focus:outline-none focus:ring-1 focus:ring-border-strong"
             />
             <div className="mt-1.5 flex items-center gap-2">
               <button
                 onClick={commitEdit}
                 disabled={!draft.trim()}
-                className="text-xs px-2.5 py-1 rounded bg-ink text-white disabled:opacity-40"
+                className="text-xs px-2.5 py-1 rounded bg-brand text-white hover:bg-brand-dark disabled:opacity-40"
               >
                 Save
               </button>
@@ -252,14 +283,18 @@ export default function Segment({
             </div>
           </div>
         ) : textOverride != null ? (
-          <p className="text-[15px] leading-[1.65] text-ink bg-blue-50 rounded px-1.5 py-0.5 -mx-1 ring-1 ring-blue-200">
-            {textOverride}
-            <span className="ml-2 align-middle font-mono text-[10px] text-blue-500 uppercase tracking-widest">
-              edited
-            </span>
-          </p>
+          showChanges ? (
+            <p className="text-[14px] leading-[1.5] text-ink bg-change-ins-bg rounded px-1.5 py-0.5 -mx-1 ring-1 ring-change-ins/25">
+              {textOverride}
+              <span className="ml-2 align-middle font-mono text-[10px] text-change-ins uppercase tracking-widest">
+                rewritten
+              </span>
+            </p>
+          ) : (
+            <p className="text-[14px] leading-[1.5] text-ink">{textOverride}</p>
+          )
         ) : (
-          <p className="text-[15px] leading-[1.65] text-ink">
+          <p className="text-[14px] leading-[1.5] text-ink">
             {words.map((word, i) => {
               const key = `${segment.id}-${i}`
               const edit = edits[key]
@@ -273,6 +308,7 @@ export default function Segment({
                     deleted={edit?.deleted === true}
                     dimension={dimension}
                     focusHit={focusHitFor?.(segment.id, i)}
+                    showChanges={showChanges}
                     onClick={(rect) => onWordClick(segment.id, i, rect)}
                   />
                   {i < words.length - 1 ? ' ' : ''}

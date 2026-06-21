@@ -132,7 +132,7 @@ export default function CandidatePopup({
         <button
           type="submit"
           disabled={!manual.trim()}
-          className="text-xs px-2 py-1 rounded bg-ink text-white disabled:opacity-40"
+          className="text-xs px-2 py-1 rounded bg-brand text-white hover:bg-brand-dark disabled:opacity-40"
         >
           Apply
         </button>
