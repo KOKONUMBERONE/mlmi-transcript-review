@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import TopBar from '../components/TopBar'
+import PlayerBar from '../components/PlayerBar'
 import TranscriptView from '../components/TranscriptView'
 import HistorySidebar from '../components/HistorySidebar'
 import FocusPanel from '../components/FocusPanel'
@@ -24,6 +25,7 @@ import {
 import { runOutline } from '../lib/outlineApi'
 import { transcribeAudio } from '../lib/transcribeApi'
 import { segmentRiskWithFocus } from '../lib/segmentRisk'
+import { buildDisplayRiskMap, combinedSegmentRisk } from '../lib/displayRisk'
 import type {
   Condition,
   EditState,
@@ -43,7 +45,8 @@ import type {
   Transcript,
   Word,
 } from '../types'
-import type { WorkspaceConfig } from './config'
+import type { RiskRegime, WorkspaceConfig } from './config'
+import { RISK_POLICY_BY_REGIME } from './config'
 import { CONDITION_CONFIG } from './conditions'
 
 // Bundled default case (case447). The transcript ships in src/data; the audio
@@ -366,6 +369,37 @@ export default function ReviewWorkspace({
     events.log('trial_end', {})
   }, [interactionLocked, trial, events])
 
+  // Display-time risk "operating point" (deployment quiet vs study dense, see
+  // RiskPolicy). The full build can switch it at runtime to preview both without
+  // opening the study build; the study build keeps its fixed regime.
+  const [riskRegime, setRiskRegime] = useState<RiskRegime>(
+    config.mode === 'study' ? 'study' : 'deployment',
+  )
+  const activeRiskPolicy = config.allowRiskRegimeToggle
+    ? RISK_POLICY_BY_REGIME[riskRegime]
+    : config.riskPolicy
+  // Only transforms the combined dimension; null for the study / pass-through
+  // policy → renders raw combined_risk (zero regression).
+  const displayRiskMap = useMemo(
+    () =>
+      activeHighlight === 'combined'
+        ? buildDisplayRiskMap(transcript, model, activeRiskPolicy)
+        : null,
+    [transcript, model, activeHighlight, activeRiskPolicy],
+  )
+
+  // Segment-level risk that honours the display policy, so the waveform markers
+  // and the high-risk-remaining count agree with the coloured words.
+  const segRisk = useCallback(
+    (s: typeof transcript.segments[number]) => {
+      const focused = showFocus && focusSegmentIds.has(s.id)
+      return displayRiskMap
+        ? combinedSegmentRisk(s, model, displayRiskMap, focused)
+        : segmentRiskWithFocus(s, model, activeHighlight, focused)
+    },
+    [displayRiskMap, activeHighlight, model, showFocus, focusSegmentIds],
+  )
+
   // ---- Audio with logging hooks ----
   // Waveform markers reflect the *active* risk dimension, so toggling the
   // toolbar switch repaints the audio strip too.
@@ -375,14 +409,9 @@ export default function ReviewWorkspace({
         segmentId: s.id,
         start: s.start,
         end: s.end,
-        risk: segmentRiskWithFocus(
-          s,
-          model,
-          activeHighlight,
-          showFocus && focusSegmentIds.has(s.id),
-        ),
+        risk: segRisk(s),
       })),
-    [transcript, model, activeHighlight, showFocus, focusSegmentIds],
+    [transcript, segRisk],
   )
 
   const audio = useAudio(audioBlob, transcript.audioDuration, {
@@ -1284,10 +1313,9 @@ export default function ReviewWorkspace({
   const highRiskRemaining = useMemo<number | null>(() => {
     if (activeHighlight === 'none') return null
     return transcript.segments.reduce((n, s) => {
-      const r = segmentRiskWithFocus(s, model, activeHighlight, showFocus && focusSegmentIds.has(s.id))
-      return r === 'high' && !verified[s.id] ? n + 1 : n
+      return segRisk(s) === 'high' && !verified[s.id] ? n + 1 : n
     }, 0)
-  }, [transcript, model, activeHighlight, showFocus, focusSegmentIds, verified])
+  }, [transcript, segRisk, activeHighlight, verified])
 
   // Latest edit per segment (reviewer + hh:mm) for the "edited · who · time"
   // tag. History is newest-first, so the first hit per segment is the latest.
@@ -1328,14 +1356,10 @@ export default function ReviewWorkspace({
         model={model}
         availableModels={availableModels}
         onModelChange={handleModelChange}
-        audio={audio}
         audioFilename={audioFilename}
         transcriptFilename={transcriptFilename}
-        reviewer={reviewer}
-        onReviewerChange={setReviewer}
         onUploadAudio={handleAudioUpload}
         onUploadTranscript={handleTranscriptUpload}
-        onSpeedChange={handleSpeedChange}
         recording={recorder.isRecording}
         recordingElapsedMs={recorder.elapsedMs}
         recordingSupported={recorder.supported}
@@ -1348,6 +1372,9 @@ export default function ReviewWorkspace({
         onDimensionChange={handleDimensionChange}
         predicting={predicting}
         showRiskSelect={config.allowFreeDimension}
+        allowRiskRegime={config.allowRiskRegimeToggle}
+        riskRegime={riskRegime}
+        onRiskRegimeChange={setRiskRegime}
         allowUpload={config.allowUpload}
         allowRecord={config.allowRecord}
         allowTranscribe={config.allowAutoTranscribe}
@@ -1359,7 +1386,6 @@ export default function ReviewWorkspace({
         allowChangeToggle={config.allowChangeToggle}
         showChanges={showChanges}
         onToggleChanges={() => setShowChanges((v) => !v)}
-        onTogglePlay={togglePlayWithRewind}
       />
 
       {transcribing && (
@@ -1454,6 +1480,7 @@ export default function ReviewWorkspace({
           edits={edits}
           verified={verified}
           dimension={activeHighlight}
+          displayRiskMap={displayRiskMap}
           showViewControls={activeHighlight !== 'none'}
           focusActive={showFocus}
           focusSegmentIds={focusSegmentIds}
@@ -1491,6 +1518,15 @@ export default function ReviewWorkspace({
           onToggleCollapse={() => setAuditCollapsed((v) => !v)}
         />
       </div>
+
+      {/* Page-bottom playback bar (reviewer + transport + speed). */}
+      <PlayerBar
+        audio={audio}
+        reviewer={reviewer}
+        onReviewerChange={setReviewer}
+        onSpeedChange={handleSpeedChange}
+        onTogglePlay={togglePlayWithRewind}
+      />
 
       <ShortcutLegend
         getEvents={events.getEvents}

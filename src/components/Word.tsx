@@ -6,6 +6,10 @@ interface Props {
   edited: boolean
   deleted: boolean
   dimension: HighlightLayer
+  // Deployment regime: display-risk override for the combined dimension (from the
+  // RiskPolicy display-policy). When set, it replaces word.combined_risk for
+  // colouring. Undefined = study / pass-through.
+  displayRisk?: Risk
   // When set (focus mode, 2b), this word was retrieved for a focus term and is
   // elevated to HIGH with a distinct violet marker layered on top.
   focusHit?: FocusWordHit
@@ -19,11 +23,12 @@ interface Props {
 // Pick the risk value to colour by, based on the active display dimension.
 // Falls back to the upstream `risk` (uncertainty) if the prediction service
 // hasn't run yet — so the UI stays usable in offline / pre-fetch state.
-function riskFor(word: WordType, dimension: HighlightLayer): Risk {
+function riskFor(word: WordType, dimension: HighlightLayer, displayRisk?: Risk): Risk {
   if (dimension === 'none') return 'low' // C1: plain text, no colouring
   if (dimension === 'uncertainty') return word.risk
   if (dimension === 'importance') return word.predicted_importance ?? word.risk
-  return word.combined_risk ?? word.risk
+  // combined: the display-policy override (deployment) wins over the raw signal.
+  return displayRisk ?? word.combined_risk ?? word.risk
 }
 
 export default function Word({
@@ -32,6 +37,7 @@ export default function Word({
   edited,
   deleted,
   dimension,
+  displayRisk,
   focusHit,
   showChanges = true,
   onClick,
@@ -43,7 +49,7 @@ export default function Word({
   const isEdit = edited && !deleted
   const showDiff = showChanges && (isEdit || deleted)
 
-  const activeRisk = riskFor(word, dimension)
+  const activeRisk = riskFor(word, dimension, displayRisk)
 
   const base =
     'relative inline-block rounded-sm px-0.5 cursor-pointer transition-colors hover:bg-surface-subtle'

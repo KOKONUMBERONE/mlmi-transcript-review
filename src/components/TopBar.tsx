@@ -1,19 +1,15 @@
 import { useRef } from 'react'
 import type { ModelName, RiskDimension } from '../types'
-import type { AudioController } from '../state/useAudio'
+import type { RiskRegime } from '../core/config'
 
 interface Props {
   model: ModelName
   availableModels: ModelName[]
   onModelChange: (model: ModelName) => void
-  audio: AudioController
   audioFilename: string | null
   transcriptFilename: string | null
-  reviewer: string
-  onReviewerChange: (name: string) => void
   onUploadAudio: (file: File) => void
   onUploadTranscript: (file: File) => void
-  onSpeedChange?: (speed: number) => void
   recording: boolean
   recordingElapsedMs: number
   recordingSupported: boolean
@@ -26,6 +22,10 @@ interface Props {
   // Study build gates: hide the free risk toggle and the upload/record
   // controls when the condition is locked by the experiment.
   showRiskSelect?: boolean
+  // Runtime flagging-regime toggle (full build): preview deployment ⇄ study.
+  allowRiskRegime?: boolean
+  riskRegime?: RiskRegime
+  onRiskRegimeChange?: (r: RiskRegime) => void
   allowUpload?: boolean
   allowRecord?: boolean
   // "Transcribe" runs the ASR service on the currently-loaded audio. Decoupled
@@ -42,15 +42,6 @@ interface Props {
   allowChangeToggle?: boolean
   showChanges?: boolean
   onToggleChanges?: () => void
-  // Play/pause with the auto-rewind-on-resume convention. Falls back to the raw
-  // audio toggle when not provided.
-  onTogglePlay?: () => void
-}
-
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60)
-  const s = Math.floor(seconds % 60)
-  return `${m}:${s.toString().padStart(2, '0')}`
 }
 
 function UploadIcon() {
@@ -108,14 +99,10 @@ export default function TopBar({
   model,
   availableModels,
   onModelChange,
-  audio,
   audioFilename,
   transcriptFilename,
-  reviewer,
-  onReviewerChange,
   onUploadAudio,
   onUploadTranscript,
-  onSpeedChange,
   recording,
   recordingElapsedMs,
   recordingSupported,
@@ -126,6 +113,9 @@ export default function TopBar({
   onDimensionChange,
   predicting,
   showRiskSelect = true,
+  allowRiskRegime = false,
+  riskRegime = 'deployment',
+  onRiskRegimeChange,
   allowUpload = true,
   allowRecord = true,
   allowTranscribe = false,
@@ -137,10 +127,7 @@ export default function TopBar({
   allowChangeToggle = false,
   showChanges = true,
   onToggleChanges,
-  onTogglePlay,
 }: Props) {
-  const reviewerMissing = reviewer.trim() === ''
-
   const audioInputRef = useRef<HTMLInputElement>(null)
   const transcriptInputRef = useRef<HTMLInputElement>(null)
 
@@ -291,79 +278,11 @@ export default function TopBar({
         </button>
       )}
 
-      {/* Reviewer identity */}
-      <label className="flex items-center gap-1.5" title="Recorded on every audit-trail entry">
-        <span className="text-[10px] text-ink-faint uppercase tracking-widest">
-          Reviewer
-        </span>
-        <input
-          type="text"
-          value={reviewer}
-          onChange={(e) => onReviewerChange(e.target.value)}
-          placeholder="Set your name…"
-          className={[
-            'text-xs border rounded px-2 py-1 bg-white text-ink min-w-[10rem] focus:outline-none focus:ring-1 focus:ring-border-strong transition-colors',
-            reviewerMissing
-              ? 'border-risk-med/50 focus:ring-risk-med/40 placeholder:text-risk-med/70 placeholder:italic'
-              : 'border-border hover:border-border-strong',
-          ].join(' ')}
-        />
-      </label>
-
-      <div className="h-7 w-px bg-border" />
-
-      <button
-        onClick={onTogglePlay ?? audio.togglePlay}
-        disabled={!audio.ready}
-        aria-label={audio.isPlaying ? 'Pause' : 'Play'}
-        className="w-8 h-8 flex items-center justify-center rounded border border-border text-ink hover:bg-surface-muted disabled:opacity-40 transition-colors"
-      >
-        {audio.isPlaying ? (
-          <svg width="10" height="12" viewBox="0 0 10 12" fill="currentColor">
-            <rect x="0" y="0" width="3" height="12" />
-            <rect x="7" y="0" width="3" height="12" />
-          </svg>
-        ) : (
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
-            <polygon points="2,1 11,6 2,11" />
-          </svg>
-        )}
-      </button>
-
-      <span className="font-mono text-xs text-ink-faint w-10 text-right tabular-nums">
-        {formatTime(audio.currentTime)}
-      </span>
-      <div
-        ref={audio.containerRef}
-        className="flex-1 max-w-2xl min-w-[8rem]"
-        title="Click to seek"
-      />
-      <span className="font-mono text-xs text-ink-faint w-10 tabular-nums">
-        {formatTime(audio.duration)}
-      </span>
-
-      <div className="h-7 w-px bg-border" />
+      {/* Spacer: pushes the config group to the right (playback moved to the
+          bottom bar). */}
+      <div className="flex-1" />
 
       <div className="flex items-center gap-3">
-        <label className="flex items-center gap-1.5">
-          <span className="text-[10px] text-ink-faint uppercase tracking-widest">Speed</span>
-          <select
-            defaultValue="1"
-            onChange={(e) => {
-              const v = parseFloat(e.target.value)
-              if (onSpeedChange) onSpeedChange(v)
-              else audio.setRate(v)
-            }}
-            className="text-xs border border-border rounded px-2 py-1 bg-white text-ink hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
-          >
-            <option value="0.5">0.5×</option>
-            <option value="0.75">0.75×</option>
-            <option value="1">1×</option>
-            <option value="1.5">1.5×</option>
-            <option value="2">2×</option>
-          </select>
-        </label>
-
         <label className="flex items-center gap-1.5">
           <span className="text-[10px] text-ink-faint uppercase tracking-widest">Model</span>
           <select
@@ -393,6 +312,28 @@ export default function TopBar({
             <option value="importance">Importance</option>
           </select>
         </label>
+        )}
+
+        {allowRiskRegime && (
+          <button
+            onClick={() =>
+              onRiskRegimeChange?.(riskRegime === 'deployment' ? 'study' : 'deployment')
+            }
+            title="Flagging regime for the Combined view — Deployment: quiet (statutory always-red + require both signals + per-segment budget). Study: importance-dominant, denser. Click to switch."
+            className={[
+              'flex items-center gap-1.5 text-[11px] px-2 py-1 rounded border transition-colors',
+              riskRegime === 'study'
+                ? 'border-accent/60 text-ink bg-accent/10'
+                : 'border-border text-ink-muted bg-white hover:border-border-strong',
+            ].join(' ')}
+          >
+            <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3">
+              <path d="M2 3.5h8M2 8.5h8" strokeLinecap="round" />
+              <circle cx={riskRegime === 'study' ? 8 : 4} cy="3.5" r="1.5" fill="currentColor" stroke="none" />
+              <circle cx={riskRegime === 'study' ? 4 : 8} cy="8.5" r="1.5" fill="currentColor" stroke="none" />
+            </svg>
+            {riskRegime === 'study' ? 'Flagging: Study' : 'Flagging: Deployment'}
+          </button>
         )}
 
         {allowChangeToggle && (

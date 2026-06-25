@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { EditState, FocusWordHit, HighlightLayer, ModelName, Segment as SegmentType } from '../types'
+import type { EditState, FocusWordHit, HighlightLayer, ModelName, Risk, Segment as SegmentType } from '../types'
 import Word from './Word'
 
 interface Props {
@@ -9,6 +9,9 @@ interface Props {
   verified: boolean
   edits: Record<string, EditState>
   dimension: HighlightLayer
+  // Deployment regime: per-word display-risk override for the combined dimension.
+  // null = study / pass-through (Word falls back to combined_risk).
+  displayRiskMap?: Map<string, Risk> | null
   // Focus mode (2b): per-word focus marker lookup. No-op when focus is inactive.
   focusHitFor?: (segId: number, wordIdx: number) => FocusWordHit | undefined
   onSeek: (seconds: number) => void
@@ -50,6 +53,7 @@ export default function Segment({
   verified,
   edits,
   dimension,
+  displayRiskMap,
   focusHitFor,
   onSeek,
   onWordClick,
@@ -287,6 +291,11 @@ export default function Segment({
                     edited={edit !== undefined && !edit.deleted}
                     deleted={edit?.deleted === true}
                     dimension={dimension}
+                    displayRisk={
+                      dimension === 'combined'
+                        ? displayRiskMap?.get(`${segment.id}-${i}`)
+                        : undefined
+                    }
                     focusHit={focusHitFor?.(segment.id, i)}
                     showChanges={showChanges}
                     onClick={(rect) => onWordClick(segment.id, i, rect)}

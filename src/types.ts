@@ -15,6 +15,26 @@ export interface Word {
   predicted_importance?: Risk
   predicted_proba?: { high: number; med: number; low: number }
   combined_risk?: Risk
+  // Which gate granted HIGH importance in the cascade: 'l1' = rule-based
+  // statutory lexicon, 'l2' = classifier. Audit-only; set by /predict.
+  predicted_importance_source?: 'l1' | 'l2'
+}
+
+// Display-time risk policy — the tunable "operating point". Differs by build:
+// the deployment/full build is quiet (require both signals + a tiny statutory
+// always-red set + a per-segment flag budget); the study build is a pass-
+// through of the importance-dominant combined_risk. Only affects the combined
+// dimension; uncertainty / importance / none are rendered as-is.
+export interface RiskPolicy {
+  // Require uncertainty ≥ med (not importance alone) for a word to read HIGH —
+  // except the always-red set. full = true, study = false.
+  requireUncertaintyForHigh: boolean
+  // 'statutory' keeps a tiny negation+weapon set red even at low uncertainty
+  // (the "confidently wrong" gun/not cell). 'none' = no always-red set.
+  alwaysRed: 'statutory' | 'none'
+  // Cap reds per segment at this fraction of content words (always-red exempt);
+  // surplus would-be-reds drop to amber. null = uncapped. full ≈ 0.15, study = null.
+  flagBudgetPerSegmentPct: number | null
 }
 
 // Which signal the transcript view colours words by.
