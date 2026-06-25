@@ -1,9 +1,16 @@
-import type { FocusItem, FocusResult, Transcript } from '../types'
+import type {
+  FocusItem,
+  FocusResult,
+  FocusSnippet,
+  FocusTermResult,
+  Transcript,
+} from '../types'
 import { PredictError } from './predictApi'
 
-// Same local FastAPI service as /predict — 2b reuses 2a's encoder.
-const FOCUS_URL = 'http://localhost:8000/focus'
-const FOCUS_LLM_URL = 'http://localhost:8000/focus_llm'
+// Same local FastAPI service as /predict — 2b reuses 2a's encoder. 127.0.0.1
+// (not "localhost") so an IPv6 ::1 squatter can't intercept it (see predictApi).
+const FOCUS_URL = 'http://127.0.0.1:8000/focus'
+const FOCUS_LLM_URL = 'http://127.0.0.1:8000/focus_llm'
 
 /**
  * POST the transcript + focus items to the case-focus retrieval service and
@@ -34,7 +41,7 @@ export async function runFocus(
     })
   } catch (e) {
     throw new PredictError(
-      'Could not reach the focus service at http://localhost:8000. ' +
+      'Could not reach the focus service at http://127.0.0.1:8000. ' +
         'Start it with:  uvicorn serve_model:app --port 8000  (run from server/)',
       e,
     )
@@ -72,7 +79,7 @@ export async function runFocusAi(
     })
   } catch (e) {
     throw new PredictError(
-      'Could not reach the focus service at http://localhost:8000. ' +
+      'Could not reach the focus service at http://127.0.0.1:8000. ' +
         'Start it with:  uvicorn serve_model:app --port 8000  (run from server/)',
       e,
     )
@@ -89,6 +96,52 @@ export async function runFocusAi(
   }
 
   return (await res.json()) as FocusResult
+}
+
+/**
+ * Merge a lexical FocusResult with an AI (LLM) FocusResult into one result for
+ * the unified "Find" box. The two engines run on the SAME lines in the SAME
+ * order (both split on /[\n;]+/), so terms are aligned by index; the lexical
+ * label/auto-aliases are kept as the section header.
+ *
+ * Per term, snippets are unioned by segment_id:
+ *  - a segment both engines found keeps its lexical match (exact/alias/…) but
+ *    gains the LLM's `llm_reason` and the stronger of the two scores;
+ *  - a segment only the LLM found (a context/pronoun hit the lexical path
+ *    can't see) is added as a fresh `match_type: 'llm'` snippet.
+ *
+ * Pure function (no I/O) so it is trivially testable.
+ */
+export function mergeFocusResults(
+  lexical: FocusResult,
+  ai: FocusResult | null,
+): FocusResult {
+  if (!ai || ai.terms.length === 0) return lexical
+  const merged: FocusTermResult[] = lexical.terms.map((lex, i) => {
+    const aiTerm = ai.terms[i]
+    if (!aiTerm) return lex
+    const bySeg = new Map<number, FocusSnippet>()
+    for (const s of lex.snippets) bySeg.set(s.segment_id, { ...s })
+    for (const a of aiTerm.snippets) {
+      const existing = bySeg.get(a.segment_id)
+      if (existing) {
+        existing.llm_reason = a.llm_reason ?? existing.llm_reason
+        existing.llm_relevance_score = a.llm_relevance_score
+        existing.focus_score = Math.max(existing.focus_score, a.focus_score)
+      } else {
+        bySeg.set(a.segment_id, { ...a, match_type: 'llm' })
+      }
+    }
+    const snippets = [...bySeg.values()].sort(
+      (x, y) => y.focus_score - x.focus_score,
+    )
+    return { ...lex, snippets }
+  })
+  // Extra AI terms (more lines than the lexical pass produced) — append as-is.
+  for (let i = lexical.terms.length; i < ai.terms.length; i++) {
+    merged.push(ai.terms[i])
+  }
+  return { terms: merged }
 }
 
 /**

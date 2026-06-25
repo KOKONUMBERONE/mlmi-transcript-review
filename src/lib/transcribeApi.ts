@@ -4,7 +4,8 @@ import { PredictError } from './predictApi'
 // Busola's ASR transcription service (separate from the importance classifier
 // on :8000). Runs the 4 ASR models locally and returns a transcript already in
 // the front-end schema shape — see server/TRANSCRIBE_API_README.md.
-const TRANSCRIBE_URL = 'http://localhost:8001/transcribe'
+// 127.0.0.1 (not "localhost") so an IPv6 ::1 squatter can't intercept it.
+const TRANSCRIBE_URL = 'http://127.0.0.1:8001/transcribe'
 
 /**
  * Upload an audio file to the local ASR service and get back a transcript in
@@ -23,7 +24,7 @@ export async function transcribeAudio(file: Blob): Promise<Transcript> {
     res = await fetch(TRANSCRIBE_URL, { method: 'POST', body: form })
   } catch (e) {
     throw new PredictError(
-      'Could not reach the transcription service at http://localhost:8001. ' +
+      'Could not reach the transcription service at http://127.0.0.1:8001. ' +
         'Start it with:  uvicorn transcribe_api:app --port 8001  (run from server/)',
       e,
     )

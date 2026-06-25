@@ -36,7 +36,7 @@ export function exportHistoryAsCSV(history: HistoryEntry[]): void {
     e.timestamp,
     e.reviewer,
     e.kind,
-    e.segmentId,
+    e.segmentIds ? e.segmentIds.join(';') : e.segmentId,
     e.wordIndex ?? '',
     e.from ?? '',
     e.kind === 'delete' ? '(deleted)' : e.to ?? '',

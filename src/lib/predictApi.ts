@@ -1,8 +1,11 @@
 import type { Transcript } from '../types'
 
 // Where the local FastAPI service lives. Vite proxying is intentionally NOT
-// used so the dev/prod behaviour is identical.
-const PREDICT_URL = 'http://localhost:8000/predict'
+// used so the dev/prod behaviour is identical. We use 127.0.0.1 (not
+// "localhost") on purpose: uvicorn binds IPv4 127.0.0.1, but "localhost" can
+// resolve to IPv6 ::1 first — if anything else is squatting ::1:8000 (e.g. a
+// stray `python -m http.server 8000`), the browser would hit that instead.
+const PREDICT_URL = 'http://127.0.0.1:8000/predict'
 
 export class PredictError extends Error {
   constructor(message: string, public readonly cause?: unknown) {
@@ -36,7 +39,7 @@ export async function predictRisks(
     })
   } catch (e) {
     throw new PredictError(
-      'Could not reach the prediction service at http://localhost:8000. ' +
+      'Could not reach the prediction service at http://127.0.0.1:8000. ' +
         'Start it with:  uvicorn serve_model:app --port 8000  (run from server/)',
       e,
     )

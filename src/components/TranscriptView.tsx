@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { EditState, FocusWordHit, ModelName, Risk, RiskDimension, Segment as SegmentType, Transcript } from '../types'
+import type { EditState, FocusWordHit, HighlightLayer, ModelName, Risk, Segment as SegmentType, Transcript } from '../types'
 import { segmentRiskWithFocus } from '../lib/segmentRisk'
 import Segment from './Segment'
 
@@ -9,16 +9,30 @@ interface Props {
   currentTime: number
   edits: Record<string, EditState>
   verified: Record<number, boolean>
-  dimension: RiskDimension
+  dimension: HighlightLayer
+  // C1 hides the risk chips + Show/Order controls (plain text, no risk shown).
+  showViewControls?: boolean
   // Focus mode (2b): which segments hold a hit + a per-word marker lookup.
   focusActive: boolean
   focusSegmentIds: Set<number>
   focusHitFor?: (segId: number, wordIdx: number) => FocusWordHit | undefined
   onSeek: (seconds: number) => void
   onWordClick: (segId: number, wordIdx: number, rect: DOMRect) => void
-  onToggleVerify: (segId: number) => void
+  onToggleVerify: (segId: number, opts?: { range?: boolean }) => void
+  onBulkVerify?: (segIds: number[], value: boolean) => void
+  // #1 whole-sentence edit + #2 structural edits, threaded to each Segment.
+  segmentTextEdits?: Record<number, { text: string; reason?: string }>
+  onEditSentence?: (segId: number, text: string) => void
+  onMergeNext?: (segId: number) => void
+  onChangeSpeaker?: (segId: number, speaker: string) => void
   onFilterChange?: (filter: string) => void
   onSortChange?: (sort: string) => void
+  // Fires when a segment scrolls ≥60% into view (complements segment_focus,
+  // which only fires from audio playback). Must be a *stable* callback.
+  onSegmentView?: (segId: number, start: number, risk: Risk) => void
+  // Track-changes view + per-segment "<reviewer> · <hh:mm>" of the last edit.
+  showChanges?: boolean
+  editInfo?: Record<number, { reviewer: string; time: string }>
 }
 
 const RISK_CHIP: Record<Risk, string> = {
@@ -61,14 +75,23 @@ export default function TranscriptView({
   edits,
   verified,
   dimension,
+  showViewControls = true,
   focusActive,
   focusSegmentIds,
   focusHitFor,
   onSeek,
   onWordClick,
   onToggleVerify,
+  onBulkVerify,
+  segmentTextEdits,
+  onEditSentence,
+  onMergeNext,
+  onChangeSpeaker,
   onFilterChange,
   onSortChange,
+  onSegmentView,
+  showChanges = true,
+  editInfo,
 }: Props) {
   const [filter, setFilter] = useState<RiskFilter>('all')
   const [sort, setSort] = useState<SortMode>('chrono')
@@ -107,12 +130,37 @@ export default function TranscriptView({
   )
 
   const activeRef = useRef<HTMLDivElement>(null)
+  const scrollRootRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     if (activeRef.current) {
       activeRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
   }, [activeId])
+
+  // Emit segment_view when a segment scrolls ≥60% into view, capturing reading
+  // attention even when the reviewer never plays that part of the audio.
+  useEffect(() => {
+    if (!onSegmentView) return
+    const root = scrollRootRef.current
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue
+          const el = e.target as HTMLElement
+          onSegmentView(
+            Number(el.dataset.segmentId),
+            Number(el.dataset.segmentStart),
+            (el.dataset.segmentRisk ?? 'low') as Risk,
+          )
+        }
+      },
+      { root, threshold: 0.6 },
+    )
+    const nodes = (root ?? document).querySelectorAll('[data-segment-id]')
+    nodes.forEach((n) => obs.observe(n))
+    return () => obs.disconnect()
+  }, [onSegmentView, displaySegments])
 
   const counts = useMemo(
     () =>
@@ -129,8 +177,8 @@ export default function TranscriptView({
   const isDefaultView = filter === 'all' && sort === 'chrono'
 
   return (
-    <main className="flex-1 overflow-y-auto">
-      <div className="max-w-3xl mx-auto px-8 py-6">
+    <main ref={scrollRootRef} className="flex-1 overflow-y-auto">
+      <div className="max-w-5xl mx-auto px-8 py-5">
         <div className="mb-6 pb-4 border-b border-border">
           <div className="flex items-baseline justify-between mb-3">
             <h1 className="text-[11px] text-ink-faint uppercase tracking-[0.2em]">
@@ -139,7 +187,8 @@ export default function TranscriptView({
             <p className="font-mono text-[11px] text-ink-faint">{model}</p>
           </div>
 
-          {/* Risk chips + view controls. */}
+          {/* Risk chips + view controls (hidden in C1 — plain text). */}
+          {showViewControls && (
           <div className="flex flex-wrap items-center gap-2 text-[11px]">
             <span className="text-ink-faint uppercase tracking-widest text-[10px]">
               Risk
@@ -180,9 +229,10 @@ export default function TranscriptView({
               </label>
             </span>
           </div>
+          )}
 
           {/* View-state indicator. */}
-          {!isDefaultView && (
+          {showViewControls && !isDefaultView && (
             <div className="mt-3 flex items-center gap-2">
               <span className="inline-flex items-center gap-2 text-[11px] text-risk-med bg-risk-med-bg border border-risk-med/30 rounded-sm px-2 py-0.5">
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -208,6 +258,27 @@ export default function TranscriptView({
               </button>
             </div>
           )}
+
+          {onBulkVerify && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+              <span className="text-ink-faint uppercase tracking-widest text-[10px]">Verify</span>
+              <button
+                onClick={() => onBulkVerify(displaySegments.map((s) => s.id), true)}
+                className="px-2 py-0.5 rounded border border-verified/50 text-verified bg-white hover:bg-verified-bg transition-colors"
+                title="Verify every currently-shown segment"
+              >
+                ✓ All shown{filter !== 'all' ? ` (${displaySegments.length})` : ''}
+              </button>
+              <button
+                onClick={() => onBulkVerify(displaySegments.map((s) => s.id), false)}
+                className="px-2 py-0.5 rounded border border-border text-ink-muted bg-white hover:border-ink-muted hover:text-ink transition-colors"
+                title="Un-verify every currently-shown segment"
+              >
+                Un-verify all shown
+              </button>
+              <span className="text-ink-faint hidden md:inline">· or Shift-click a segment's Verify to select a range</span>
+            </div>
+          )}
         </div>
 
         <div className="space-y-1">
@@ -217,7 +288,13 @@ export default function TranscriptView({
             </p>
           ) : (
             displaySegments.map((segment) => (
-              <div key={segment.id} ref={segment.id === activeId ? activeRef : null}>
+              <div
+                key={segment.id}
+                ref={segment.id === activeId ? activeRef : null}
+                data-segment-id={segment.id}
+                data-segment-start={segment.start}
+                data-segment-risk={riskOf(segment)}
+              >
                 <Segment
                   segment={segment}
                   model={model}
@@ -225,11 +302,23 @@ export default function TranscriptView({
                   verified={!!verified[segment.id]}
                   edits={edits}
                   dimension={dimension}
-                  focused={focusActive && focusSegmentIds.has(segment.id)}
                   focusHitFor={focusHitFor}
                   onSeek={onSeek}
                   onWordClick={onWordClick}
                   onToggleVerify={onToggleVerify}
+                  textOverride={segmentTextEdits?.[segment.id]?.text}
+                  onEditSentence={onEditSentence}
+                  onMergeNext={onMergeNext}
+                  canMergeNext={
+                    transcript.segments[transcript.segments.length - 1]?.id !== segment.id
+                  }
+                  onChangeSpeaker={onChangeSpeaker}
+                  showChanges={showChanges}
+                  editLabel={
+                    editInfo?.[segment.id]
+                      ? `${editInfo[segment.id].reviewer} · ${editInfo[segment.id].time}`
+                      : undefined
+                  }
                 />
               </div>
             ))
