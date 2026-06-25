@@ -7,6 +7,7 @@ interface Args {
   togglePlay: () => void
   seek: (seconds: number) => void
   toggleVerify: (segId: number) => void
+  replaySegment: () => void
 }
 
 function isEditableTarget(el: EventTarget | null): boolean {
@@ -26,6 +27,7 @@ export function useKeyboardShortcuts({
   togglePlay,
   seek,
   toggleVerify,
+  replaySegment,
 }: Args) {
   useEffect(() => {
     const activeSegmentId = (): number | null => {
@@ -79,13 +81,19 @@ export function useKeyboardShortcuts({
           if (id !== null) {
             e.preventDefault()
             toggleVerify(id)
+            // Shift+V = verify and advance to the next segment.
+            if (e.shiftKey) seek(nextSegmentStart())
           }
           return
         }
+        case 'r':
+          e.preventDefault()
+          replaySegment()
+          return
       }
     }
 
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [transcript, currentTime, togglePlay, seek, toggleVerify])
+  }, [transcript, currentTime, togglePlay, seek, toggleVerify, replaySegment])
 }

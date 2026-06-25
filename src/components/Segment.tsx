@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import type { EditState, FocusWordHit, HighlightLayer, ModelName, Segment as SegmentType } from '../types'
-import { segmentRiskWithFocus } from '../lib/segmentRisk'
 import Word from './Word'
 
 interface Props {
@@ -10,9 +9,7 @@ interface Props {
   verified: boolean
   edits: Record<string, EditState>
   dimension: HighlightLayer
-  // Focus mode (2b): whether this segment holds a focus hit, and a lookup for
-  // per-word focus markers. Both no-ops when focus is inactive.
-  focused: boolean
+  // Focus mode (2b): per-word focus marker lookup. No-op when focus is inactive.
   focusHitFor?: (segId: number, wordIdx: number) => FocusWordHit | undefined
   onSeek: (seconds: number) => void
   onWordClick: (segId: number, wordIdx: number, rect: DOMRect) => void
@@ -53,7 +50,6 @@ export default function Segment({
   verified,
   edits,
   dimension,
-  focused,
   focusHitFor,
   onSeek,
   onWordClick,
@@ -91,14 +87,9 @@ export default function Segment({
       .filter(Boolean)
       .join(' ')
 
-  // Aggregate the segment-level risk from words under the active dimension, so
-  // the left bar + "HIGH RISK" badge follow the toolbar Risk toggle. A focus
-  // hit forces the segment to HIGH (display only — 2a scores are untouched).
-  const effectiveRisk = segmentRiskWithFocus(segment, model, dimension, focused)
-
-  // No left bar — segment-level risk is shown only by the HIGH RISK badge, and
-  // word-level risk by the coloured words (so red lands on the words that matter,
-  // not the whole segment). active/verified keep just a faint background tint.
+  // No left bar, no segment-level "HIGH RISK" badge — segment risk is conveyed
+  // purely by the coloured words (so red lands on the words that matter, not the
+  // whole segment). active/verified keep just a faint background tint.
   const containerCls = verified
     ? 'bg-verified-bg/50 ring-1 ring-verified-bar/30'
     : active
@@ -163,17 +154,6 @@ export default function Segment({
           <span className="font-mono text-[11px] text-ink-faint tabular-nums">
             {formatTime(segment.start)}
           </span>
-
-          {effectiveRisk === 'high' && !verified && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-white uppercase tracking-wide px-1.5 py-0.5 bg-risk-high rounded">
-              <svg width="9" height="9" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
-                <path d="M6 1 11 11H1z" />
-                <rect x="5.3" y="4.5" width="1.4" height="3.2" fill="#fff" />
-                <rect x="5.3" y="8.4" width="1.4" height="1.4" fill="#fff" />
-              </svg>
-              High risk
-            </span>
-          )}
 
           {active && (
             <span className="font-mono text-[10px] text-brand uppercase tracking-widest">

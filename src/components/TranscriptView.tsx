@@ -302,7 +302,6 @@ export default function TranscriptView({
                   verified={!!verified[segment.id]}
                   edits={edits}
                   dimension={dimension}
-                  focused={focusActive && focusSegmentIds.has(segment.id)}
                   focusHitFor={focusHitFor}
                   onSeek={onSeek}
                   onWordClick={onWordClick}

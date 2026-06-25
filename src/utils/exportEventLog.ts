@@ -54,6 +54,7 @@ const KNOWN_COLUMNS = [
   'from_text',
   'to_text',
   'via',
+  'occurrences',
   'chosen_model',
   'reason',
   'filter',

@@ -165,8 +165,11 @@ export default function ReviewWorkspace({
   // audio file. Drives a progress banner — transcription runs on CPU and is slow.
   const [transcribing, setTranscribing] = useState<boolean>(false)
 
-  // ---- Outline sub-page: whether the centre modal is open ----
+  // ---- Outline sub-page: whether it's open, and whether it's docked to the
+  // left as a side panel (vs. the centre modal). Docked lets the reviewer read
+  // the outline and the transcript at the same time. ----
   const [outlineOpen, setOutlineOpen] = useState(false)
+  const [outlineDocked, setOutlineDocked] = useState(false)
 
   // ---- Case focus (2b) — retrieval overlay on top of the default scoring ----
   // The "Find" box runs ONE unified search: lexical first (fast, deterministic)
@@ -416,6 +419,28 @@ export default function ReviewWorkspace({
     [audio, events],
   )
 
+  // ---- Playback ergonomics (transcription-editor conventions) ----
+  // Pressing play after a pause rewinds a couple of seconds so the reviewer
+  // re-hears the lead-in instead of resuming cold mid-word.
+  const togglePlayWithRewind = useCallback(() => {
+    if (!audio.isPlaying && audio.currentTime > 0.2) {
+      audio.seek(Math.max(0, audio.currentTime - 2))
+    }
+    audio.togglePlay()
+  }, [audio])
+
+  // Replay the segment the playhead is in from its start (key: R).
+  const replayCurrentSegment = useCallback(() => {
+    const t = audio.currentTime
+    const seg =
+      transcript.segments.find((s) => t >= s.start && t < s.end) ??
+      [...transcript.segments].reverse().find((s) => s.start <= t) ??
+      transcript.segments[0]
+    if (!seg) return
+    seekWithLog(seg.start, 'keyboard')
+    if (!audio.isPlaying) audio.togglePlay()
+  }, [audio, transcript, seekWithLog])
+
   // ---- Active segment + focus event ----
   const activeId = useMemo(() => {
     const seg = transcript.segments.find(
@@ -556,6 +581,58 @@ export default function ReviewWorkspace({
       segment_id: popup.segId,
       word_index: popup.wordIdx,
     })
+    setPopup(null)
+  }
+
+  // Batch correct-all: fix every token (active model) whose CURRENT displayed
+  // text equals `fromText`, in one decision. Writes a single summary audit entry
+  // + a single edit_apply event carrying the occurrence count (so a recurring
+  // ASR error — e.g. a mis-heard name — is one human judgment, not N).
+  const applyEditAll = (newText: string, reason: string | undefined, via: 'candidate' | 'manual') => {
+    if (!popup) return
+    const fromText =
+      edits[`${popup.segId}-${popup.wordIdx}`]?.text ?? originalTextAt(popup.segId, popup.wordIdx)
+    if (!fromText || newText === fromText) {
+      closePopup()
+      return
+    }
+    const hits: { segId: number; wordIdx: number }[] = []
+    for (const s of transcript.segments) {
+      const ws = s.words[model] ?? []
+      ws.forEach((w, i) => {
+        const e = edits[`${s.id}-${i}`]
+        if (e?.deleted) return
+        const cur = e?.text ?? w.text
+        if (cur && cur === fromText) hits.push({ segId: s.id, wordIdx: i })
+      })
+    }
+    if (hits.length === 0) {
+      closePopup()
+      return
+    }
+    setEdits((prev) => {
+      const next = { ...prev }
+      for (const h of hits) next[`${h.segId}-${h.wordIdx}`] = { text: newText, deleted: false, reason }
+      return next
+    })
+    const segIds = [...new Set(hits.map((h) => h.segId))]
+    logEntry({
+      kind: 'edit',
+      segmentId: hits[0].segId,
+      segmentIds: segIds,
+      from: fromText,
+      to: newText,
+      reason: reason ?? `applied to ${hits.length} occurrences`,
+    })
+    events.log('edit_apply', {
+      segment_id: hits[0].segId,
+      from_text: fromText,
+      to_text: newText,
+      via,
+      occurrences: hits.length,
+      reason,
+    })
+    events.log('popup_close', { segment_id: popup.segId, word_index: popup.wordIdx })
     setPopup(null)
   }
 
@@ -945,8 +1022,9 @@ export default function ReviewWorkspace({
     if (!outlineResult && !outlineRunning) handleRunOutline()
   }, [events, outlineResult, outlineRunning, handleRunOutline])
 
-  // Jump to a Part / Chapter: seek, log, and close the modal so the reviewer
-  // lands on that passage in the transcript.
+  // Jump to a Part / Chapter: seek, log, and (in modal mode) close so the
+  // reviewer lands on that passage. When docked, the panel stays open so they
+  // can keep navigating beside the transcript.
   const handlePartClick = useCallback(
     (part: OutlinePart) => {
       events.log('outline_part_click', {
@@ -957,9 +1035,9 @@ export default function ReviewWorkspace({
         segment_id: part.start_id,
       })
       seekWithLog(part.segment_start, 'marker')
-      setOutlineOpen(false)
+      if (!outlineDocked) setOutlineOpen(false)
     },
-    [events, seekWithLog],
+    [events, seekWithLog, outlineDocked],
   )
 
   const handleChapterClick = useCallback(
@@ -972,9 +1050,9 @@ export default function ReviewWorkspace({
         segment_id: chapter.start_id,
       })
       seekWithLog(chapter.segment_start, 'marker')
-      setOutlineOpen(false)
+      if (!outlineDocked) setOutlineOpen(false)
     },
-    [events, seekWithLog],
+    [events, seekWithLog, outlineDocked],
   )
 
   const handleFocusSnippetClick = useCallback(
@@ -1160,9 +1238,10 @@ export default function ReviewWorkspace({
   useKeyboardShortcuts({
     transcript,
     currentTime: audio.currentTime,
-    togglePlay: audio.togglePlay,
+    togglePlay: togglePlayWithRewind,
     seek: (t) => seekWithLog(t, 'keyboard'),
     toggleVerify,
+    replaySegment: replayCurrentSegment,
   })
 
   // ---- Wrapped exporter to log every download ----
@@ -1180,6 +1259,22 @@ export default function ReviewWorkspace({
     ? popupEdit?.text ?? popupSegment?.words[model]?.[popup.wordIdx]?.text ?? ''
     : ''
   const popupIsDeleted = popupEdit?.deleted === true
+
+  // How many tokens (active model) currently display the same text as the popup
+  // word — drives the "apply to all N" affordance for batch correction.
+  const sameTokenCount = useMemo(() => {
+    if (!popup || !popupCurrentText || popupIsDeleted) return 0
+    let n = 0
+    for (const s of transcript.segments) {
+      const ws = s.words[model] ?? []
+      ws.forEach((w, i) => {
+        const e = edits[`${s.id}-${i}`]
+        if (e?.deleted) return
+        if ((e?.text ?? w.text) === popupCurrentText) n += 1
+      })
+    }
+    return n
+  }, [popup, popupCurrentText, popupIsDeleted, transcript, model, edits])
 
   const verifiedCount = Object.values(verified).filter(Boolean).length
   const totalSegments = transcript.segments.length
@@ -1264,6 +1359,7 @@ export default function ReviewWorkspace({
         allowChangeToggle={config.allowChangeToggle}
         showChanges={showChanges}
         onToggleChanges={() => setShowChanges((v) => !v)}
+        onTogglePlay={togglePlayWithRewind}
       />
 
       {transcribing && (
@@ -1319,6 +1415,21 @@ export default function ReviewWorkspace({
       )}
 
       <div className="flex-1 flex overflow-hidden">
+        {config.allowOutline && outlineOpen && outlineDocked && (
+          <OutlineModal
+            result={outlineResult}
+            running={outlineRunning}
+            error={outlineError}
+            audioDuration={transcript.audioDuration}
+            currentTime={audio.currentTime}
+            onRegenerate={handleRunOutline}
+            onClose={() => setOutlineOpen(false)}
+            onPartClick={handlePartClick}
+            onChapterClick={handleChapterClick}
+            docked
+            onToggleDock={() => setOutlineDocked(false)}
+          />
+        )}
         {focusEnabled && (
           <FocusPanel
             text={focusText}
@@ -1400,14 +1511,16 @@ export default function ReviewWorkspace({
           activeModel={model}
           currentText={popupCurrentText}
           isDeleted={popupIsDeleted}
+          sameTokenCount={sameTokenCount}
           onApply={applyEdit}
+          onApplyAll={applyEditAll}
           onDelete={deleteWord}
           onClose={closePopup}
           onSplit={() => splitSegment(popup.segId, popup.wordIdx)}
         />
       )}
 
-      {config.allowOutline && outlineOpen && (
+      {config.allowOutline && outlineOpen && !outlineDocked && (
         <OutlineModal
           result={outlineResult}
           running={outlineRunning}
@@ -1418,6 +1531,8 @@ export default function ReviewWorkspace({
           onClose={() => setOutlineOpen(false)}
           onPartClick={handlePartClick}
           onChapterClick={handleChapterClick}
+          docked={false}
+          onToggleDock={() => setOutlineDocked(true)}
         />
       )}
 

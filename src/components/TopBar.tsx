@@ -42,6 +42,9 @@ interface Props {
   allowChangeToggle?: boolean
   showChanges?: boolean
   onToggleChanges?: () => void
+  // Play/pause with the auto-rewind-on-resume convention. Falls back to the raw
+  // audio toggle when not provided.
+  onTogglePlay?: () => void
 }
 
 function formatTime(seconds: number): string {
@@ -134,6 +137,7 @@ export default function TopBar({
   allowChangeToggle = false,
   showChanges = true,
   onToggleChanges,
+  onTogglePlay,
 }: Props) {
   const reviewerMissing = reviewer.trim() === ''
 
@@ -309,7 +313,7 @@ export default function TopBar({
       <div className="h-7 w-px bg-border" />
 
       <button
-        onClick={audio.togglePlay}
+        onClick={onTogglePlay ?? audio.togglePlay}
         disabled={!audio.ready}
         aria-label={audio.isPlaying ? 'Pause' : 'Play'}
         className="w-8 h-8 flex items-center justify-center rounded border border-border text-ink hover:bg-surface-muted disabled:opacity-40 transition-colors"

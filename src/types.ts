@@ -242,6 +242,7 @@ export interface LogEvent {
   from_text?: string
   to_text?: string
   via?: 'candidate' | 'manual'
+  occurrences?: number         // batch correct-all: how many identical tokens one decision fixed
   chosen_model?: string        // which ASR model produced the chosen candidate
   reason?: string
   filter?: string

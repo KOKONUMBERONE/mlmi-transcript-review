@@ -14,7 +14,11 @@ interface Props {
   activeModel: ModelName
   currentText: string
   isDeleted: boolean
+  // How many tokens currently display the same text (this one included). When
+  // > 1, the popup offers a one-click "apply to all" batch correction.
+  sameTokenCount?: number
   onApply: (newText: string, reason?: string) => void
+  onApplyAll?: (newText: string, reason: string | undefined, via: 'candidate' | 'manual') => void
   onDelete: (reason?: string) => void
   onClose: () => void
   // #2: split this segment so that this word starts a new segment.
@@ -28,7 +32,9 @@ export default function CandidatePopup({
   activeModel,
   currentText,
   isDeleted,
+  sameTokenCount = 0,
   onApply,
+  onApplyAll,
   onDelete,
   onClose,
   onSplit,
@@ -36,6 +42,8 @@ export default function CandidatePopup({
   const ref = useRef<HTMLDivElement>(null)
   const [manual, setManual] = useState('')
   const [reason, setReason] = useState('')
+  const [applyAll, setApplyAll] = useState(false)
+  const canApplyAll = !isDeleted && !!onApplyAll && sameTokenCount > 1
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
@@ -68,6 +76,11 @@ export default function CandidatePopup({
 
   const submitReason = () => (reason.trim() ? reason.trim() : undefined)
 
+  const doApply = (text: string, via: 'candidate' | 'manual') => {
+    if (applyAll && canApplyAll) onApplyAll!(text, submitReason(), via)
+    else onApply(text, submitReason())
+  }
+
   const top = anchor.rect.bottom + 6
   const left = Math.min(anchor.rect.left, window.innerWidth - 300)
 
@@ -93,7 +106,7 @@ export default function CandidatePopup({
           return (
             <li key={c.text}>
               <button
-                onClick={() => onApply(c.text, submitReason())}
+                onClick={() => doApply(c.text, 'candidate')}
                 className={[
                   'w-full text-left px-2 py-1.5 rounded border transition-colors',
                   isCurrent
@@ -117,7 +130,7 @@ export default function CandidatePopup({
         onSubmit={(e) => {
           e.preventDefault()
           const v = manual.trim()
-          if (v) onApply(v, submitReason())
+          if (v) doApply(v, 'manual')
         }}
         className="border-t border-border pt-2 flex gap-1 mb-2"
       >
@@ -146,6 +159,22 @@ export default function CandidatePopup({
         placeholder='Reason (optional, e.g. "not in audio")'
         className="w-full text-xs border border-border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-border-strong mb-2"
       />
+
+      {/* Batch correct-all: one decision fixes every identical token. */}
+      {canApplyAll && (
+        <label className="flex items-center gap-2 mb-2 text-[11px] text-ink-muted cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={applyAll}
+            onChange={(e) => setApplyAll(e.target.checked)}
+            className="accent-brand w-3.5 h-3.5"
+          />
+          <span>
+            Apply to all <span className="font-medium text-ink">{sameTokenCount}</span>{' '}
+            <span className="font-mono">“{currentText}”</span>
+          </span>
+        </label>
+      )}
 
       {/* Delete / hallucination */}
       {!isDeleted && (

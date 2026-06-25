@@ -3,11 +3,13 @@ import { exportEventLogAsCSV, exportEventLogAsJSON } from '../utils/exportEventL
 import type { LogEvent } from '../types'
 
 const SHORTCUTS: { keys: string[]; label: string }[] = [
-  { keys: ['Space'], label: 'Play / pause' },
+  { keys: ['Space'], label: 'Play / pause (rewinds 2 s on resume)' },
   { keys: ['←', '→'], label: 'Seek ±5 s' },
   { keys: ['J'], label: 'Previous segment' },
   { keys: ['K'], label: 'Next segment' },
+  { keys: ['R'], label: 'Replay current segment' },
   { keys: ['V'], label: 'Verify active segment' },
+  { keys: ['⇧', 'V'], label: 'Verify + next segment' },
 ]
 
 interface Props {
