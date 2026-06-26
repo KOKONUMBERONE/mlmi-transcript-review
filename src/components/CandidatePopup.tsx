@@ -14,9 +14,15 @@ interface Props {
   activeModel: ModelName
   currentText: string
   isDeleted: boolean
+  // How many tokens currently display the same text (this one included). When
+  // > 1, the popup offers a one-click "apply to all" batch correction.
+  sameTokenCount?: number
   onApply: (newText: string, reason?: string) => void
+  onApplyAll?: (newText: string, reason: string | undefined, via: 'candidate' | 'manual') => void
   onDelete: (reason?: string) => void
   onClose: () => void
+  // #2: split this segment so that this word starts a new segment.
+  onSplit?: () => void
 }
 
 export default function CandidatePopup({
@@ -26,13 +32,18 @@ export default function CandidatePopup({
   activeModel,
   currentText,
   isDeleted,
+  sameTokenCount = 0,
   onApply,
+  onApplyAll,
   onDelete,
   onClose,
+  onSplit,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const [manual, setManual] = useState('')
   const [reason, setReason] = useState('')
+  const [applyAll, setApplyAll] = useState(false)
+  const canApplyAll = !isDeleted && !!onApplyAll && sameTokenCount > 1
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
@@ -65,6 +76,11 @@ export default function CandidatePopup({
 
   const submitReason = () => (reason.trim() ? reason.trim() : undefined)
 
+  const doApply = (text: string, via: 'candidate' | 'manual') => {
+    if (applyAll && canApplyAll) onApplyAll!(text, submitReason(), via)
+    else onApply(text, submitReason())
+  }
+
   const top = anchor.rect.bottom + 6
   const left = Math.min(anchor.rect.left, window.innerWidth - 300)
 
@@ -90,7 +106,7 @@ export default function CandidatePopup({
           return (
             <li key={c.text}>
               <button
-                onClick={() => onApply(c.text, submitReason())}
+                onClick={() => doApply(c.text, 'candidate')}
                 className={[
                   'w-full text-left px-2 py-1.5 rounded border transition-colors',
                   isCurrent
@@ -114,7 +130,7 @@ export default function CandidatePopup({
         onSubmit={(e) => {
           e.preventDefault()
           const v = manual.trim()
-          if (v) onApply(v, submitReason())
+          if (v) doApply(v, 'manual')
         }}
         className="border-t border-border pt-2 flex gap-1 mb-2"
       >
@@ -129,7 +145,7 @@ export default function CandidatePopup({
         <button
           type="submit"
           disabled={!manual.trim()}
-          className="text-xs px-2 py-1 rounded bg-ink text-white disabled:opacity-40"
+          className="text-xs px-2 py-1 rounded bg-brand text-white hover:bg-brand-dark disabled:opacity-40"
         >
           Apply
         </button>
@@ -143,6 +159,22 @@ export default function CandidatePopup({
         placeholder='Reason (optional, e.g. "not in audio")'
         className="w-full text-xs border border-border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-border-strong mb-2"
       />
+
+      {/* Batch correct-all: one decision fixes every identical token. */}
+      {canApplyAll && (
+        <label className="flex items-center gap-2 mb-2 text-[11px] text-ink-muted cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={applyAll}
+            onChange={(e) => setApplyAll(e.target.checked)}
+            className="accent-brand w-3.5 h-3.5"
+          />
+          <span>
+            Apply to all <span className="font-medium text-ink">{sameTokenCount}</span>{' '}
+            <span className="font-mono">“{currentText}”</span>
+          </span>
+        </label>
+      )}
 
       {/* Delete / hallucination */}
       {!isDeleted && (
@@ -160,6 +192,20 @@ export default function CandidatePopup({
         <p className="text-[10px] text-ink-faint italic text-center">
           Currently marked as deleted. Pick a candidate or type a correction to restore.
         </p>
+      )}
+
+      {/* Split the segment so this word begins a new segment. */}
+      {!isDeleted && onSplit && anchor.wordIdx > 0 && (
+        <button
+          onClick={onSplit}
+          title="Start a new segment at this word"
+          className="mt-2 w-full flex items-center justify-center gap-1.5 text-xs px-2 py-1.5 rounded border border-border text-ink-muted hover:text-ink hover:border-ink-muted transition-colors"
+        >
+          <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3">
+            <path d="M6 1.5v9M3.5 4 6 1.5 8.5 4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Split segment before this word
+        </button>
       )}
 
       <p className="mt-2 text-[10px] text-ink-faint italic">

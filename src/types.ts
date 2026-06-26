@@ -15,10 +15,40 @@ export interface Word {
   predicted_importance?: Risk
   predicted_proba?: { high: number; med: number; low: number }
   combined_risk?: Risk
+  // Which gate granted HIGH importance in the cascade: 'l1' = rule-based
+  // statutory lexicon, 'l2' = classifier. Audit-only; set by /predict.
+  predicted_importance_source?: 'l1' | 'l2'
+}
+
+// Display-time risk policy — the tunable "operating point". Differs by build:
+// the deployment/full build is quiet (require both signals + a tiny statutory
+// always-red set + a per-segment flag budget); the study build is a pass-
+// through of the importance-dominant combined_risk. Only affects the combined
+// dimension; uncertainty / importance / none are rendered as-is.
+export interface RiskPolicy {
+  // Require uncertainty ≥ med (not importance alone) for a word to read HIGH —
+  // except the always-red set. full = true, study = false.
+  requireUncertaintyForHigh: boolean
+  // 'statutory' keeps a tiny negation+weapon set red even at low uncertainty
+  // (the "confidently wrong" gun/not cell). 'none' = no always-red set.
+  alwaysRed: 'statutory' | 'none'
+  // Cap reds per segment at this fraction of content words (always-red exempt);
+  // surplus would-be-reds drop to amber. null = uncapped. full ≈ 0.15, study = null.
+  flagBudgetPerSegmentPct: number | null
 }
 
 // Which signal the transcript view colours words by.
 export type RiskDimension = 'uncertainty' | 'importance' | 'combined'
+
+// The active highlight layer rendered in the transcript. 'none' = C1 (plain
+// text, no risk colouring); the three RiskDimension values colour as before.
+export type HighlightLayer = RiskDimension | 'none'
+
+// ----- User-study interface conditions (C1–C4) -----
+// Each condition is the shared review skeleton with a different highlight
+// layer (+ case focus for C4). The mapping condition → highlight layer lives
+// in src/core/conditions.ts (Phase 1).
+export type Condition = 'C1' | 'C2' | 'C3' | 'C4'
 
 // ----- Component 2b: case-focused evidence retrieval (overlay) -----
 // A focus item the reviewer declares: a label plus optional reviewer-typed
@@ -77,6 +107,41 @@ export interface FocusTermResult {
 
 export interface FocusResult {
   terms: FocusTermResult[]
+}
+
+// ----- Long-transcript outline (centre "Outline" sub-page / modal) -----
+// A navigable, two-level "table of contents" for a (possibly hours-long)
+// transcript. The local LLM groups consecutive segments into fine CHAPTERS,
+// then a synthesis pass groups those into a handful of coarse PARTS and writes
+// an overall summary. It is a navigation overlay only — the transcript is never
+// mutated; clicking a part/chapter just seeks the audio to its `segment_start`.
+export interface OutlineChapter {
+  id: number              // 1-based chapter index (across the whole outline)
+  start_id: number        // first segment id in the chapter
+  end_id: number          // last segment id in the chapter
+  segment_start: number   // seconds — start of the first segment
+  segment_end: number     // seconds — end of the last segment
+  title: string           // short topic label (≤ ~8 words)
+  gist: string            // 1–2 line summary of what is discussed
+}
+
+// A coarse top-level section grouping several consecutive chapters. Carries the
+// longer narrative description; the number of parts is duration-adaptive so even
+// a 3-hour recording stays skimmable.
+export interface OutlinePart {
+  id: number              // 1-based part index
+  start_id: number        // first segment id in the part
+  end_id: number          // last segment id in the part
+  segment_start: number   // seconds — start of the part
+  segment_end: number     // seconds — end of the part
+  title: string           // section title
+  description: string     // 2–3 sentence description of the section
+  chapters: OutlineChapter[]
+}
+
+export interface OutlineResult {
+  summary: string         // 3–6 sentence overview of the whole recording
+  parts: OutlinePart[]
 }
 
 // Per-word overlay used by the transcript view: which focus term marked this
@@ -145,6 +210,17 @@ export type EventType =
   | 'focus_apply'
   | 'focus_clear'
   | 'focus_snippet_click'
+  | 'trial_start'
+  | 'trial_end'
+  | 'dimension_change'
+  | 'segment_view'
+  | 'segment_split'
+  | 'segment_merge'
+  | 'speaker_change'
+  | 'outline_run'
+  | 'outline_open'
+  | 'outline_part_click'
+  | 'outline_chapter_click'
 
 export type SeekTrigger = 'waveform' | 'segment' | 'marker' | 'keyboard' | 'programmatic'
 
@@ -156,7 +232,14 @@ export interface LogEvent {
   reviewer: string
   model: string
   participant_id: string // study participant code, e.g. "P01" — "demo" if unset
-  condition: string      // study condition code, e.g. "A_plain" — "demo" if unset
+  condition: string      // study condition code, e.g. "C3" — "demo" if unset
+
+  // Trial context (set by the study trial runner; absent in the full build):
+  t_in_trial_ms?: number // ms since the current trial started
+  block?: number
+  trial_index?: number
+  difficulty?: string
+  stimulus_id?: string
 
   // Event-specific fields (all optional, flat for pandas):
   audio_position?: number
@@ -172,33 +255,50 @@ export interface LogEvent {
   segment_risk?: Risk
   word_index?: number
   word_text?: string
-  word_risk?: Risk
+  word_risk?: Risk             // uncertainty bin of the word
+  word_importance?: Risk       // 2a predicted_importance
+  word_combined_risk?: Risk    // 2x2 combined risk
+  word_proba_high?: number     // 2a P(importance=HIGH), continuous (for calibration)
   from_text?: string
   to_text?: string
   via?: 'candidate' | 'manual'
+  occurrences?: number         // batch correct-all: how many identical tokens one decision fixed
+  chosen_model?: string        // which ASR model produced the chosen candidate
   reason?: string
   filter?: string
   sort?: string
+  from_dimension?: RiskDimension
+  to_dimension?: RiskDimension
   export_kind?: string
   audio_duration?: number
   transcript_filename?: string
   audio_filename?: string
   segment_count?: number
+  time_budget_ms?: number   // fixed review time T for the trial
   // Focus mode (2b):
   focus_terms?: string      // comma-joined labels the reviewer ran
   focus_label?: string      // which term a snippet click belongs to
   focus_match_type?: FocusMatchType
+  focus_match_detail?: FocusMatchDetail
   focus_score?: number
   focus_hits?: number       // total snippets returned across all terms
-  focus_mode?: FocusMode    // 'lexical' | 'ai'
+  focus_mode?: FocusMode | 'merged'  // 'lexical' | 'ai' | 'merged' (lexical+AI)
+  // Outline (long-transcript two-level chapters):
+  part_count?: number       // top-level Parts returned by an outline_run
+  chapter_count?: number    // fine chapters returned by an outline_run
+  chapter_id?: number       // which part/chapter a click belongs to (chapter_* reused for parts)
+  chapter_title?: string
+  chapter_start?: number    // seconds
+  chapter_end?: number      // seconds
 }
 
 export interface HistoryEntry {
   id: string
   timestamp: string         // HH:MM:SS — second-precision
   reviewer: string          // who made the change
-  kind: 'edit' | 'delete' | 'verify' | 'unverify'
+  kind: 'edit' | 'delete' | 'verify' | 'unverify' | 'split' | 'merge' | 'speaker'
   segmentId: number
+  segmentIds?: number[]     // bulk verify/unverify: all affected segments (one summary entry)
   wordIndex?: number
   from?: string             // previous displayed text (or "(deleted)")
   to?: string               // new displayed text (omitted for delete)

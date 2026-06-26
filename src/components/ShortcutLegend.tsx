@@ -3,11 +3,13 @@ import { exportEventLogAsCSV, exportEventLogAsJSON } from '../utils/exportEventL
 import type { LogEvent } from '../types'
 
 const SHORTCUTS: { keys: string[]; label: string }[] = [
-  { keys: ['Space'], label: 'Play / pause' },
+  { keys: ['Space'], label: 'Play / pause (rewinds 2 s on resume)' },
   { keys: ['←', '→'], label: 'Seek ±5 s' },
   { keys: ['J'], label: 'Previous segment' },
   { keys: ['K'], label: 'Next segment' },
+  { keys: ['R'], label: 'Replay current segment' },
   { keys: ['V'], label: 'Verify active segment' },
+  { keys: ['⇧', 'V'], label: 'Verify + next segment' },
 ]
 
 interface Props {
@@ -37,7 +39,7 @@ export default function ShortcutLegend({
   }
 
   return (
-    <div className="fixed bottom-3 right-3 z-40">
+    <div className="fixed bottom-[4.25rem] right-3 z-40">
       {open && (
         <div className="mb-2 w-64 bg-white border border-border rounded-md shadow-lg p-3">
           <p className="text-[10px] text-ink-faint uppercase tracking-[0.2em] mb-2">

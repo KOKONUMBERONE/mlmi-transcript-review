@@ -4,6 +4,7 @@ interface ExportArgs {
   transcript: Transcript
   model: ModelName
   edits: Record<string, EditState>
+  segmentTextEdits?: Record<number, { text: string; reason?: string }>
   verified: Record<number, boolean>
   reviewer: string
   audioFilename: string | null
@@ -52,7 +53,7 @@ function verifiedCount(verified: Record<number, boolean>): number {
 // --------------------------------------------------------------------------
 
 export function exportTranscriptText(args: ExportArgs): void {
-  const { transcript, model, edits, verified, reviewer } = args
+  const { transcript, model, edits, segmentTextEdits, verified, reviewer } = args
   const totalSegments = transcript.segments.length
   const verifiedN = verifiedCount(verified)
 
@@ -85,8 +86,9 @@ export function exportTranscriptText(args: ExportArgs): void {
       }
     }
     const verifiedTag = verified[seg.id] ? '  (✓ verified)' : ''
+    const override = segmentTextEdits?.[seg.id]?.text
     lines.push(`[${formatTime(seg.start)}] ${seg.speaker.toUpperCase()}:${verifiedTag}`)
-    lines.push(`  ${renderedWords.join(' ')}`)
+    lines.push(`  ${override ?? renderedWords.join(' ')}`)
     lines.push('')
   }
 
@@ -120,11 +122,12 @@ interface ExportedSegment {
   end: number
   paraRisk: 'high' | 'med' | 'low'
   verified: boolean
+  reviewed_text?: string   // #1 whole-sentence rewrite (supersedes per-word)
   words: { [modelName: string]: ExportedWord[] }
 }
 
 export function exportTranscriptJson(args: ExportArgs): void {
-  const { transcript, model, edits, verified, reviewer } = args
+  const { transcript, model, edits, segmentTextEdits, verified, reviewer } = args
   const totalSegments = transcript.segments.length
   const verifiedN = verifiedCount(verified)
 
@@ -149,7 +152,7 @@ export function exportTranscriptJson(args: ExportArgs): void {
       return out
     })
 
-    return {
+    const out: ExportedSegment = {
       id: seg.id,
       speaker: seg.speaker,
       start: seg.start,
@@ -158,6 +161,9 @@ export function exportTranscriptJson(args: ExportArgs): void {
       verified: !!verified[seg.id],
       words: { [model]: reviewedWords },
     }
+    const override = segmentTextEdits?.[seg.id]?.text
+    if (override) out.reviewed_text = override
+    return out
   })
 
   const payload = {
@@ -177,6 +183,19 @@ export function exportTranscriptJson(args: ExportArgs): void {
   downloadBlob(
     `transcript-${fileStem(args)}-${safeFsStamp()}.json`,
     JSON.stringify(payload, null, 2),
+    'application/json',
+  )
+}
+
+// --------------------------------------------------------------------------
+// Original (source) transcript — the full multi-model pipeline output exactly
+// as loaded, with every model branch and the predicted_* fields, unedited.
+// Schema-valid, so the Upload Transcript button accepts it: re-load this later
+// to reuse the same audio without re-running the ASR models.
+export function exportSourceTranscriptJson(args: ExportArgs): void {
+  downloadBlob(
+    `transcript-source-${fileStem(args)}-${safeFsStamp()}.json`,
+    JSON.stringify(args.transcript, null, 2),
     'application/json',
   )
 }
@@ -208,6 +227,9 @@ const KIND_LABEL: Record<HistoryEntry['kind'], string> = {
   delete: 'Removed',
   verify: 'Verified',
   unverify: 'Un-verified',
+  split: 'Split',
+  merge: 'Merged',
+  speaker: 'Speaker',
 }
 
 function changeCell(entry: HistoryEntry): string {
@@ -218,10 +240,20 @@ function changeCell(entry: HistoryEntry): string {
       return `<span class="old">${from}</span> <span class="arrow">→</span> <span class="new">${to}</span>`
     case 'delete':
       return `<span class="old">${from}</span> <span class="arrow">→</span> <span class="removed">(removed)</span>`
+    case 'split':
+      return `<span class="muted">Split segment ${to}</span>`
+    case 'merge':
+      return `<span class="muted">Merged ${to}</span>`
+    case 'speaker':
+      return `<span class="old">${from}</span> <span class="arrow">→</span> <span class="new">${to}</span>`
     case 'verify':
-      return '<span class="verified">Marked segment as verified</span>'
+      return `<span class="verified">Marked ${
+        entry.segmentIds && entry.segmentIds.length > 1 ? `${entry.segmentIds.length} segments` : 'segment'
+      } as verified</span>`
     default:
-      return '<span class="unverified">Marked segment as not verified</span>'
+      return `<span class="unverified">Marked ${
+        entry.segmentIds && entry.segmentIds.length > 1 ? `${entry.segmentIds.length} segments` : 'segment'
+      } as not verified</span>`
   }
 }
 
@@ -235,7 +267,7 @@ export function exportTranscriptReportHtml(args: ReportArgs): void {
 
 // Pure builder (no DOM side-effects) so the markup can be unit-tested.
 export function buildTranscriptReportHtml(args: ReportArgs): string {
-  const { transcript, model, edits, verified, reviewer, history } = args
+  const { transcript, model, edits, segmentTextEdits, verified, reviewer, history } = args
   const totalSegments = transcript.segments.length
   const verifiedN = verifiedCount(verified)
   const editCount = Object.keys(edits).length
@@ -264,9 +296,13 @@ export function buildTranscriptReportHtml(args: ReportArgs): string {
       const verifiedTag = verified[seg.id]
         ? '<span class="seg-verified">✓ verified</span>'
         : ''
+      const override = segmentTextEdits?.[seg.id]?.text
+      const bodyHtml = override
+        ? `<span class="w edited"><span class="old">${escapeHtml(words.map((w) => w.text).join(' '))}</span><span class="new">${escapeHtml(override)}</span></span>`
+        : wordsHtml
       return `<div class="seg">
         <div class="seg-head"><span class="seg-time">[${formatTime(seg.start)}]</span> <span class="seg-speaker">${escapeHtml(seg.speaker.toUpperCase())}</span>${verifiedTag}</div>
-        <div class="seg-body">${wordsHtml}</div>
+        <div class="seg-body">${bodyHtml}</div>
       </div>`
     })
     .join('\n')
@@ -276,9 +312,12 @@ export function buildTranscriptReportHtml(args: ReportArgs): string {
   const changeRows = chronological
     .map((entry, idx) => {
       const seg = segById.get(entry.segmentId)
-      const loc = seg
-        ? `[${formatTime(seg.start)}] ${escapeHtml(seg.speaker.toUpperCase())}`
-        : `segment ${entry.segmentId}`
+      const loc =
+        entry.segmentIds && entry.segmentIds.length > 1
+          ? `${entry.segmentIds.length} segments`
+          : seg
+            ? `[${formatTime(seg.start)}] ${escapeHtml(seg.speaker.toUpperCase())}`
+            : `segment ${entry.segmentId}`
       const reason = entry.reason ? escapeHtml(entry.reason) : '<span class="muted">—</span>'
       return `<tr>
         <td class="num">${idx + 1}</td>
@@ -378,6 +417,8 @@ export function buildTranscriptReportHtml(args: ReportArgs): string {
   .kind-delete { background: #fee2e2; color: var(--del); }
   .kind-verify { background: #d1fae5; color: var(--verified); }
   .kind-unverify { background: #f3f4f6; color: var(--muted); }
+  .kind-split, .kind-merge { background: #fef3c7; color: #b45309; }
+  .kind-speaker { background: #ede9fe; color: #6d28d9; }
   .muted { color: var(--faint); }
   .empty { color: var(--muted); font-style: italic; }
   .footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 11px; color: var(--faint); }
