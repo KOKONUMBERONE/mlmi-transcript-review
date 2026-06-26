@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { EditState, FocusWordHit, HighlightLayer, ModelName, Risk, Segment as SegmentType, Transcript } from '../types'
 import { segmentRiskWithFocus } from '../lib/segmentRisk'
+import { combinedSegmentRisk } from '../lib/displayRisk'
 import Segment from './Segment'
 
 interface Props {
@@ -10,6 +11,9 @@ interface Props {
   edits: Record<string, EditState>
   verified: Record<number, boolean>
   dimension: HighlightLayer
+  // Deployment regime: per-word display-risk override for the combined dimension
+  // (`${segId}-${wordIdx}` → Risk). null = study / pass-through (raw combined_risk).
+  displayRiskMap?: Map<string, Risk> | null
   // C1 hides the risk chips + Show/Order controls (plain text, no risk shown).
   showViewControls?: boolean
   // Focus mode (2b): which segments hold a hit + a per-word marker lookup.
@@ -75,6 +79,7 @@ export default function TranscriptView({
   edits,
   verified,
   dimension,
+  displayRiskMap,
   showViewControls = true,
   focusActive,
   focusSegmentIds,
@@ -119,9 +124,13 @@ export default function TranscriptView({
   // segment with a hit reads HIGH, so it surfaces under "High risk only" /
   // "By risk" too.
   const riskOf = useMemo(
-    () => (s: SegmentType) =>
-      segmentRiskWithFocus(s, model, dimension, focusActive && focusSegmentIds.has(s.id)),
-    [model, dimension, focusActive, focusSegmentIds],
+    () => (s: SegmentType) => {
+      const focused = focusActive && focusSegmentIds.has(s.id)
+      return displayRiskMap
+        ? combinedSegmentRisk(s, model, displayRiskMap, focused)
+        : segmentRiskWithFocus(s, model, dimension, focused)
+    },
+    [model, dimension, focusActive, focusSegmentIds, displayRiskMap],
   )
 
   const displaySegments = useMemo(
@@ -302,6 +311,7 @@ export default function TranscriptView({
                   verified={!!verified[segment.id]}
                   edits={edits}
                   dimension={dimension}
+                  displayRiskMap={displayRiskMap}
                   focusHitFor={focusHitFor}
                   onSeek={onSeek}
                   onWordClick={onWordClick}

@@ -126,7 +126,21 @@ export function useAudio(
     regions.on('region-clicked', (region, e) => {
       e?.stopPropagation()
       const d = ws.getDuration()
-      if (d > 0) ws.seekTo(Math.max(0, Math.min(region.start / d, 1)))
+      if (d > 0) {
+        // Seek to the EXACT clicked position, not the segment start, so the
+        // reviewer can start anywhere mid-segment. The risk regions sit on top
+        // of the waveform and would otherwise swallow the click and snap to
+        // region.start (wavesurfer's native click-to-seek never runs under a
+        // region). Recover the real click ratio from the cursor x over the
+        // waveform; fall back to region.start if the event is unavailable.
+        const wrap = containerRef.current
+        let ratio = region.start / d
+        if (wrap && e) {
+          const rect = wrap.getBoundingClientRect()
+          if (rect.width > 0) ratio = (e.clientX - rect.left) / rect.width
+        }
+        ws.seekTo(Math.max(0, Math.min(ratio, 1)))
+      }
       // Find the original marker by id so we can log segmentId + risk.
       const markers = callbacksRef.current.riskMarkers ?? []
       const marker = markers.find((m) => `risk-${m.segmentId}` === region.id)
