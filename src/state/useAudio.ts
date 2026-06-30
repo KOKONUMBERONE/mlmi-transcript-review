@@ -1,15 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import WaveSurfer from 'wavesurfer.js'
-import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.esm.js'
 import { makeSilentWav } from '../utils/silentWav'
-import type { Risk } from '../types'
-
-export interface RiskMarker {
-  segmentId: number
-  start: number
-  end: number
-  risk: Risk
-}
 
 export interface AudioController {
   containerRef: React.RefObject<HTMLDivElement>
@@ -24,17 +15,9 @@ export interface AudioController {
 
 interface Options {
   onError?: (msg: string) => void
-  riskMarkers?: RiskMarker[]
   onPlay?: (position: number) => void
   onPause?: (position: number) => void
   onWaveformSeek?: (from: number, to: number) => void
-  onRegionClick?: (marker: RiskMarker, fromPosition: number) => void
-}
-
-const RISK_COLOR: Record<Risk, string> = {
-  high: 'rgba(220, 38, 38, 0.22)',
-  med: 'rgba(217, 119, 6, 0.18)',
-  low: 'rgba(0, 0, 0, 0)',
 }
 
 export function useAudio(
@@ -44,7 +27,6 @@ export function useAudio(
 ): AudioController {
   const containerRef = useRef<HTMLDivElement>(null)
   const wsRef = useRef<WaveSurfer | null>(null)
-  const regionsRef = useRef<ReturnType<typeof RegionsPlugin.create> | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -63,22 +45,23 @@ export function useAudio(
   useEffect(() => {
     if (!containerRef.current) return
 
-    const regions = RegionsPlugin.create()
-    regionsRef.current = regions
-
     const ws = WaveSurfer.create({
       container: containerRef.current,
       height: 24,
       waveColor: '#a09e99',
       progressColor: '#1a1917',
-      cursorColor: '#dc2626',
-      cursorWidth: 1,
+      // No built-in cursor line — the draggable knob overlay (PlayerBar) is the
+      // playhead now.
+      cursorWidth: 0,
       barWidth: 2,
       barGap: 1,
       barRadius: 1,
       normalize: false,
       interact: true,
-      plugins: [regions],
+      // Click OR drag to seek; debounceTime 0 = real-time scrubbing (playing
+      // and paused). The visible draggable knob is an app-DOM overlay in
+      // PlayerBar (wavesurfer renders in a shadow DOM we can't style).
+      dragToSeek: { debounceTime: 0 },
     })
 
     wsRef.current = ws
@@ -87,6 +70,12 @@ export function useAudio(
       timeRef.current = t
       setCurrentTime(t)
     }
+
+    // A drag fires an `interaction` on every move; coalesce a whole gesture
+    // (click or drag) into ONE `seek` log so the event stream isn't flooded.
+    // `from` is captured at the first interaction of a window (timeRef is still
+    // the pre-seek position then); `to` tracks the latest; flush after idle.
+    const seekLog = { from: 0, to: 0, timer: null as ReturnType<typeof setTimeout> | null }
 
     ws.on('ready', () => {
       setDuration(ws.getDuration())
@@ -108,10 +97,14 @@ export function useAudio(
     ws.on('seeking', updateTime)
     ws.on('timeupdate', updateTime)
     ws.on('interaction', (newTime: number) => {
-      // Fires when the user clicks the waveform itself (not regions, not our
-      // programmatic seeks). We capture the position BEFORE the click using
-      // timeRef, then let the seek complete.
-      callbacksRef.current.onWaveformSeek?.(timeRef.current, newTime)
+      // User clicked or dragged the waveform (not a programmatic seek).
+      if (seekLog.timer == null) seekLog.from = timeRef.current
+      seekLog.to = newTime
+      if (seekLog.timer) clearTimeout(seekLog.timer)
+      seekLog.timer = setTimeout(() => {
+        seekLog.timer = null
+        callbacksRef.current.onWaveformSeek?.(seekLog.from, seekLog.to)
+      }, 250)
     })
     ws.on('error', (err) => {
       // A superseded load (new audio, re-mount, StrictMode double-invoke)
@@ -123,34 +116,10 @@ export function useAudio(
       callbacksRef.current.onError?.(`Audio failed to load: ${msg}`)
     })
 
-    regions.on('region-clicked', (region, e) => {
-      e?.stopPropagation()
-      const d = ws.getDuration()
-      if (d > 0) {
-        // Seek to the EXACT clicked position, not the segment start, so the
-        // reviewer can start anywhere mid-segment. The risk regions sit on top
-        // of the waveform and would otherwise swallow the click and snap to
-        // region.start (wavesurfer's native click-to-seek never runs under a
-        // region). Recover the real click ratio from the cursor x over the
-        // waveform; fall back to region.start if the event is unavailable.
-        const wrap = containerRef.current
-        let ratio = region.start / d
-        if (wrap && e) {
-          const rect = wrap.getBoundingClientRect()
-          if (rect.width > 0) ratio = (e.clientX - rect.left) / rect.width
-        }
-        ws.seekTo(Math.max(0, Math.min(ratio, 1)))
-      }
-      // Find the original marker by id so we can log segmentId + risk.
-      const markers = callbacksRef.current.riskMarkers ?? []
-      const marker = markers.find((m) => `risk-${m.segmentId}` === region.id)
-      if (marker) callbacksRef.current.onRegionClick?.(marker, timeRef.current)
-    })
-
     return () => {
+      if (seekLog.timer) clearTimeout(seekLog.timer)
       ws.destroy()
       wsRef.current = null
-      regionsRef.current = null
       if (currentUrlRef.current) {
         URL.revokeObjectURL(currentUrlRef.current)
         currentUrlRef.current = null
@@ -205,35 +174,6 @@ export function useAudio(
       }
     }
   }, [audioBlob, fallbackDuration])
-
-  // Sync risk markers with the regions plugin.
-  const markers = options.riskMarkers
-  useEffect(() => {
-    const regions = regionsRef.current
-    if (!regions || !ready) return
-
-    regions.clearRegions()
-
-    if (!markers) return
-    for (const m of markers) {
-      if (m.risk === 'low') continue
-      const region = regions.addRegion({
-        id: `risk-${m.segmentId}`,
-        start: m.start,
-        end: m.end,
-        color: RISK_COLOR[m.risk],
-        drag: false,
-        resize: false,
-      })
-      if (region.element) {
-        const label = m.risk === 'high' ? 'High-risk segment' : 'Medium-risk segment'
-        region.element.title = `${label} (click to seek)`
-        region.element.style.cursor = 'pointer'
-        region.element.style.zIndex = '2'
-        region.element.style.pointerEvents = 'auto'
-      }
-    }
-  }, [markers, ready])
 
   return {
     containerRef,

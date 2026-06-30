@@ -409,22 +409,10 @@ export default function ReviewWorkspace({
   )
 
   // ---- Audio with logging hooks ----
-  // Waveform markers reflect the *active* risk dimension, so toggling the
-  // toolbar switch repaints the audio strip too.
-  const riskMarkers = useMemo(
-    () =>
-      transcript.segments.map((s) => ({
-        segmentId: s.id,
-        start: s.start,
-        end: s.end,
-        risk: segRisk(s),
-      })),
-    [transcript, segRisk],
-  )
-
+  // The waveform is a clean scrubber now (no risk-colour bands); click or drag
+  // to seek, logged as one `seek` per gesture.
   const audio = useAudio(audioBlob, transcript.audioDuration, {
     onError: (msg) => setErrorMsg(msg),
-    riskMarkers,
     onPlay: (position) => events.log('play', { audio_position: position }),
     onPause: (position) => events.log('pause', { audio_position: position }),
     onWaveformSeek: (from, to) =>
@@ -432,14 +420,6 @@ export default function ReviewWorkspace({
         from_position: from,
         to_position: to,
         trigger: 'waveform',
-      }),
-    onRegionClick: (marker, fromPos) =>
-      events.log('seek', {
-        from_position: fromPos,
-        to_position: marker.start,
-        trigger: 'marker',
-        segment_id: marker.segmentId,
-        segment_risk: marker.risk,
       }),
   })
 
@@ -1031,6 +1011,21 @@ export default function ReviewWorkspace({
       if (!audio.isPlaying) audio.togglePlay()
     },
     [transcript, seekWithLog, audio],
+  )
+
+  // Play from a specific word's timestamp (the "▶ play from here" popup button).
+  // No-op when the word has no start time (case447 / non-Whisper models).
+  const playFromWord = useCallback(
+    (segId: number, wordIdx: number) => {
+      const seg = transcript.segments.find((s) => s.id === segId)
+      const word = seg?.words[model]?.[wordIdx]
+      if (!seg || word?.start == null) return
+      setExpandedSegmentId(segId)
+      autoExpandedRef.current = segId
+      seekWithLog(word.start, 'word')
+      if (!audio.isPlaying) audio.togglePlay()
+    },
+    [transcript, model, seekWithLog, audio],
   )
 
   // Unified "Find": lexical first (fast, deterministic) then, in the full
@@ -1643,6 +1638,10 @@ export default function ReviewWorkspace({
           onDelete={deleteWord}
           onClose={closePopup}
           onSplit={() => splitSegment(popup.segId, popup.wordIdx)}
+          onPlayFromWord={(s, w) => {
+            playFromWord(s, w)
+            closePopup()
+          }}
         />
       )}
 

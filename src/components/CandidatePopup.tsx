@@ -23,6 +23,8 @@ interface Props {
   onClose: () => void
   // #2: split this segment so that this word starts a new segment.
   onSplit?: () => void
+  // Seek to this word's timestamp and play (only when the word carries a start).
+  onPlayFromWord?: (segId: number, wordIdx: number) => void
 }
 
 export default function CandidatePopup({
@@ -38,12 +40,16 @@ export default function CandidatePopup({
   onDelete,
   onClose,
   onSplit,
+  onPlayFromWord,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const [manual, setManual] = useState('')
   const [reason, setReason] = useState('')
   const [applyAll, setApplyAll] = useState(false)
   const canApplyAll = !isDeleted && !!onApplyAll && sameTokenCount > 1
+  // "Play from here" only when this word (in the active model) has a real start.
+  const canPlayFromWord =
+    !isDeleted && !!onPlayFromWord && segment.words[activeModel]?.[anchor.wordIdx]?.start != null
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
@@ -192,6 +198,20 @@ export default function CandidatePopup({
         <p className="text-[10px] text-ink-faint italic text-center">
           Currently marked as deleted. Pick a candidate or type a correction to restore.
         </p>
+      )}
+
+      {/* Seek to this word's timestamp and play. */}
+      {canPlayFromWord && (
+        <button
+          onClick={() => onPlayFromWord!(anchor.segId, anchor.wordIdx)}
+          title="Seek to this word and play"
+          className="mt-2 w-full flex items-center justify-center gap-1.5 text-xs px-2 py-1.5 rounded border border-border text-ink-muted hover:text-ink hover:border-ink-muted transition-colors"
+        >
+          <svg width="10" height="10" viewBox="0 0 12 12" fill="currentColor">
+            <polygon points="2,1 11,6 2,11" />
+          </svg>
+          Play from here
+        </button>
       )}
 
       {/* Split the segment so this word begins a new segment. */}

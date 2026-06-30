@@ -72,12 +72,24 @@ export default function PlayerBar({
       <span className="font-mono text-xs text-ink-muted w-10 text-right tabular-nums shrink-0">
         {formatTime(audio.currentTime)}
       </span>
-      {/* Shorter, centred waveform (was full-width) */}
-      <div
-        ref={audio.containerRef}
-        className="w-[34rem] max-w-[45vw] min-w-[12rem]"
-        title="Click to seek"
-      />
+      {/* Shorter, centred waveform + a YouTube-style draggable scrubber knob.
+          The knob is a pure-visual app-DOM overlay (wavesurfer renders in a
+          shadow DOM); pointer-events-none so wavesurfer's own drag-to-seek
+          underneath still gets every click/drag. */}
+      <div className="relative w-[34rem] max-w-[45vw] min-w-[12rem]">
+        <div
+          ref={audio.containerRef}
+          className="w-full"
+          title="Click to seek · drag to scrub"
+        />
+        {audio.duration > 0 && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-risk-high ring-2 ring-white shadow"
+            style={{ left: `${(audio.currentTime / audio.duration) * 100}%` }}
+          />
+        )}
+      </div>
       <span className="font-mono text-xs text-ink-muted w-10 tabular-nums shrink-0">
         {formatTime(audio.duration)}
       </span>

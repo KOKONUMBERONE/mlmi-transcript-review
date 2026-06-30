@@ -189,6 +189,23 @@ export interface EditState {
   reason?: string
 }
 
+// One token of a rendered whole-sentence rewrite, after word-level diffing the
+// rewrite against the original words (see src/lib/retainRisk.ts alignRewrite).
+// 'keep' carries the matched original Word (real risk + real start/end);
+// 'insert' is human-authored (no risk). Deleted originals are dropped (not
+// emitted). start/end are the karaoke range: 'keep' = the Word's; 'insert' =
+// interpolated, or shared across a block run (same blockId). Absent when the
+// originals carry no timestamps.
+export interface AlignedToken {
+  text: string
+  op: 'keep' | 'insert'
+  word: Word | null
+  originalIndex: number | null
+  start?: number
+  end?: number
+  blockId?: number
+}
+
 // Flat, pandas-friendly schema for behavioural events. Every meaningful
 // interaction emits one row. Most fields are optional — only the four base
 // columns are guaranteed present on every row.
@@ -230,7 +247,7 @@ export type EventType =
   | 'outline_part_click'
   | 'outline_chapter_click'
 
-export type SeekTrigger = 'waveform' | 'segment' | 'marker' | 'keyboard' | 'programmatic'
+export type SeekTrigger = 'waveform' | 'segment' | 'marker' | 'keyboard' | 'programmatic' | 'word'
 
 export interface LogEvent {
   // Always present:

@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
-import type { EditState, FocusWordHit, HighlightLayer, ModelName, Risk, Segment as SegmentType } from '../types'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { AlignedToken, EditState, FocusWordHit, HighlightLayer, ModelName, Risk, Segment as SegmentType } from '../types'
 import Word from './Word'
-import { matchOverrideTokens } from '../lib/retainRisk'
+import { alignRewrite } from '../lib/retainRisk'
 
 interface Props {
   segment: SegmentType
@@ -26,6 +26,10 @@ interface Props {
   // Karaoke: index of the word currently being spoken in THIS segment, or null.
   // Only the active (playing) segment ever receives a non-null value.
   activeWordIndex?: number | null
+  // Karaoke for REWRITTEN segments: the playhead time, passed only to the active
+  // segment. The override branch scans the aligned tokens' start/end with it
+  // (the normal branch uses activeWordIndex). undefined elsewhere.
+  activeTime?: number
   // Deployment regime: per-word display-risk override for the combined dimension.
   // null = study / pass-through (Word falls back to combined_risk).
   displayRiskMap?: Map<string, Risk> | null
@@ -77,6 +81,7 @@ export default function Segment({
   segmentRisk,
   collapsedHighUnderline,
   activeWordIndex,
+  activeTime,
   displayRiskMap,
   focusHitFor,
   onSeek,
@@ -106,6 +111,40 @@ export default function Segment({
   // single-click so a double-click can cancel it (no stray play + edit).
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => () => { if (clickTimer.current) clearTimeout(clickTimer.current) }, [])
+
+  // Word-level diff of a whole-sentence rewrite (pure + memoized — recomputes
+  // only when the override text or original words change, NOT per karaoke tick).
+  const aligned = useMemo(
+    () => (textOverride != null ? alignRewrite(textOverride, words, segment.start, segment.end) : null),
+    [textOverride, words, segment.start, segment.end],
+  )
+  // Group consecutive same-blockId inserts into one render unit (a clause block).
+  type RewriteGroup =
+    | { type: 'word'; tok: AlignedToken; key: number }
+    | { type: 'insert'; tok: AlignedToken; key: number }
+    | { type: 'block'; toks: AlignedToken[]; start?: number; end?: number; key: number }
+  const groups = useMemo<RewriteGroup[] | null>(() => {
+    if (!aligned) return null
+    const g: RewriteGroup[] = []
+    for (let i = 0; i < aligned.length; ) {
+      const t = aligned[i]
+      if (t.op === 'keep') {
+        g.push({ type: 'word', tok: t, key: i })
+        i++
+      } else if (t.blockId != null) {
+        const id = t.blockId
+        const startI = i
+        while (i < aligned.length && aligned[i].blockId === id) i++
+        g.push({ type: 'block', toks: aligned.slice(startI, i), start: t.start, end: t.end, key: startI })
+      } else {
+        g.push({ type: 'insert', tok: t, key: i })
+        i++
+      }
+    }
+    return g
+  }, [aligned])
+  const tokActive = (start?: number, end?: number) =>
+    activeTime != null && start != null && end != null && activeTime >= start && activeTime < end
 
   // Current rendered sentence (edits applied, deletions dropped) — prefill for
   // the whole-sentence editor.
@@ -371,10 +410,11 @@ export default function Segment({
             title="Click to play this segment · double-click to edit"
             className="cursor-pointer"
           >
-            {textOverride != null ? (
-              // Rewritten sentence: keep risk on words that survived the rewrite
-              // (diff-retain). Matched tokens render via <Word> (inherit risk +
-              // honour expand/collapse); new/changed tokens render plain.
+            {textOverride != null && groups ? (
+              // Rewritten sentence: word-level diff against the original words.
+              // 'keep' tokens render via <Word> (inherit real risk + karaoke);
+              // inserted words/clauses render in the blue "inserted" style — a
+              // clause run is one block that karaokes together.
               <p
                 className={
                   showChanges
@@ -382,32 +422,41 @@ export default function Segment({
                     : 'text-[14px] leading-[1.5] text-ink'
                 }
               >
-                {matchOverrideTokens(textOverride, words).map((tok, i, arr) => (
-                  <span key={i}>
-                    {tok.word ? (
+                {groups.map((g, gi) => (
+                  <span key={g.key}>
+                    {g.type === 'word' ? (
                       <Word
-                        word={tok.word}
-                        displayText={tok.text}
+                        word={g.tok.word!}
+                        displayText={g.tok.text}
                         edited={false}
                         deleted={false}
                         dimension={dimension}
                         expanded={expanded}
                         collapsedHighUnderline={collapsedHighUnderline}
-                        isActiveWord={false}
+                        isActiveWord={expanded && tokActive(g.tok.start, g.tok.end)}
                         displayRisk={
                           dimension === 'combined'
-                            ? displayRiskMap?.get(`${segment.id}-${tok.index}`)
+                            ? displayRiskMap?.get(`${segment.id}-${g.tok.originalIndex}`)
                             : undefined
                         }
                         showChanges={false}
                         segId={segment.id}
-                        wordIdx={tok.index ?? 0}
+                        wordIdx={g.tok.originalIndex ?? 0}
                         onWordClick={onWordClick}
                       />
                     ) : (
-                      tok.text
+                      <span
+                        title="Inserted by reviewer"
+                        className={`text-change-ins underline decoration-change-ins/60 decoration-2 underline-offset-[3px] rounded-sm px-0.5 ${
+                          (g.type === 'block' ? tokActive(g.start, g.end) : tokActive(g.tok.start, g.tok.end))
+                            ? 'bg-brand-active ring-1 ring-brand/40'
+                            : ''
+                        }`}
+                      >
+                        {g.type === 'block' ? g.toks.map((t) => t.text).join(' ') : g.tok.text}
+                      </span>
                     )}
-                    {i < arr.length - 1 ? ' ' : ''}
+                    {gi < groups.length - 1 ? ' ' : ''}
                   </span>
                 ))}
                 {showChanges && (

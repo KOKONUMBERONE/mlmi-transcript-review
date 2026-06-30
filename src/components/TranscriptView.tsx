@@ -365,6 +365,7 @@ export default function TranscriptView({
                   segmentRisk={riskOf(segment)}
                   collapsedHighUnderline={collapsedHighUnderline}
                   activeWordIndex={segment.id === activeId ? activeWordIndex : null}
+                  activeTime={segment.id === activeId ? currentTime : undefined}
                   displayRiskMap={displayRiskMap}
                   focusHitFor={focusHitFor}
                   onSeek={onSeek}

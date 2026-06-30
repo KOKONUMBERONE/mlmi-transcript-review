@@ -1,4 +1,5 @@
 import type { EditState, HistoryEntry, ModelName, Transcript } from '../types'
+import { alignRewrite } from '../lib/retainRisk'
 
 interface ExportArgs {
   transcript: Transcript
@@ -115,6 +116,19 @@ interface ExportedWord {
   reason?: string
 }
 
+// Word-level diff of a whole-sentence rewrite vs the original words (matches what
+// the reviewer saw on screen) — kept words carry their original risk; inserts are
+// human-authored. Phase-2 / analysis friendly; parallels reviewed_text.
+interface ExportedAlignedWord {
+  text: string
+  op: 'keep' | 'insert'
+  risk?: 'high' | 'med' | 'low'
+  original_index?: number
+  start?: number
+  end?: number
+  block_id?: number
+}
+
 interface ExportedSegment {
   id: number
   speaker: string
@@ -123,6 +137,7 @@ interface ExportedSegment {
   paraRisk: 'high' | 'med' | 'low'
   verified: boolean
   reviewed_text?: string   // #1 whole-sentence rewrite (supersedes per-word)
+  reviewed_words?: ExportedAlignedWord[]  // word-level diff of the rewrite
   words: { [modelName: string]: ExportedWord[] }
 }
 
@@ -162,7 +177,18 @@ export function exportTranscriptJson(args: ExportArgs): void {
       words: { [model]: reviewedWords },
     }
     const override = segmentTextEdits?.[seg.id]?.text
-    if (override) out.reviewed_text = override
+    if (override) {
+      out.reviewed_text = override
+      out.reviewed_words = alignRewrite(override, sourceWords, seg.start, seg.end).map((t) => {
+        const a: ExportedAlignedWord = { text: t.text, op: t.op }
+        if (t.op === 'keep' && t.word) a.risk = t.word.risk
+        if (t.originalIndex != null) a.original_index = t.originalIndex
+        if (t.start != null) a.start = t.start
+        if (t.end != null) a.end = t.end
+        if (t.blockId != null) a.block_id = t.blockId
+        return a
+      })
+    }
     return out
   })
 
