@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { EditState, FocusWordHit, HighlightLayer, ModelName, Risk, Segment as SegmentType } from '../types'
 import Word from './Word'
+import { matchOverrideTokens } from '../lib/retainRisk'
 
 interface Props {
   segment: SegmentType
@@ -9,6 +10,22 @@ interface Props {
   verified: boolean
   edits: Record<string, EditState>
   dimension: HighlightLayer
+  // Progressive disclosure: when collapsed, the sentence shows only a head risk
+  // dot (+ a quiet HIGH underline); clicking it expands to full word-level risk.
+  expanded: boolean
+  onToggleExpand: (segId: number) => void
+  // Single-click the sentence body → seek there + play it (and pin it open).
+  onPlaySegment?: (segId: number) => void
+  // Hover-reveal: transiently show this segment's word-level risk while hovered.
+  onHover?: (segId: number | null) => void
+  // Policy-aware segment risk, computed once in TranscriptView (riskOf). Drives
+  // the sentence-head dot — reused here, never recomputed.
+  segmentRisk: Risk
+  // Soft vs pure collapsed look — threaded straight to Word.
+  collapsedHighUnderline: boolean
+  // Karaoke: index of the word currently being spoken in THIS segment, or null.
+  // Only the active (playing) segment ever receives a non-null value.
+  activeWordIndex?: number | null
   // Deployment regime: per-word display-risk override for the combined dimension.
   // null = study / pass-through (Word falls back to combined_risk).
   displayRiskMap?: Map<string, Risk> | null
@@ -53,6 +70,13 @@ export default function Segment({
   verified,
   edits,
   dimension,
+  expanded,
+  onToggleExpand,
+  onPlaySegment,
+  onHover,
+  segmentRisk,
+  collapsedHighUnderline,
+  activeWordIndex,
   displayRiskMap,
   focusHitFor,
   onSeek,
@@ -77,6 +101,11 @@ export default function Segment({
   const [draft, setDraft] = useState('')
   const [editingSpeaker, setEditingSpeaker] = useState(false)
   const [speakerDraft, setSpeakerDraft] = useState('')
+
+  // Single-click = play this segment; double-click = edit it. Defer the
+  // single-click so a double-click can cancel it (no stray play + edit).
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (clickTimer.current) clearTimeout(clickTimer.current) }, [])
 
   // Current rendered sentence (edits applied, deletions dropped) — prefill for
   // the whole-sentence editor.
@@ -117,11 +146,45 @@ export default function Segment({
 
   return (
     <article
-      onClick={() => onSeek(segment.start)}
-      className={`group flex gap-3 rounded-md cursor-pointer transition-colors px-3 py-1.5 -mx-3 ${containerCls}`}
+      onMouseEnter={() => onHover?.(segment.id)}
+      onMouseLeave={() => onHover?.(null)}
+      className={`group flex gap-3 rounded-md transition-colors px-3 py-1.5 -mx-3 ${containerCls}`}
     >
       <div className="flex-1 min-w-0">
         <header className="flex items-center gap-3 mb-0.5">
+          {/* Expand affordance + sentence-head risk dot (the sentence-level
+              signal that replaces always-on word colour). */}
+          <span className="flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleExpand(segment.id)
+              }}
+              title={expanded ? 'Collapse — hide word-level risk' : 'Show word-level risk'}
+              aria-expanded={expanded}
+              className="text-ink-faint hover:text-ink p-0.5 -ml-1 rounded hover:bg-surface-muted transition-colors"
+            >
+              <svg
+                className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
+                viewBox="0 0 12 12"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                aria-hidden="true"
+              >
+                <path d="M4.5 3l3 3-3 3" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            {/* Only HIGH risk gets a head dot; medium shows nothing (just the
+                chevron). Keeps the overview quiet — red means "look here". */}
+            {segmentRisk === 'high' && (
+              <span
+                aria-hidden="true"
+                title="High risk"
+                className="w-2 h-2 rounded-full bg-risk-high"
+              />
+            )}
+          </span>
           {editingSpeaker ? (
             <input
               autoFocus
@@ -155,9 +218,18 @@ export default function Segment({
               {segment.speaker}
             </span>
           )}
-          <span className="font-mono text-[11px] text-ink-faint tabular-nums">
+          {/* Seek lives on the timestamp now (the sentence body click expands
+              instead of seeking). */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onSeek(segment.start)
+            }}
+            title="Play from here"
+            className="font-mono text-[11px] text-ink-faint tabular-nums hover:text-brand transition-colors"
+          >
             {formatTime(segment.start)}
-          </span>
+          </button>
 
           {active && (
             <span className="font-mono text-[10px] text-brand uppercase tracking-widest">
@@ -266,45 +338,119 @@ export default function Segment({
               </span>
             </div>
           </div>
-        ) : textOverride != null ? (
-          showChanges ? (
-            <p className="text-[14px] leading-[1.5] text-ink bg-change-ins-bg rounded px-1.5 py-0.5 -mx-1 ring-1 ring-change-ins/25">
-              {textOverride}
-              <span className="ml-2 align-middle font-mono text-[10px] text-change-ins uppercase tracking-widest">
-                rewritten
-              </span>
-            </p>
-          ) : (
-            <p className="text-[14px] leading-[1.5] text-ink">{textOverride}</p>
-          )
         ) : (
-          <p className="text-[14px] leading-[1.5] text-ink">
-            {words.map((word, i) => {
-              const key = `${segment.id}-${i}`
-              const edit = edits[key]
-              const displayText = edit ? edit.text : word.text
-              return (
-                <span key={i}>
-                  <Word
-                    word={word}
-                    displayText={displayText}
-                    edited={edit !== undefined && !edit.deleted}
-                    deleted={edit?.deleted === true}
-                    dimension={dimension}
-                    displayRisk={
-                      dimension === 'combined'
-                        ? displayRiskMap?.get(`${segment.id}-${i}`)
-                        : undefined
-                    }
-                    focusHit={focusHitFor?.(segment.id, i)}
-                    showChanges={showChanges}
-                    onClick={(rect) => onWordClick(segment.id, i, rect)}
-                  />
-                  {i < words.length - 1 ? ' ' : ''}
-                </span>
-              )
-            })}
-          </p>
+          // Single-click the sentence body → seek there + play it (deferred so a
+          // double-click can cancel it). Double-click → edit the whole sentence.
+          // Hover already reveals word-level risk; the chevron is the
+          // expand-without-play control. Word/button clicks stopPropagation.
+          <div
+            onClick={() => {
+              if (clickTimer.current) clearTimeout(clickTimer.current)
+              clickTimer.current = setTimeout(() => {
+                clickTimer.current = null
+                onPlaySegment?.(segment.id)
+              }, 250)
+            }}
+            onDoubleClick={(e) => {
+              e.preventDefault()
+              if (clickTimer.current) {
+                clearTimeout(clickTimer.current)
+                clickTimer.current = null
+              }
+              startEdit()
+            }}
+            role="button"
+            aria-expanded={expanded}
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onPlaySegment?.(segment.id)
+              }
+            }}
+            title="Click to play this segment · double-click to edit"
+            className="cursor-pointer"
+          >
+            {textOverride != null ? (
+              // Rewritten sentence: keep risk on words that survived the rewrite
+              // (diff-retain). Matched tokens render via <Word> (inherit risk +
+              // honour expand/collapse); new/changed tokens render plain.
+              <p
+                className={
+                  showChanges
+                    ? 'text-[14px] leading-[1.5] text-ink bg-change-ins-bg rounded px-1.5 py-0.5 -mx-1 ring-1 ring-change-ins/25'
+                    : 'text-[14px] leading-[1.5] text-ink'
+                }
+              >
+                {matchOverrideTokens(textOverride, words).map((tok, i, arr) => (
+                  <span key={i}>
+                    {tok.word ? (
+                      <Word
+                        word={tok.word}
+                        displayText={tok.text}
+                        edited={false}
+                        deleted={false}
+                        dimension={dimension}
+                        expanded={expanded}
+                        collapsedHighUnderline={collapsedHighUnderline}
+                        isActiveWord={false}
+                        displayRisk={
+                          dimension === 'combined'
+                            ? displayRiskMap?.get(`${segment.id}-${tok.index}`)
+                            : undefined
+                        }
+                        showChanges={false}
+                        segId={segment.id}
+                        wordIdx={tok.index ?? 0}
+                        onWordClick={onWordClick}
+                      />
+                    ) : (
+                      tok.text
+                    )}
+                    {i < arr.length - 1 ? ' ' : ''}
+                  </span>
+                ))}
+                {showChanges && (
+                  <span className="ml-2 align-middle font-mono text-[10px] text-change-ins uppercase tracking-widest">
+                    rewritten
+                  </span>
+                )}
+              </p>
+            ) : (
+              <p className="text-[14px] leading-[1.5] text-ink">
+                {words.map((word, i) => {
+                  const key = `${segment.id}-${i}`
+                  const edit = edits[key]
+                  const displayText = edit ? edit.text : word.text
+                  return (
+                    <span key={i}>
+                      <Word
+                        word={word}
+                        displayText={displayText}
+                        edited={edit !== undefined && !edit.deleted}
+                        deleted={edit?.deleted === true}
+                        dimension={dimension}
+                        expanded={expanded}
+                        collapsedHighUnderline={collapsedHighUnderline}
+                        isActiveWord={expanded && i === activeWordIndex}
+                        displayRisk={
+                          dimension === 'combined'
+                            ? displayRiskMap?.get(`${segment.id}-${i}`)
+                            : undefined
+                        }
+                        focusHit={focusHitFor?.(segment.id, i)}
+                        showChanges={showChanges}
+                        segId={segment.id}
+                        wordIdx={i}
+                        onWordClick={onWordClick}
+                      />
+                      {i < words.length - 1 ? ' ' : ''}
+                    </span>
+                  )
+                })}
+              </p>
+            )}
+          </div>
         )}
       </div>
     </article>

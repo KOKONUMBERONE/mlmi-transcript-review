@@ -155,6 +155,12 @@ export default function ReviewWorkspace({
     Record<number, { text: string; reason?: string }>
   >({})
   const [verified, setVerified] = useState<Record<number, boolean>>({})
+  // Progressive disclosure: which sentence is expanded to word-level risk
+  // (accordion — at most one open). null = all collapsed. The ref lets the
+  // playing segment auto-expand on a genuine playhead transition without
+  // re-firing on every render (and StrictMode-safe).
+  const [expandedSegmentId, setExpandedSegmentId] = useState<number | null>(null)
+  const autoExpandedRef = useRef<number | null>(null)
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [popup, setPopup] = useState<PopupAnchor | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
@@ -348,6 +354,8 @@ export default function ReviewWorkspace({
     setVerified({})
     setHistory([])
     setPopup(null)
+    setExpandedSegmentId(null)
+    autoExpandedRef.current = null
     setFocusResult(null)
     setFocusActive(false)
     setFocusError(null)
@@ -494,6 +502,24 @@ export default function ReviewWorkspace({
     })
   }, [activeId, transcript, events])
 
+  // Progressive disclosure: auto-expand the playing segment to word level. Fires
+  // only on a genuine playhead transition (autoExpandedRef guards re-renders +
+  // StrictMode); manual expand/collapse is respected in between (it doesn't move
+  // the playhead). Accordion: setting one id collapses the rest.
+  useEffect(() => {
+    if (activeId == null) return
+    if (autoExpandedRef.current === activeId) return
+    autoExpandedRef.current = activeId
+    setExpandedSegmentId(activeId)
+    const seg = transcript.segments.find((s) => s.id === activeId)
+    events.log('segment_expand', {
+      segment_id: activeId,
+      segment_start: seg?.start,
+      segment_risk: seg ? segRisk(seg) : undefined,
+      expand_trigger: 'auto',
+    })
+  }, [activeId, transcript, events, segRisk])
+
   // ---- Audit-trail logger ----
   const currentReviewer = (): string =>
     reviewer.trim() === '' ? UNKNOWN_REVIEWER : reviewer.trim()
@@ -510,7 +536,10 @@ export default function ReviewWorkspace({
     ])
 
   // ---- Popup ----
-  const openPopup = (segId: number, wordIdx: number, rect: DOMRect) => {
+  // useCallback so the per-word onWordClick reference is stable — lets
+  // React.memo(Word) skip words whose risk/active state didn't change as the
+  // karaoke playhead ticks (otherwise every word re-renders ~every 50-250ms).
+  const openPopup = useCallback((segId: number, wordIdx: number, rect: DOMRect) => {
     const segment = transcript.segments.find((s) => s.id === segId)
     const word = segment?.words[model]?.[wordIdx]
     events.log('word_click', {
@@ -524,7 +553,7 @@ export default function ReviewWorkspace({
     })
     events.log('popup_open', { segment_id: segId, word_index: wordIdx })
     setPopup({ segId, wordIdx, rect })
-  }
+  }, [transcript, model, events])
 
   const closePopup = () => {
     if (popup) {
@@ -856,6 +885,8 @@ export default function ReviewWorkspace({
     logEntry({ kind: 'split', segmentId: segId, to: `→ new seg ${newId}` })
     events.log('segment_split', { segment_id: segId })
     setPopup(null)
+    setExpandedSegmentId(null)
+    autoExpandedRef.current = null
   }
 
   const mergeWithNext = (segId: number) => {
@@ -897,6 +928,8 @@ export default function ReviewWorkspace({
     })
     logEntry({ kind: 'merge', segmentId: a.id, to: `+ seg ${b.id}` })
     events.log('segment_merge', { segment_id: a.id })
+    setExpandedSegmentId(null)
+    autoExpandedRef.current = null
   }
 
   const changeSpeaker = (segId: number, speaker: string) => {
@@ -944,10 +977,60 @@ export default function ReviewWorkspace({
     [],
   )
 
+  // Debounced (in TranscriptView) hover-dwell signal — a lightweight attention
+  // proxy that complements segment_view/segment_focus now that hovering reveals
+  // word-level risk without a click.
+  const handleSegmentHover = useCallback(
+    (segId: number, start: number, risk: Risk) =>
+      events.log('segment_hover', {
+        segment_id: segId,
+        segment_start: start,
+        segment_risk: risk,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  )
+
   const focusHitFor = useCallback(
     (segId: number, wordIdx: number): FocusWordHit | undefined =>
       showFocus ? focusHitMap.get(`${segId}-${wordIdx}`) : undefined,
     [showFocus, focusHitMap],
+  )
+
+  // Accordion toggle: clicking a sentence body expands it to word level (or
+  // collapses it). At most one open at a time; logged for the study.
+  const handleToggleExpand = useCallback(
+    (segId: number) => {
+      setExpandedSegmentId((prev) => {
+        const next = prev === segId ? null : segId
+        if (next != null) {
+          const seg = transcript.segments.find((s) => s.id === segId)
+          events.log('segment_expand', {
+            segment_id: segId,
+            segment_start: seg?.start,
+            segment_risk: seg ? segRisk(seg) : undefined,
+            expand_trigger: 'manual',
+          })
+        }
+        return next
+      })
+    },
+    [transcript, events, segRisk],
+  )
+
+  // Single-click a sentence → jump there + play it (transcript-editor style),
+  // and pin it open. Pinning is set directly (not via the audio→activeId effect)
+  // so the segment shows immediately even if audio is silent / not yet running.
+  const playFromSegment = useCallback(
+    (segId: number) => {
+      const seg = transcript.segments.find((s) => s.id === segId)
+      if (!seg) return
+      setExpandedSegmentId(segId)
+      autoExpandedRef.current = segId
+      seekWithLog(seg.start, 'segment')
+      if (!audio.isPlaying) audio.togglePlay()
+    },
+    [transcript, seekWithLog, audio],
   )
 
   // Unified "Find": lexical first (fast, deterministic) then, in the full
@@ -1120,6 +1203,8 @@ export default function ReviewWorkspace({
       setVerified({})
       setHistory([])
       setPopup(null)
+      setExpandedSegmentId(null)
+      autoExpandedRef.current = null
       // A new transcript invalidates any prior focus retrieval + outline.
       setFocusResult(null)
       setFocusActive(false)
@@ -1481,6 +1566,10 @@ export default function ReviewWorkspace({
           verified={verified}
           dimension={activeHighlight}
           displayRiskMap={displayRiskMap}
+          expandedSegmentId={expandedSegmentId}
+          onToggleExpand={handleToggleExpand}
+          onPlaySegment={playFromSegment}
+          collapsedHighUnderline={config.collapsedHighUnderline}
           showViewControls={activeHighlight !== 'none'}
           focusActive={showFocus}
           focusSegmentIds={focusSegmentIds}
@@ -1496,6 +1585,7 @@ export default function ReviewWorkspace({
           onFilterChange={(filter) => events.log('filter_change', { filter })}
           onSortChange={(sort) => events.log('sort_change', { sort })}
           onSegmentView={handleSegmentView}
+          onSegmentHover={handleSegmentHover}
           showChanges={showChanges}
           editInfo={editInfo}
         />

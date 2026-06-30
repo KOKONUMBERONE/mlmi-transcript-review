@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { EditState, FocusWordHit, HighlightLayer, ModelName, Risk, Segment as SegmentType, Transcript } from '../types'
 import { segmentRiskWithFocus } from '../lib/segmentRisk'
 import { combinedSegmentRisk } from '../lib/displayRisk'
@@ -14,6 +14,12 @@ interface Props {
   // Deployment regime: per-word display-risk override for the combined dimension
   // (`${segId}-${wordIdx}` → Risk). null = study / pass-through (raw combined_risk).
   displayRiskMap?: Map<string, Risk> | null
+  // Progressive disclosure: which segment (if any) is expanded to word level.
+  expandedSegmentId: number | null
+  onToggleExpand: (segId: number) => void
+  // Single-click a segment → seek there + play it (and pin it open).
+  onPlaySegment: (segId: number) => void
+  collapsedHighUnderline: boolean
   // C1 hides the risk chips + Show/Order controls (plain text, no risk shown).
   showViewControls?: boolean
   // Focus mode (2b): which segments hold a hit + a per-word marker lookup.
@@ -34,6 +40,9 @@ interface Props {
   // Fires when a segment scrolls ≥60% into view (complements segment_focus,
   // which only fires from audio playback). Must be a *stable* callback.
   onSegmentView?: (segId: number, start: number, risk: Risk) => void
+  // Fires when the pointer DWELLS on a segment (≥ HOVER_DWELL_MS) — debounced so
+  // quick sweeps don't flood the log. Stable callback.
+  onSegmentHover?: (segId: number, start: number, risk: Risk) => void
   // Track-changes view + per-segment "<reviewer> · <hh:mm>" of the last edit.
   showChanges?: boolean
   editInfo?: Record<number, { reviewer: string; time: string }>
@@ -49,6 +58,10 @@ type RiskFilter = 'all' | 'high+med' | 'high'
 type SortMode = 'chrono' | 'risk'
 
 const RISK_RANK: Record<Risk, number> = { high: 0, med: 1, low: 2 }
+
+// Dwell before a hover counts as a logged segment_hover (ms). Long enough that a
+// quick sweep across segments logs nothing; short enough to catch real reading.
+const HOVER_DWELL_MS = 500
 
 function applyFilter(
   segments: SegmentType[],
@@ -80,6 +93,10 @@ export default function TranscriptView({
   verified,
   dimension,
   displayRiskMap,
+  expandedSegmentId,
+  onToggleExpand,
+  onPlaySegment,
+  collapsedHighUnderline,
   showViewControls = true,
   focusActive,
   focusSegmentIds,
@@ -95,11 +112,16 @@ export default function TranscriptView({
   onFilterChange,
   onSortChange,
   onSegmentView,
+  onSegmentHover,
   showChanges = true,
   editInfo,
 }: Props) {
   const [filter, setFilter] = useState<RiskFilter>('all')
   const [sort, setSort] = useState<SortMode>('chrono')
+  // Transient hover-reveal (local + unlogged): hovering a segment shows its
+  // word-level risk; moving away collapses it (unless pinned/playing).
+  const [hoveredId, setHoveredId] = useState<number | null>(null)
+  const handleHover = useCallback((id: number | null) => setHoveredId(id), [])
 
   const setFilterAndLog = (next: RiskFilter) => {
     setFilter(next)
@@ -119,6 +141,20 @@ export default function TranscriptView({
     return seg?.id ?? null
   }, [transcript, currentTime])
 
+  // Karaoke: index of the word currently being spoken, scanned in the ACTIVE
+  // segment only (cheap — ~tens of words, not the whole transcript). null when
+  // no segment is active or the words carry no timestamps (graceful no-op).
+  const activeWordIndex = useMemo(() => {
+    if (activeId == null) return null
+    const seg = transcript.segments.find((s) => s.id === activeId)
+    const ws = seg?.words[model] ?? []
+    for (let i = 0; i < ws.length; i++) {
+      const w = ws[i]
+      if (w.start != null && w.end != null && currentTime >= w.start && currentTime < w.end) return i
+    }
+    return null
+  }, [transcript, model, activeId, currentTime])
+
   // Capture the active dimension's risk lookup so filter, sort and counts
   // all agree with the segment-level bar shown on the left. In focus mode a
   // segment with a hit reads HIGH, so it surfaces under "High risk only" /
@@ -137,6 +173,17 @@ export default function TranscriptView({
     () => applySort(applyFilter(transcript.segments, filter, riskOf), sort, riskOf),
     [transcript, filter, sort, riskOf],
   )
+
+  // Debounced segment_hover: log only when the pointer DWELLS on a segment
+  // (≥ HOVER_DWELL_MS), so a quick sweep across segments doesn't flood the log.
+  // The effect cleanup cancels the pending timer when the hover moves away.
+  useEffect(() => {
+    if (hoveredId == null || !onSegmentHover) return
+    const seg = transcript.segments.find((s) => s.id === hoveredId)
+    if (!seg) return
+    const t = setTimeout(() => onSegmentHover(seg.id, seg.start, riskOf(seg)), HOVER_DWELL_MS)
+    return () => clearTimeout(t)
+  }, [hoveredId, transcript, onSegmentHover, riskOf])
 
   const activeRef = useRef<HTMLDivElement>(null)
   const scrollRootRef = useRef<HTMLElement>(null)
@@ -311,6 +358,13 @@ export default function TranscriptView({
                   verified={!!verified[segment.id]}
                   edits={edits}
                   dimension={dimension}
+                  expanded={segment.id === expandedSegmentId || segment.id === hoveredId}
+                  onToggleExpand={onToggleExpand}
+                  onPlaySegment={onPlaySegment}
+                  onHover={handleHover}
+                  segmentRisk={riskOf(segment)}
+                  collapsedHighUnderline={collapsedHighUnderline}
+                  activeWordIndex={segment.id === activeId ? activeWordIndex : null}
                   displayRiskMap={displayRiskMap}
                   focusHitFor={focusHitFor}
                   onSeek={onSeek}

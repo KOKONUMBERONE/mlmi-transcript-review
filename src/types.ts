@@ -11,6 +11,12 @@ export type ModelName =
 export interface Word {
   text: string
   risk: Risk
+  // Per-word audio timestamps (seconds) for karaoke highlighting. Optional —
+  // older transcripts (and non-Whisper models) may omit them, in which case the
+  // karaoke highlight simply doesn't run. Real values come from Whisper
+  // return_token_timestamps (cross-attention DTW); even-distributed otherwise.
+  start?: number
+  end?: number
   alternatives?: string[]
   predicted_importance?: Risk
   predicted_proba?: { high: number; med: number; low: number }
@@ -214,6 +220,8 @@ export type EventType =
   | 'trial_end'
   | 'dimension_change'
   | 'segment_view'
+  | 'segment_expand'
+  | 'segment_hover'
   | 'segment_split'
   | 'segment_merge'
   | 'speaker_change'
@@ -253,6 +261,9 @@ export interface LogEvent {
   segment_id?: number
   segment_start?: number
   segment_risk?: Risk
+  // Progressive disclosure: how a sentence got expanded to word level —
+  // 'manual' = reviewer clicked it, 'auto' = playhead entered it.
+  expand_trigger?: 'manual' | 'auto'
   word_index?: number
   word_text?: string
   word_risk?: Risk             // uncertainty bin of the word

@@ -37,6 +37,7 @@ const KNOWN_COLUMNS = [
   'segment_id',
   'segment_start',
   'segment_risk',
+  'expand_trigger',
   'word_index',
   'word_text',
   'word_risk',

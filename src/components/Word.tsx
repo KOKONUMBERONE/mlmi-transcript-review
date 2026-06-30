@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import type { FocusWordHit, HighlightLayer, Risk, Word as WordType } from '../types'
 
 interface Props {
@@ -17,7 +18,21 @@ interface Props {
   // through + the new word inserted, and a deletion shows struck-through. When
   // false ("clean view"), edits show only the final text and deletions vanish.
   showChanges?: boolean
-  onClick: (rect: DOMRect) => void
+  // Progressive disclosure. When the parent sentence is collapsed (false), word
+  // risk is quiet: HIGH gets at most a thin underline (see collapsedHighUnderline),
+  // MED nothing. When expanded (true), the full red/amber treatment returns.
+  expanded?: boolean
+  // Soft vs pure: when true, a collapsed HIGH word still gets a subtle underline
+  // so it can be scanned; when false, a collapsed word shows nothing at all.
+  collapsedHighUnderline?: boolean
+  // Karaoke: this is the word currently being spoken (audio playhead ∈ [start,end)).
+  // Gets a cool background pill, distinct from the warm risk colours.
+  isActiveWord?: boolean
+  // Identity for the click handler — passed as plain props (not a fresh closure)
+  // so React.memo can skip words whose risk/active state didn't change.
+  segId: number
+  wordIdx: number
+  onWordClick: (segId: number, wordIdx: number, rect: DOMRect) => void
 }
 
 // Pick the risk value to colour by, based on the active display dimension.
@@ -31,7 +46,7 @@ function riskFor(word: WordType, dimension: HighlightLayer, displayRisk?: Risk):
   return displayRisk ?? word.combined_risk ?? word.risk
 }
 
-export default function Word({
+function Word({
   word,
   displayText,
   edited,
@@ -40,7 +55,12 @@ export default function Word({
   displayRisk,
   focusHit,
   showChanges = true,
-  onClick,
+  expanded = true,
+  collapsedHighUnderline = true,
+  isActiveWord = false,
+  segId,
+  wordIdx,
+  onWordClick,
 }: Props) {
   if (!displayText) return null
   // Clean view: a removed word simply isn't part of the final text.
@@ -54,19 +74,37 @@ export default function Word({
   const base =
     'relative inline-block rounded-sm px-0.5 cursor-pointer transition-colors hover:bg-surface-subtle'
 
-  // Risk / focus colour only applies to a plain, unedited word. An edited or
-  // deleted word carries its own track-change styling (or, in clean view,
-  // reads as confirmed final text with no risk flag).
+  // Risk styling is split into INK (text colour + underline — the risk signal)
+  // and BG (background fill), so the karaoke pill can replace the BG while the
+  // risk underline still shows on top. Progressive disclosure (supervisor's
+  // "too busy" fix): focus → violet both states; expanded → full red/amber;
+  // collapsed → quiet (HIGH thin underline only, gated by collapsedHighUnderline).
   const showRisk = !isEdit && !deleted
-  const risk = !showRisk
-    ? ''
-    : focusHit
-      ? 'bg-focus-bg text-focus underline decoration-focus decoration-2 underline-offset-[3px] ring-1 ring-focus/40 hover:bg-focus/15'
-      : activeRisk === 'high'
-        ? 'bg-risk-high-bg text-risk-high underline decoration-risk-high decoration-dotted underline-offset-[3px] hover:bg-risk-high/15'
-        : activeRisk === 'med'
-          ? 'bg-risk-med-bg text-risk-med underline decoration-risk-med decoration-dotted underline-offset-[3px] hover:bg-risk-med/15'
-          : ''
+  let focusCls = ''
+  let riskInk = ''
+  let riskBg = ''
+  if (showRisk) {
+    if (focusHit) {
+      focusCls =
+        'bg-focus-bg text-focus underline decoration-focus decoration-2 underline-offset-[3px] ring-1 ring-focus/40 hover:bg-focus/15'
+    } else if (expanded) {
+      if (activeRisk === 'high') {
+        riskInk = 'text-risk-high underline decoration-risk-high decoration-dotted underline-offset-[3px]'
+        riskBg = 'bg-risk-high-bg hover:bg-risk-high/15'
+      } else if (activeRisk === 'med') {
+        riskInk = 'text-risk-med underline decoration-risk-med decoration-dotted underline-offset-[3px]'
+        riskBg = 'bg-risk-med-bg hover:bg-risk-med/15'
+      }
+    } else if (activeRisk === 'high' && collapsedHighUnderline) {
+      riskInk = 'underline decoration-risk-high/50 decoration-dotted underline-offset-[3px]'
+    }
+  }
+
+  // Karaoke pill (cool: Echo light-blue + navy ring) — unmistakably not a warm
+  // risk colour. It replaces the risk BG so the two never fight in the
+  // stylesheet; the risk underline/text stays on top. Focus (violet) wins.
+  const pill = isActiveWord && !focusHit ? 'bg-brand-active ring-1 ring-brand/40' : ''
+  const risk = focusHit ? focusCls : `${riskInk} ${pill || riskBg}`
 
   // Deleted (track-changes view): struck-through in the deletion colour.
   const deletedCls = deleted
@@ -96,8 +134,12 @@ export default function Word({
       className={`${base} ${risk} ${deleted ? deletedCls : ''}`}
       title={title}
       onClick={(e) => {
+        // Collapsed sentence: let the click bubble up so the sentence expands
+        // to word level first (progressive disclosure). Once expanded, a word
+        // click inspects it (opens the candidate popup).
+        if (!expanded) return
         e.stopPropagation()
-        onClick(e.currentTarget.getBoundingClientRect())
+        onWordClick(segId, wordIdx, e.currentTarget.getBoundingClientRect())
       }}
     >
       {isEdit && showChanges ? (
@@ -135,3 +177,5 @@ export default function Word({
     </span>
   )
 }
+
+export default memo(Word)
