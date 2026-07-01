@@ -97,10 +97,25 @@ export default function CandidatePopup({
       className="bg-white border border-border-strong rounded-md shadow-lg p-3 text-sm"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="flex items-baseline justify-between mb-2">
-        <p className="text-[10px] uppercase tracking-widest text-ink-faint">
-          {isDeleted ? 'Restore word' : 'Word candidates'}
-        </p>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <p className="text-[10px] uppercase tracking-widest text-ink-faint">
+            {isDeleted ? 'Restore word' : 'Word candidates'}
+          </p>
+          {/* Seek to this word's timestamp and play — sits right by the title. */}
+          {canPlayFromWord && (
+            <button
+              onClick={() => onPlayFromWord!(anchor.segId, anchor.wordIdx)}
+              title="Play from this word"
+              aria-label="Play from this word"
+              className="flex items-center justify-center w-5 h-5 rounded-full border border-border text-ink-muted hover:text-brand hover:border-brand transition-colors"
+            >
+              <svg width="8" height="8" viewBox="0 0 12 12" fill="currentColor">
+                <polygon points="2,1 11,6 2,11" />
+              </svg>
+            </button>
+          )}
+        </div>
         <p className="font-mono text-[10px] text-ink-faint">
           seg {anchor.segId} · #{anchor.wordIdx + 1}
         </p>
@@ -198,20 +213,6 @@ export default function CandidatePopup({
         <p className="text-[10px] text-ink-faint italic text-center">
           Currently marked as deleted. Pick a candidate or type a correction to restore.
         </p>
-      )}
-
-      {/* Seek to this word's timestamp and play. */}
-      {canPlayFromWord && (
-        <button
-          onClick={() => onPlayFromWord!(anchor.segId, anchor.wordIdx)}
-          title="Seek to this word and play"
-          className="mt-2 w-full flex items-center justify-center gap-1.5 text-xs px-2 py-1.5 rounded border border-border text-ink-muted hover:text-ink hover:border-ink-muted transition-colors"
-        >
-          <svg width="10" height="10" viewBox="0 0 12 12" fill="currentColor">
-            <polygon points="2,1 11,6 2,11" />
-          </svg>
-          Play from here
-        </button>
       )}
 
       {/* Split the segment so this word begins a new segment. */}

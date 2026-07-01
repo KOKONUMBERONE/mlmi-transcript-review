@@ -183,11 +183,40 @@ export default function Segment({
     setEditingSpeaker(false)
   }
 
+  // Click anywhere on the segment card to play it; double-click to edit the
+  // whole sentence. Single-click is deferred so a double-click can cancel it.
+  // Interactive controls (header buttons, expanded words, the editor) all
+  // stopPropagation, so only the blank areas of the card trigger these — which
+  // is why the handler lives on the <article> (covers the header row too, not
+  // just the sentence body).
+  const playSegment = () => {
+    if (editing || editingSpeaker) return
+    if (clickTimer.current) clearTimeout(clickTimer.current)
+    clickTimer.current = setTimeout(() => {
+      clickTimer.current = null
+      onPlaySegment?.(segment.id)
+    }, 250)
+  }
+  const editSegment = () => {
+    if (editing) return
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current)
+      clickTimer.current = null
+    }
+    startEdit()
+  }
+
   return (
     <article
       onMouseEnter={() => onHover?.(segment.id)}
       onMouseLeave={() => onHover?.(null)}
-      className={`group flex gap-3 rounded-md transition-colors px-3 py-1.5 -mx-3 ${containerCls}`}
+      onClick={playSegment}
+      onDoubleClick={(e) => {
+        e.preventDefault()
+        editSegment()
+      }}
+      title="Click to play this segment · double-click to edit"
+      className={`group flex gap-3 rounded-md transition-colors px-3 py-1.5 -mx-3 cursor-pointer ${containerCls}`}
     >
       <div className="flex-1 min-w-0">
         <header className="flex items-center gap-3 mb-0.5">
@@ -378,26 +407,11 @@ export default function Segment({
             </div>
           </div>
         ) : (
-          // Single-click the sentence body → seek there + play it (deferred so a
-          // double-click can cancel it). Double-click → edit the whole sentence.
-          // Hover already reveals word-level risk; the chevron is the
-          // expand-without-play control. Word/button clicks stopPropagation.
+          // Play / edit is handled on the whole card (<article>); this stays the
+          // keyboard target (Enter/Space play). Word clicks (when expanded) and
+          // header controls stopPropagation; collapsed word clicks bubble up so
+          // the sentence reveals word-level risk + plays. Chevron = expand only.
           <div
-            onClick={() => {
-              if (clickTimer.current) clearTimeout(clickTimer.current)
-              clickTimer.current = setTimeout(() => {
-                clickTimer.current = null
-                onPlaySegment?.(segment.id)
-              }, 250)
-            }}
-            onDoubleClick={(e) => {
-              e.preventDefault()
-              if (clickTimer.current) {
-                clearTimeout(clickTimer.current)
-                clickTimer.current = null
-              }
-              startEdit()
-            }}
             role="button"
             aria-expanded={expanded}
             tabIndex={0}
@@ -407,8 +421,6 @@ export default function Segment({
                 onPlaySegment?.(segment.id)
               }
             }}
-            title="Click to play this segment · double-click to edit"
-            className="cursor-pointer"
           >
             {textOverride != null && groups ? (
               // Rewritten sentence: word-level diff against the original words.
