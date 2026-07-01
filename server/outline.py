@@ -41,6 +41,7 @@ import hashlib
 import json
 import math
 import re
+import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -88,25 +89,92 @@ def _map_user_prompt(numbered: str) -> str:
     )
 
 
+# --- OLD synthesis system prompt (kept for easy revert: comment out the active
+#     block below and un-comment this one) ---
+# _SYNTH_SYSTEM = (
+#     "You organise a police-interview chapter list into a high-level outline for "
+#     "a reviewer. Group CONSECUTIVE fine-grained chapters into a few coarse PARTS "
+#     "(the major phases of the interview) and write a short overall summary. "
+#     "Output strict JSON only."
+# )
 _SYNTH_SYSTEM = (
     "You organise a police-interview chapter list into a high-level outline for "
-    "a reviewer. Group CONSECUTIVE fine-grained chapters into a few coarse PARTS "
-    "(the major phases of the interview) and write a short overall summary. "
-    "Output strict JSON only."
+    "a reviewer who must grasp THIS specific case quickly. Group CONSECUTIVE "
+    "fine-grained chapters into a few coarse PARTS (the major phases of the "
+    "interview) and write a concrete, information-dense overall summary that "
+    "captures the specific events, evidence, findings and motives drawn from "
+    "the chapters. Never fall back on generic placeholder phrasing. Output "
+    "strict JSON only. (A later pass replaces personal names with roles, so you "
+    "may name people here — focus on getting the substance right.)"
 )
 
 
 def _synth_user_prompt(digest: str, n_chapters: int, target_parts: int) -> str:
+    # --- OLD summary instruction (kept for easy revert: comment out the active
+    #     return below and un-comment this one) ---
+    # return (
+    #     f"CHAPTERS (each line is '[idx] mm:ss  title — gist'):\n{digest}\n\n"
+    #     f"Group these {n_chapters} consecutive chapters into about "
+    #     f"{target_parts} top-level PARTS (each a major phase of the interview). "
+    #     'Return JSON exactly: {"summary":"<3-6 sentences: what the whole '
+    #     'recording covers>","parts":[{"start_idx":<first chapter idx>,'
+    #     '"end_idx":<last chapter idx>,"title":"<=8 words","description":'
+    #     '"<2-3 sentences describing this section>"}]}. Cover every chapter in '
+    #     "order, parts must not overlap, and use the idx numbers shown above."
+    # )
     return (
         f"CHAPTERS (each line is '[idx] mm:ss  title — gist'):\n{digest}\n\n"
         f"Group these {n_chapters} consecutive chapters into about "
         f"{target_parts} top-level PARTS (each a major phase of the interview). "
-        'Return JSON exactly: {"summary":"<3-6 sentences: what the whole '
-        'recording covers>","parts":[{"start_idx":<first chapter idx>,'
-        '"end_idx":<last chapter idx>,"title":"<=8 words","description":'
-        '"<2-3 sentences describing this section>"}]}. Cover every chapter in '
-        "order, parts must not overlap, and use the idx numbers shown above."
+        'Return JSON exactly: {"summary":"<4-6 sentences, specific and grounded '
+        'in the chapters above. Cover in order: (1) the core event and who is '
+        'involved; (2) the main thread tying it together, e.g. the key evidence '
+        'or backstory; (3) the principal suspects and their motives; (4) how it '
+        'resolves or where it currently stands. Do NOT use vague filler such as '
+        'various aspects, a range of topics, or including.>",'
+        '"parts":[{"start_idx":'
+        '<first chapter idx>,"end_idx":<last chapter idx>,"title":"<=8 words",'
+        '"description":"<2-3 sentences describing this section>"}]}. Cover every '
+        "chapter in order, parts must not overlap, and use the idx numbers shown above."
     )
+
+
+# --- Pass 2: strip personal names from the summary, replacing them with roles.
+# A single 7B pass won't honour a "use no names" instruction — it parrots the
+# names that fill the chapter digest. A focused rewrite whose ONLY job is
+# name -> role is reliable instead. Names are unreliable across recordings (ASR
+# mangles them, and they vary by case type), so the overview is kept name-free
+# and works for any recording. ---
+_DENAME_SYSTEM = (
+    "You rewrite a short case summary to remove EVERY personal name. Replace "
+    "each person's name with their role in the case (the victim, a suspect, a "
+    "witness, the professor, the investigator, a family member). Keep all other "
+    "facts, evidence, motives and sentence structure identical. Output strict "
+    "JSON only."
+)
+
+
+def _dename_user(summary: str) -> str:
+    return (
+        f"SUMMARY:\n{summary}\n\n"
+        'Return JSON exactly: {"summary":"<the same summary with every personal '
+        'name replaced by a role word (the victim, a suspect, a witness, etc.); '
+        'change nothing else>"}'
+    )
+
+
+def _dename_summary(summary: str, model: str, ollama_url: str) -> str:
+    """Best-effort second pass: rewrite the summary with names -> roles. On any
+    failure (Ollama down, bad JSON, empty result) the original summary is kept,
+    so the outline never breaks — it may just retain names that one time."""
+    if not summary.strip():
+        return summary
+    try:
+        content = _ollama_chat(model, ollama_url, _DENAME_SYSTEM, _dename_user(summary))
+        cleaned = str(json.loads(content).get("summary", "")).strip()
+        return cleaned or summary
+    except Exception:
+        return summary
 
 
 def _normalise_title(t: str) -> str:
@@ -324,6 +392,23 @@ def _cached_chapters(
     return chapters
 
 
+def _ollama_chat_retry(
+    model: str, ollama_url: str, system: str, user: str, attempts: int = 3
+) -> str:
+    """_ollama_chat with retries. A crashed llama runner (the 'broken pipe' seen
+    under memory pressure) often recovers on the next attempt, so one transient
+    crash no longer blanks the whole synthesis / overview. On exhaustion the last
+    OllamaError propagates (caller falls back)."""
+    last: Optional[Exception] = None
+    for i in range(attempts):
+        try:
+            return _ollama_chat(model, ollama_url, system, user)
+        except OllamaError as e:
+            last = e
+            time.sleep(1.5 * (i + 1))
+    raise last  # type: ignore[misc]
+
+
 def _cached_synthesis(
     digest: str,
     n_chapters: int,
@@ -336,7 +421,9 @@ def _cached_synthesis(
     path = None
     if cache is not None:
         key = hashlib.sha256(
-            "\x00".join([model, digest, str(target_parts), "synthesis-v1"]).encode("utf-8")
+            # bump the version tag whenever the synthesis prompt changes, so a
+            # re-run regenerates instead of returning the stale cached summary.
+            "\x00".join([model, digest, str(target_parts), "synthesis-v3"]).encode("utf-8")
         ).hexdigest()
         path = cache / f"{key}.json"
         if path.exists():
@@ -345,10 +432,13 @@ def _cached_synthesis(
                 return blob.get("summary", ""), blob.get("parts", [])
             except Exception:
                 pass
-    content = _ollama_chat(
+    content = _ollama_chat_retry(
         model, ollama_url, _SYNTH_SYSTEM, _synth_user_prompt(digest, n_chapters, target_parts)
     )
     summary, parts = _parse_parts(content, n_chapters)
+    # Pass 2: replace personal names with roles (kept name-free for robustness
+    # across recordings). Cached below, so repeat calls pay no extra LLM cost.
+    summary = _dename_summary(summary, model, ollama_url)
     if path is not None:
         try:
             path.write_text(json.dumps({"summary": summary, "parts": parts}))
