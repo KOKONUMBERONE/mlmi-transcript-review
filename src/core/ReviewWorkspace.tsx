@@ -98,6 +98,11 @@ export interface TrialContext {
   stimulusId: string
   timeBudgetMs: number
   focusTerms?: string
+  // Frozen study clip for this trial (resolved from the STIMULI registry). When
+  // present, the workspace loads them at trial start instead of the bundled
+  // placeholder. Absent → keep using defaultTranscript (pre-curation behaviour).
+  transcriptUrl?: string
+  audioUrl?: string
 }
 
 export default function ReviewWorkspace({
@@ -371,6 +376,47 @@ export default function ReviewWorkspace({
     })
     events.log('trial_start', { time_budget_ms: trial.timeBudgetMs })
   }, [trial, events])
+
+  // Load this trial's frozen stimulus (transcript + audio). Separate effect,
+  // keyed on the trial KEY (a primitive) with the standard cancel-on-cleanup
+  // pattern — so it survives StrictMode's double-invoke (the reset effect above
+  // early-returns on its second pass, which would otherwise cancel the fetch).
+  // Each trial reloads a pristine transcript; an unregistered stimulus id (no
+  // url) falls back to the bundled placeholder.
+  useEffect(() => {
+    if (!trial) return
+    let cancelled = false
+    if (trial.transcriptUrl) {
+      fetch(trial.transcriptUrl)
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`transcript HTTP ${r.status}`))))
+        .then((json) => {
+          if (cancelled) return
+          const tr = json as Transcript
+          setTranscript(tr)
+          originalTranscriptRef.current = tr
+          setTranscriptFilename(trial.stimulusId)
+        })
+        .catch((e) => console.warn('Stimulus transcript not loaded:', (e as Error).message))
+    } else {
+      setTranscript(defaultTranscript)
+      originalTranscriptRef.current = defaultTranscript
+      setTranscriptFilename(null)
+    }
+    if (trial.audioUrl) {
+      fetch(trial.audioUrl)
+        .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(`audio HTTP ${r.status}`))))
+        .then((blob) => {
+          if (cancelled) return
+          setAudioBlob(blob)
+          setAudioFilename(trial.stimulusId)
+        })
+        .catch((e) => console.warn('Stimulus audio not loaded:', (e as Error).message))
+    }
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trial?.key])
   useEffect(() => {
     if (!trial || !interactionLocked || trialEndedRef.current) return
     trialEndedRef.current = true
@@ -1556,6 +1602,7 @@ export default function ReviewWorkspace({
         <TranscriptView
           transcript={transcript}
           model={model}
+          heading={transcriptFilename ?? undefined}
           currentTime={audio.currentTime}
           edits={edits}
           verified={verified}
