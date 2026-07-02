@@ -29,7 +29,7 @@ export default function PlayerBar({
   const reviewerMissing = reviewer.trim() === ''
 
   return (
-    <div className="h-14 grid grid-cols-[1fr_auto_1fr] items-center px-5 bg-white border-t border-border shrink-0">
+    <div className="h-14 grid grid-cols-[1fr_auto_1fr] items-center px-5 bg-surface border-t border-border shrink-0">
       {/* Reviewer identity (left cell) */}
       <label className="flex items-center gap-1.5 justify-self-start" title="Recorded on every audit-trail entry">
         <span className="text-[10px] text-ink-muted uppercase tracking-widest">
@@ -41,7 +41,7 @@ export default function PlayerBar({
           onChange={(e) => onReviewerChange(e.target.value)}
           placeholder="Set your name…"
           className={[
-            'text-xs border rounded px-2 py-1 bg-white text-ink min-w-[9rem] focus:outline-none focus:ring-1 focus:ring-border-strong transition-colors',
+            'text-xs border rounded px-2 py-1 bg-surface text-ink min-w-[9rem] focus:outline-none focus:ring-1 focus:ring-border-strong transition-colors',
             reviewerMissing
               ? 'border-risk-med/50 focus:ring-risk-med/40 placeholder:text-risk-med/70 placeholder:italic'
               : 'border-border hover:border-border-strong',
@@ -85,7 +85,7 @@ export default function PlayerBar({
         {audio.duration > 0 && (
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-risk-high ring-2 ring-white shadow"
+            className="pointer-events-none absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-risk-high ring-2 ring-surface shadow"
             style={{ left: `${(audio.currentTime / audio.duration) * 100}%` }}
           />
         )}
@@ -105,7 +105,7 @@ export default function PlayerBar({
             if (onSpeedChange) onSpeedChange(v)
             else audio.setRate(v)
           }}
-          className="text-xs border border-border rounded px-2 py-1 bg-white text-ink hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
+          className="text-xs border border-border rounded px-2 py-1 bg-surface text-ink hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
         >
           <option value="0.5">0.5×</option>
           <option value="0.75">0.75×</option>

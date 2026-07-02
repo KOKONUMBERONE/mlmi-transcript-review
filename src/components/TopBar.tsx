@@ -42,6 +42,10 @@ interface Props {
   allowChangeToggle?: boolean
   showChanges?: boolean
   onToggleChanges?: () => void
+  // Light/dark theme toggle (full build only; study locks the theme at setup).
+  allowThemeToggle?: boolean
+  theme?: 'light' | 'dark'
+  onToggleTheme?: () => void
 }
 
 function UploadIcon() {
@@ -127,12 +131,15 @@ export default function TopBar({
   allowChangeToggle = false,
   showChanges = true,
   onToggleChanges,
+  allowThemeToggle,
+  theme,
+  onToggleTheme,
 }: Props) {
   const audioInputRef = useRef<HTMLInputElement>(null)
   const transcriptInputRef = useRef<HTMLInputElement>(null)
 
   return (
-    <header className="h-14 flex items-center px-5 gap-4 bg-white border-b border-border shrink-0">
+    <header className="h-14 flex items-center px-5 gap-4 bg-surface border-b border-border shrink-0">
       {/* Filename block */}
       <div className="flex flex-col leading-tight mr-1 min-w-0 max-w-[14rem]">
         <span className="font-mono text-[11px] text-ink tracking-wide truncate" title={audioFilename ?? undefined}>
@@ -194,7 +201,7 @@ export default function TopBar({
           <button
             onClick={onTranscribe}
             disabled={!canTranscribe || transcribing}
-            className="flex items-center gap-1 text-[11px] px-2 py-1 rounded border transition-colors border-focus/40 text-focus bg-focus-bg hover:border-focus/60 disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-white disabled:text-ink-muted disabled:border-border"
+            className="flex items-center gap-1 text-[11px] px-2 py-1 rounded border transition-colors border-focus/40 text-focus bg-focus-bg hover:border-focus/60 disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-surface disabled:text-ink-muted disabled:border-border"
             title={canTranscribe ? 'Run the ASR models on the loaded audio' : 'Load an audio file first'}
           >
             {transcribing ? (
@@ -288,7 +295,7 @@ export default function TopBar({
           <select
             value={model}
             onChange={(e) => onModelChange(e.target.value as ModelName)}
-            className="text-xs border border-border rounded px-2 py-1 bg-white text-ink hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong min-w-[11rem]"
+            className="text-xs border border-border rounded px-2 py-1 bg-surface text-ink hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong min-w-[11rem]"
           >
             {availableModels.map((name) => (
               <option key={name} value={name}>{name}</option>
@@ -305,7 +312,7 @@ export default function TopBar({
           <select
             value={dimension}
             onChange={(e) => onDimensionChange(e.target.value as RiskDimension)}
-            className="text-xs border border-border rounded px-2 py-1 bg-white text-ink hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
+            className="text-xs border border-border rounded px-2 py-1 bg-surface text-ink hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
           >
             <option value="combined">Combined (2×2)</option>
             <option value="uncertainty">Uncertainty</option>
@@ -324,7 +331,7 @@ export default function TopBar({
               'flex items-center gap-1.5 text-[11px] px-2 py-1 rounded border transition-colors',
               riskRegime === 'study'
                 ? 'border-accent/60 text-ink bg-accent/10'
-                : 'border-border text-ink-muted bg-white hover:border-border-strong',
+                : 'border-border text-ink-muted bg-surface hover:border-border-strong',
             ].join(' ')}
           >
             <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3">
@@ -344,13 +351,36 @@ export default function TopBar({
               'flex items-center gap-1.5 text-[11px] px-2 py-1 rounded border transition-colors',
               showChanges
                 ? 'border-change-ins/50 text-change-ins bg-change-ins-bg'
-                : 'border-border text-ink-muted bg-white hover:border-border-strong',
+                : 'border-border text-ink-muted bg-surface hover:border-border-strong',
             ].join(' ')}
           >
             <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3">
               <path d="M8.5 1.5 10.5 3.5 4 10 1.5 10.5 2 8z" strokeLinejoin="round" />
             </svg>
             {showChanges ? 'Changes: on' : 'Changes: off'}
+          </button>
+        )}
+
+        {allowThemeToggle && (
+          <button
+            onClick={onToggleTheme}
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            aria-label="Toggle dark mode"
+            className="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded border border-border text-ink-muted bg-surface hover:border-border-strong transition-colors"
+          >
+            {theme === 'dark' ? (
+              // Sun — click to go light
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2">
+                <circle cx="6" cy="6" r="2.3" />
+                <path d="M6 .8v1.4M6 9.8v1.4M.8 6h1.4M9.8 6h1.4M2.3 2.3l1 1M8.7 8.7l1 1M9.7 2.3l-1 1M3.3 8.7l-1 1" strokeLinecap="round" />
+              </svg>
+            ) : (
+              // Moon — click to go dark
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+                <path d="M9.5 7.2A4 4 0 0 1 4.8 2.5a.5.5 0 0 0-.7-.6A4.5 4.5 0 1 0 10.1 8a.5.5 0 0 0-.6-.8z" />
+              </svg>
+            )}
+            {theme === 'dark' ? 'Light' : 'Dark'}
           </button>
         )}
 

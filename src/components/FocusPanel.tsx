@@ -80,7 +80,7 @@ export default function FocusPanel({
 
   if (collapsed) {
     return (
-      <aside className="w-9 shrink-0 border-r border-border bg-white flex flex-col items-center gap-3 py-3">
+      <aside className="w-9 shrink-0 border-r border-border bg-surface flex flex-col items-center gap-3 py-3">
         <button
           onClick={onToggleCollapse}
           title="Expand find panel"
@@ -101,8 +101,8 @@ export default function FocusPanel({
   }
 
   return (
-    <aside className="w-80 shrink-0 border-r border-border bg-white overflow-y-auto flex flex-col">
-      <div className="px-4 py-3 border-b border-border sticky top-0 bg-white z-10">
+    <aside className="w-80 shrink-0 border-r border-border bg-surface overflow-y-auto flex flex-col">
+      <div className="px-4 py-3 border-b border-border sticky top-0 bg-surface z-10">
         <div className="flex items-center justify-between mb-2">
           <p className="text-[10px] text-brand uppercase tracking-[0.2em] font-semibold">
             Find
@@ -193,7 +193,7 @@ function FindControls({
         }}
         rows={3}
         placeholder={'weapon: gun, knife\nsilver hatchback\nwho paid for the taxi'}
-        className="w-full text-[13px] leading-snug border border-border rounded px-2 py-1.5 bg-white resize-y placeholder:text-ink-faint/60 focus:outline-none focus:ring-1 focus:ring-brand/50 focus:border-brand/50"
+        className="w-full text-[13px] leading-snug border border-border rounded px-2 py-1.5 bg-surface resize-y placeholder:text-ink-faint/60 focus:outline-none focus:ring-1 focus:ring-brand/50 focus:border-brand/50"
       />
 
       <div className="mt-1 flex items-center justify-between">
@@ -236,7 +236,7 @@ function FindControls({
         <button
           onClick={onClear}
           disabled={!active && !result}
-          className="text-xs px-3 py-1.5 rounded border border-border text-ink-muted bg-white hover:border-ink-muted hover:text-ink transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="text-xs px-3 py-1.5 rounded border border-border text-ink-muted bg-surface hover:border-ink-muted hover:text-ink transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Clear
         </button>

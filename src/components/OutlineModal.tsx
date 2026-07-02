@@ -208,7 +208,7 @@ export default function OutlineModal({
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
               placeholder="Filter sections…"
-              className="w-full mb-3 text-[12px] border border-border rounded px-2.5 py-1.5 bg-white placeholder:text-ink-faint/60 focus:outline-none focus:ring-1 focus:ring-brand/50 focus:border-brand/50"
+              className="w-full mb-3 text-[12px] border border-border rounded px-2.5 py-1.5 bg-surface placeholder:text-ink-faint/60 focus:outline-none focus:ring-1 focus:ring-brand/50 focus:border-brand/50"
             />
 
             {visibleParts.length === 0 ? (
@@ -332,7 +332,7 @@ export default function OutlineModal({
   if (docked) {
     return (
       <aside
-        className="w-80 shrink-0 border-r border-border bg-white flex flex-col overflow-hidden"
+        className="w-80 shrink-0 border-r border-border bg-surface flex flex-col overflow-hidden"
         aria-label="Transcript outline"
       >
         {inner}
@@ -343,11 +343,11 @@ export default function OutlineModal({
   // Centre "sub-page" modal.
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-ink/40 backdrop-blur-[2px] px-4 py-[6vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 backdrop-blur-[2px] px-4 py-[6vh]"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-3xl max-h-[85vh] bg-white rounded-lg shadow-xl border border-border flex flex-col overflow-hidden"
+        className="w-full max-w-3xl max-h-[85vh] bg-surface rounded-lg shadow-xl border border-border flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

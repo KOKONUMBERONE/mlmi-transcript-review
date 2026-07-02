@@ -269,7 +269,7 @@ export default function TranscriptView({
                 <select
                   value={filter}
                   onChange={(e) => setFilterAndLog(e.target.value as RiskFilter)}
-                  className="text-[11px] border border-border rounded px-1.5 py-0.5 bg-white hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
+                  className="text-[11px] border border-border rounded px-1.5 py-0.5 bg-surface hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
                 >
                   <option value="all">All segments</option>
                   <option value="high+med">High + medium</option>
@@ -281,7 +281,7 @@ export default function TranscriptView({
                 <select
                   value={sort}
                   onChange={(e) => setSortAndLog(e.target.value as SortMode)}
-                  className="text-[11px] border border-border rounded px-1.5 py-0.5 bg-white hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
+                  className="text-[11px] border border-border rounded px-1.5 py-0.5 bg-surface hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
                 >
                   <option value="chrono">Chronological</option>
                   <option value="risk">By risk</option>
@@ -324,14 +324,14 @@ export default function TranscriptView({
               <span className="text-ink-faint uppercase tracking-widest text-[10px]">Verify</span>
               <button
                 onClick={() => onBulkVerify(displaySegments.map((s) => s.id), true)}
-                className="px-2 py-0.5 rounded border border-verified/50 text-verified bg-white hover:bg-verified-bg transition-colors"
+                className="px-2 py-0.5 rounded border border-verified/50 text-verified bg-surface hover:bg-verified-bg transition-colors"
                 title="Verify every currently-shown segment"
               >
                 ✓ All shown{filter !== 'all' ? ` (${displaySegments.length})` : ''}
               </button>
               <button
                 onClick={() => onBulkVerify(displaySegments.map((s) => s.id), false)}
-                className="px-2 py-0.5 rounded border border-border text-ink-muted bg-white hover:border-ink-muted hover:text-ink transition-colors"
+                className="px-2 py-0.5 rounded border border-border text-ink-muted bg-surface hover:border-ink-muted hover:text-ink transition-colors"
                 title="Un-verify every currently-shown segment"
               >
                 Un-verify all shown

@@ -370,7 +370,7 @@ export default function Segment({
                   ? 'border border-verified/40 text-verified bg-verified-bg/60'
                   : active
                   ? 'bg-brand text-white hover:bg-brand-dark shadow-sm'
-                  : 'border border-border text-ink-muted bg-white group-hover:border-brand group-hover:text-brand',
+                  : 'border border-border text-ink-muted bg-surface group-hover:border-brand group-hover:text-brand',
               ].join(' ')}
             >
               {verified ? '✓ Verified' : 'Verify'}
@@ -430,8 +430,8 @@ export default function Segment({
               <p
                 className={
                   showChanges
-                    ? 'text-[14px] leading-[1.5] text-ink bg-change-ins-bg rounded px-1.5 py-0.5 -mx-1 ring-1 ring-change-ins/25'
-                    : 'text-[14px] leading-[1.5] text-ink'
+                    ? 'text-[15px] leading-[1.6] text-ink bg-change-ins-bg rounded px-1.5 py-0.5 -mx-1 ring-1 ring-change-ins/25'
+                    : 'text-[15px] leading-[1.6] text-ink'
                 }
               >
                 {groups.map((g, gi) => (
@@ -478,7 +478,7 @@ export default function Segment({
                 )}
               </p>
             ) : (
-              <p className="text-[14px] leading-[1.5] text-ink">
+              <p className="text-[15px] leading-[1.6] text-ink">
                 {words.map((word, i) => {
                   const key = `${segment.id}-${i}`
                   const edit = edits[key]

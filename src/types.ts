@@ -258,6 +258,7 @@ export interface LogEvent {
   model: string
   participant_id: string // study participant code, e.g. "P01" — "demo" if unset
   condition: string      // study condition code, e.g. "C3" — "demo" if unset
+  theme?: 'light' | 'dark' // active UI theme (study locks it at setup)
 
   // Trial context (set by the study trial runner; absent in the full build):
   t_in_trial_ms?: number // ms since the current trial started

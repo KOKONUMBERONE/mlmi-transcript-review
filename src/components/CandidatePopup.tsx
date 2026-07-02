@@ -94,7 +94,7 @@ export default function CandidatePopup({
     <div
       ref={ref}
       style={{ position: 'fixed', top, left, width: 280, zIndex: 50 }}
-      className="bg-white border border-border-strong rounded-md shadow-lg p-3 text-sm"
+      className="bg-surface border border-border-strong rounded-md shadow-lg p-3 text-sm"
       onClick={(e) => e.stopPropagation()}
     >
       <div className="flex items-center justify-between mb-2">

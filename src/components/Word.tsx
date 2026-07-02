@@ -160,7 +160,7 @@ function Word({
       {focusHit && !showDiff && (
         <span
           aria-hidden="true"
-          className="absolute -top-1 -left-1 w-1.5 h-1.5 rounded-full bg-focus ring-1 ring-white"
+          className="absolute -top-1 -left-1 w-1.5 h-1.5 rounded-full bg-focus ring-1 ring-surface"
         />
       )}
       {deleted && showChanges && (

@@ -6,6 +6,7 @@ interface Context {
   model: string
   participantId: string
   condition: string
+  theme?: 'light' | 'dark'
   // Trial-level context (set by the study trial runner; undefined in full).
   block?: number
   trialIndex?: number
@@ -72,6 +73,7 @@ export function useEventLog(): EventLog {
         model: ctx.model,
         participant_id: ctx.participantId.trim() || DEFAULT_PARTICIPANT,
         condition: ctx.condition.trim() || DEFAULT_CONDITION,
+        theme: ctx.theme,
         block: ctx.block,
         trial_index: ctx.trialIndex,
         difficulty: ctx.difficulty,
@@ -95,6 +97,7 @@ export function useEventLog(): EventLog {
     if (ctx.model !== undefined) c.model = ctx.model
     if (ctx.participantId !== undefined) c.participantId = ctx.participantId
     if (ctx.condition !== undefined) c.condition = ctx.condition
+    if (ctx.theme !== undefined) c.theme = ctx.theme
     if (ctx.block !== undefined) c.block = ctx.block
     if (ctx.trialIndex !== undefined) c.trialIndex = ctx.trialIndex
     if (ctx.difficulty !== undefined) c.difficulty = ctx.difficulty

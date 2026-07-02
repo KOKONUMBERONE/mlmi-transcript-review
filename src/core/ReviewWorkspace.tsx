@@ -48,6 +48,7 @@ import type {
 import type { RiskRegime, WorkspaceConfig } from './config'
 import { RISK_POLICY_BY_REGIME } from './config'
 import { CONDITION_CONFIG } from './conditions'
+import { useTheme } from '../hooks/useTheme'
 
 // Bundled default case (case447). The transcript ships in src/data; the audio
 // is served from public/ and fetched into a Blob on mount (same path uploads
@@ -144,6 +145,13 @@ export default function ReviewWorkspace({
   // Track-changes view. Always on in the study (constant across C1–C4); the
   // full build defaults it on but lets the reviewer switch to a clean read.
   const [showChanges, setShowChanges] = useState(true)
+  // Light/dark theme (shared singleton store). The TopBar toggle is full-build
+  // only; the study locks it via config.allowThemeToggle.
+  const { theme, toggleTheme } = useTheme()
+  // Stamp the active theme onto every logged event (both builds).
+  useEffect(() => {
+    events.setContext({ theme })
+  }, [theme, events])
   // The standing "AI-generated" notice can be dismissed (session-level — it
   // reappears on reload so the legal reminder is never permanently gone).
   const [warningDismissed, setWarningDismissed] = useState(false)
@@ -1512,6 +1520,9 @@ export default function ReviewWorkspace({
         allowChangeToggle={config.allowChangeToggle}
         showChanges={showChanges}
         onToggleChanges={() => setShowChanges((v) => !v)}
+        allowThemeToggle={config.allowThemeToggle}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
 
       {transcribing && (
@@ -1710,8 +1721,8 @@ export default function ReviewWorkspace({
 
       {dragActive && (
         <div className="fixed inset-0 z-50 pointer-events-none">
-          <div className="absolute inset-2 border-2 border-dashed border-ink/30 rounded-lg bg-white/60 backdrop-blur-sm flex items-center justify-center">
-            <div className="bg-white border border-border rounded-md shadow-lg px-4 py-3 text-center">
+          <div className="absolute inset-2 border-2 border-dashed border-ink/30 rounded-lg bg-surface/60 backdrop-blur-sm flex items-center justify-center">
+            <div className="bg-surface border border-border rounded-md shadow-lg px-4 py-3 text-center">
               <p className="text-xs text-ink font-medium mb-0.5">Drop file to load</p>
               <p className="text-[11px] text-ink-faint">
                 Audio (.wav / .mp3 / .m4a) or transcript (.json)

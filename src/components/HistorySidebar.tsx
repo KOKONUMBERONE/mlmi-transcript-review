@@ -137,7 +137,7 @@ export default function HistorySidebar({
 
   if (collapsed) {
     return (
-      <aside className="w-9 shrink-0 border-l border-border bg-white flex flex-col items-center gap-3 py-3">
+      <aside className="w-9 shrink-0 border-l border-border bg-surface flex flex-col items-center gap-3 py-3">
         <button
           onClick={onToggleCollapse}
           title="Expand review panel"
@@ -169,7 +169,7 @@ export default function HistorySidebar({
   }
 
   return (
-    <aside className="w-80 shrink-0 border-l border-border bg-white overflow-hidden flex flex-col">
+    <aside className="w-80 shrink-0 border-l border-border bg-surface overflow-hidden flex flex-col">
       {/* Review progress — the reviewer's "how much is left" panel. */}
       <div className="px-4 py-3 border-b border-border shrink-0">
         <div className="flex items-center justify-between mb-2">

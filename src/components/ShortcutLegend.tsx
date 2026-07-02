@@ -41,7 +41,7 @@ export default function ShortcutLegend({
   return (
     <div className="fixed bottom-[4.25rem] right-3 z-40">
       {open && (
-        <div className="mb-2 w-64 bg-white border border-border rounded-md shadow-lg p-3">
+        <div className="mb-2 w-64 bg-surface border border-border rounded-md shadow-lg p-3">
           <p className="text-[10px] text-ink-faint uppercase tracking-[0.2em] mb-2">
             Keyboard shortcuts
           </p>
@@ -125,7 +125,7 @@ export default function ShortcutLegend({
         onClick={() => setOpen((v) => !v)}
         aria-label="Keyboard shortcuts"
         aria-expanded={open}
-        className="flex items-center gap-2 px-2.5 py-1.5 bg-white border border-border rounded-md shadow-sm hover:border-border-strong transition-colors"
+        className="flex items-center gap-2 px-2.5 py-1.5 bg-surface border border-border rounded-md shadow-sm hover:border-border-strong transition-colors"
       >
         <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-ink-muted">
           <rect x="0.5" y="3" width="13" height="8" rx="1.5" />

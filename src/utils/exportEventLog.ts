@@ -28,6 +28,7 @@ const KNOWN_COLUMNS = [
   'type',
   'participant_id',
   'condition',
+  'theme',
   'block',
   'trial_index',
   'difficulty',
