@@ -4,7 +4,10 @@ import PlayerBar from '../components/PlayerBar'
 import TranscriptView from '../components/TranscriptView'
 import HistorySidebar from '../components/HistorySidebar'
 import FocusPanel from '../components/FocusPanel'
+import ChatPanel, { type ChatUiTurn } from '../components/ChatPanel'
+import { CollapsedLeftRail, LeftTabStrip, type LeftTab } from '../components/LeftPanelTabs'
 import OutlineModal from '../components/OutlineModal'
+import OutlineStoryboard from '../components/OutlineStoryboard'
 import CandidatePopup, { type PopupAnchor } from '../components/CandidatePopup'
 import ShortcutLegend from '../components/ShortcutLegend'
 import defaultTranscriptJson from '../data/defaultTranscript.json'
@@ -23,6 +26,7 @@ import {
   parseFocusQueries,
 } from '../lib/focusApi'
 import { runOutline } from '../lib/outlineApi'
+import { runChat, type ChatCitation } from '../lib/chatApi'
 import { transcribeAudio } from '../lib/transcribeApi'
 import { segmentRiskWithFocus } from '../lib/segmentRisk'
 import { buildDisplayRiskMap, combinedSegmentRisk } from '../lib/displayRisk'
@@ -141,6 +145,14 @@ export default function ReviewWorkspace({
   // UI: collapsible side panels + shift-click range-verify anchor.
   const [focusCollapsed, setFocusCollapsed] = useState(false)
   const [auditCollapsed, setAuditCollapsed] = useState(false)
+  // Left column tab (full build with allowChat): Find | Assistant.
+  const [leftTab, setLeftTab] = useState<LeftTab>('find')
+  // Assistant chat — ephemeral by design: in-memory only, cleared on transcript
+  // change, never written to the audit trail or any export.
+  const [chatMessages, setChatMessages] = useState<ChatUiTurn[]>([])
+  const [chatThinking, setChatThinking] = useState(false)
+  const [chatError, setChatError] = useState<string | null>(null)
+  const chatRunIdRef = useRef(0)
   const verifyAnchorRef = useRef<number | null>(null)
   // Track-changes view. Always on in the study (constant across C1–C4); the
   // full build defaults it on but lets the reviewer switch to a clean read.
@@ -1230,6 +1242,64 @@ export default function ReviewWorkspace({
     [events, seekWithLog],
   )
 
+  // ----- Assistant chat (full build, config.allowChat) ---------------------
+  // Content is NEVER logged — only metadata (turn index, lengths, counts).
+  const handleChatSend = useCallback(
+    async (text: string) => {
+      const runId = ++chatRunIdRef.current
+      const turn = chatMessages.filter((m) => m.role === 'user').length + 1
+      const history = chatMessages.map((m) => ({ role: m.role, content: m.content }))
+      setChatMessages((prev) => [...prev, { role: 'user', content: text }])
+      setChatError(null)
+      setChatThinking(true)
+      events.log('chat_send', { chat_turn: turn, chat_chars: text.length })
+      const t0 = performance.now()
+      try {
+        const res = await runChat(transcript, [...history, { role: 'user', content: text }])
+        if (chatRunIdRef.current !== runId) return // cleared / superseded
+        setChatMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: res.answer, citations: res.citations },
+        ])
+        events.log('chat_answer', {
+          chat_turn: turn,
+          chat_chars: res.answer.length,
+          chat_citations: res.citations.length,
+          chat_latency_ms: Math.round(performance.now() - t0),
+        })
+      } catch (err) {
+        if (chatRunIdRef.current !== runId) return
+        setChatError(
+          err instanceof PredictError ? err.message : `Assistant failed: ${(err as Error).message}`,
+        )
+      } finally {
+        if (chatRunIdRef.current === runId) setChatThinking(false)
+      }
+    },
+    [chatMessages, transcript, events],
+  )
+
+  const handleChatCitationClick = useCallback(
+    (c: ChatCitation) => {
+      events.log('chat_citation_click', {
+        segment_id: c.id,
+        segment_start: c.segment_start,
+      })
+      seekWithLog(c.segment_start, 'marker')
+    },
+    [events, seekWithLog],
+  )
+
+  const handleChatClear = useCallback(() => {
+    chatRunIdRef.current++ // invalidate any in-flight request
+    events.log('chat_clear', {
+      chat_turn: chatMessages.filter((m) => m.role === 'user').length,
+    })
+    setChatMessages([])
+    setChatError(null)
+    setChatThinking(false)
+  }, [events, chatMessages])
+
   // ---- Upload handlers ----
 
   // Shared "load this transcript into the app" path: validate, swap it in,
@@ -1254,11 +1324,16 @@ export default function ReviewWorkspace({
       setPopup(null)
       setExpandedSegmentId(null)
       autoExpandedRef.current = null
-      // A new transcript invalidates any prior focus retrieval + outline.
+      // A new transcript invalidates any prior focus retrieval + outline +
+      // assistant conversation (its citations point into the old transcript).
       setFocusResult(null)
       setFocusActive(false)
       setOutlineResult(null)
       setOutlineError(null)
+      chatRunIdRef.current++
+      setChatMessages([])
+      setChatError(null)
+      setChatThinking(false)
       events.log('transcript_load', {
         transcript_filename: sourceName,
         segment_count: result.transcript.segments.length,
@@ -1532,7 +1607,7 @@ export default function ReviewWorkspace({
             <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
           </svg>
           <p className="text-xs text-focus">
-            <span className="font-semibold uppercase tracking-wider mr-2">Transcribing</span>
+            <span className="font-semibold mr-2">Transcribing</span>
             Running the ASR models on your audio — this can take a few minutes for
             long recordings. You can keep listening while it works.
           </p>
@@ -1542,7 +1617,7 @@ export default function ReviewWorkspace({
       {errorMsg && (
         <div className="bg-risk-high-bg border-b border-risk-high/30 px-4 py-2 flex items-center justify-between gap-3">
           <p className="text-xs text-risk-high">
-            <span className="font-semibold uppercase tracking-wider mr-2">Upload error</span>
+            <span className="font-semibold mr-2">Upload error</span>
             {errorMsg}
           </p>
           <button
@@ -1589,27 +1664,56 @@ export default function ReviewWorkspace({
             onClose={() => setOutlineOpen(false)}
             onPartClick={handlePartClick}
             onChapterClick={handleChapterClick}
-            docked
             onToggleDock={() => setOutlineDocked(false)}
           />
         )}
-        {focusEnabled && (
-          <FocusPanel
-            text={focusText}
-            onTextChange={setFocusText}
-            onRun={handleRunFocus}
-            onClear={handleClearFocus}
-            running={focusRunning}
-            aiEnriching={aiEnriching}
-            active={focusActive}
-            result={focusResult}
-            error={focusError}
-            readOnly={!config.allowFocusFreeInput}
-            collapsed={focusCollapsed}
-            onToggleCollapse={() => setFocusCollapsed((v) => !v)}
-            onSnippetClick={handleFocusSnippetClick}
-          />
-        )}
+        {/* Left column: Find (both builds) + Assistant tab (full build only).
+            One shared collapse flag; the collapsed rail carries both labels
+            when the assistant exists, else FocusPanel's own rail runs. */}
+        {focusEnabled &&
+          (config.allowChat && focusCollapsed ? (
+            <CollapsedLeftRail
+              findHits={
+                focusActive && focusResult
+                  ? focusResult.terms.reduce((n, t) => n + t.snippets.length, 0)
+                  : null
+              }
+              onExpand={(tab) => {
+                setLeftTab(tab)
+                setFocusCollapsed(false)
+              }}
+            />
+          ) : config.allowChat && leftTab === 'chat' ? (
+            <ChatPanel
+              messages={chatMessages}
+              thinking={chatThinking}
+              error={chatError}
+              onSend={handleChatSend}
+              onClear={handleChatClear}
+              onCitationClick={handleChatCitationClick}
+              tabStrip={<LeftTabStrip active="chat" onSelect={setLeftTab} />}
+              onToggleCollapse={() => setFocusCollapsed(true)}
+            />
+          ) : (
+            <FocusPanel
+              text={focusText}
+              onTextChange={setFocusText}
+              onRun={handleRunFocus}
+              onClear={handleClearFocus}
+              running={focusRunning}
+              aiEnriching={aiEnriching}
+              active={focusActive}
+              result={focusResult}
+              error={focusError}
+              readOnly={!config.allowFocusFreeInput}
+              collapsed={config.allowChat ? false : focusCollapsed}
+              onToggleCollapse={() => setFocusCollapsed((v) => !v)}
+              onSnippetClick={handleFocusSnippetClick}
+              tabStrip={
+                config.allowChat ? <LeftTabStrip active="find" onSelect={setLeftTab} /> : undefined
+              }
+            />
+          ))}
         <TranscriptView
           transcript={transcript}
           model={model}
@@ -1636,7 +1740,14 @@ export default function ReviewWorkspace({
           onMergeNext={mergeWithNext}
           onChangeSpeaker={changeSpeaker}
           onFilterChange={(filter) => events.log('filter_change', { filter })}
-          onSortChange={(sort) => events.log('sort_change', { sort })}
+          showHighlightLevel={config.allowHighlightLevelToggle}
+          onHighlightLevelChange={(level) =>
+            events.log('filter_change', { filter: `highlights:${level}` })
+          }
+          showRevealAll={config.allowRevealAllToggle}
+          onRevealAllChange={(revealAll) =>
+            events.log('filter_change', { filter: `marks:${revealAll ? 'always' : 'hover'}` })
+          }
           onSegmentView={handleSegmentView}
           onSegmentHover={handleSegmentHover}
           showChanges={showChanges}
@@ -1704,7 +1815,7 @@ export default function ReviewWorkspace({
       )}
 
       {config.allowOutline && outlineOpen && !outlineDocked && (
-        <OutlineModal
+        <OutlineStoryboard
           result={outlineResult}
           running={outlineRunning}
           error={outlineError}
@@ -1714,8 +1825,7 @@ export default function ReviewWorkspace({
           onClose={() => setOutlineOpen(false)}
           onPartClick={handlePartClick}
           onChapterClick={handleChapterClick}
-          docked={false}
-          onToggleDock={() => setOutlineDocked(true)}
+          onDock={() => setOutlineDocked(true)}
         />
       )}
 

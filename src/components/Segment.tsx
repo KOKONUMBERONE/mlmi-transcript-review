@@ -23,6 +23,8 @@ interface Props {
   segmentRisk: Risk
   // Soft vs pure collapsed look — threaded straight to Word.
   collapsedHighUnderline: boolean
+  // Word-highlight level ('all' | 'high') — 'high' hides MED highlights.
+  highlightLevel?: 'all' | 'high'
   // Karaoke: index of the word currently being spoken in THIS segment, or null.
   // Only the active (playing) segment ever receives a non-null value.
   activeWordIndex?: number | null
@@ -80,6 +82,7 @@ export default function Segment({
   onHover,
   segmentRisk,
   collapsedHighUnderline,
+  highlightLevel = 'all',
   activeWordIndex,
   activeTime,
   displayRiskMap,
@@ -216,10 +219,10 @@ export default function Segment({
         editSegment()
       }}
       title="Click to play this segment · double-click to edit"
-      className={`group flex gap-3 rounded-md transition-colors px-3 py-1.5 -mx-3 cursor-pointer ${containerCls}`}
+      className={`group flex gap-3 rounded-md transition-colors px-3 py-2 -mx-3 cursor-pointer ${containerCls}`}
     >
       <div className="flex-1 min-w-0">
-        <header className="flex items-center gap-3 mb-0.5">
+        <header className="flex items-center gap-3 mb-1">
           {/* Expand affordance + sentence-head risk dot (the sentence-level
               signal that replaces always-on word colour). */}
           <span className="flex items-center gap-1.5 shrink-0">
@@ -279,7 +282,7 @@ export default function Segment({
                   : undefined
               }
               title={onChangeSpeaker ? 'Click to change speaker' : undefined}
-              className={`text-[11px] font-semibold uppercase tracking-[0.15em] ${
+              className={`text-[11px] font-semibold uppercase tracking-[0.06em] ${
                 SPEAKER_COLOR[segment.speaker] ?? SPEAKER_COLOR_DEFAULT
               } ${onChangeSpeaker ? 'cursor-pointer hover:underline decoration-dotted underline-offset-2' : ''}`}
             >
@@ -300,20 +303,15 @@ export default function Segment({
           </button>
 
           {active && (
-            <span className="font-mono text-[10px] text-brand uppercase tracking-widest">
-              ▸ playing
-            </span>
-          )}
-
-          {verified && (
-            <span className="font-mono text-[10px] text-verified uppercase tracking-widest">
-              ✓ verified
+            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-brand">
+              <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-brand" />
+              Playing
             </span>
           )}
 
           {hasEdits && (
             <span
-              className="inline-flex items-center gap-1 text-[10px] text-change-ins bg-change-ins-bg border border-change-ins/40 rounded-full px-1.5 py-0.5 leading-none"
+              className="inline-flex items-center gap-1 text-[10px] text-change-ins bg-change-ins-bg rounded-full px-1.5 py-0.5 leading-none"
               title="Reviewer-edited segment"
             >
               <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.4">
@@ -370,7 +368,7 @@ export default function Segment({
                   ? 'border border-verified/40 text-verified bg-verified-bg/60'
                   : active
                   ? 'bg-brand text-white hover:bg-brand-dark shadow-sm'
-                  : 'border border-border text-ink-muted bg-surface group-hover:border-brand group-hover:text-brand',
+                  : 'border border-transparent text-ink-faint group-hover:border-border group-hover:text-ink-muted hover:!border-brand hover:!text-brand',
               ].join(' ')}
             >
               {verified ? '✓ Verified' : 'Verify'}
@@ -445,6 +443,7 @@ export default function Segment({
                         dimension={dimension}
                         expanded={expanded}
                         collapsedHighUnderline={collapsedHighUnderline}
+                        highlightLevel={highlightLevel}
                         isActiveWord={expanded && tokActive(g.tok.start, g.tok.end)}
                         displayRisk={
                           dimension === 'combined'
@@ -472,7 +471,7 @@ export default function Segment({
                   </span>
                 ))}
                 {showChanges && (
-                  <span className="ml-2 align-middle font-mono text-[10px] text-change-ins uppercase tracking-widest">
+                  <span className="ml-2 align-middle font-sans text-[10px] font-medium text-change-ins">
                     rewritten
                   </span>
                 )}
@@ -493,6 +492,7 @@ export default function Segment({
                         dimension={dimension}
                         expanded={expanded}
                         collapsedHighUnderline={collapsedHighUnderline}
+                        highlightLevel={highlightLevel}
                         isActiveWord={expanded && i === activeWordIndex}
                         displayRisk={
                           dimension === 'combined'

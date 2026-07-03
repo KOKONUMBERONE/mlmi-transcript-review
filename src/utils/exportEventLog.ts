@@ -60,7 +60,7 @@ const KNOWN_COLUMNS = [
   'chosen_model',
   'reason',
   'filter',
-  'sort',
+  'sort', // legacy (Order control removed 2026-07-02) — always empty in new logs; kept so the rectangular CSV stays column-identical across old and new exports
   'from_dimension',
   'to_dimension',
   'export_kind',
@@ -82,6 +82,11 @@ const KNOWN_COLUMNS = [
   'chapter_title',
   'chapter_start',
   'chapter_end',
+  // Assistant chat metadata (appended — column order stays stable for pandas).
+  'chat_turn',
+  'chat_chars',
+  'chat_citations',
+  'chat_latency_ms',
 ] as const
 
 function summary(events: LogEvent[]): Record<string, unknown> {

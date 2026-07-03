@@ -99,7 +99,7 @@ export default function CandidatePopup({
     >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
-          <p className="text-[10px] uppercase tracking-widest text-ink-faint">
+          <p className="text-[11px] font-medium text-ink-faint">
             {isDeleted ? 'Restore word' : 'Word candidates'}
           </p>
           {/* Seek to this word's timestamp and play — sits right by the title. */}

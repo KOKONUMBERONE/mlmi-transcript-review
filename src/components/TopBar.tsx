@@ -182,7 +182,7 @@ export default function TopBar({
 
         <button
           onClick={() => audioInputRef.current?.click()}
-          className="flex items-center gap-1 text-[11px] text-ink-muted hover:text-ink px-2 py-1 rounded border border-border hover:border-border-strong transition-colors"
+          className="flex items-center gap-1 text-[11px] text-ink-muted hover:text-ink px-2 py-1 rounded-md border border-border hover:border-border-strong transition-colors"
           title="Replace the placeholder audio with a real .wav / .mp3 file"
         >
           <UploadIcon />
@@ -190,7 +190,7 @@ export default function TopBar({
         </button>
         <button
           onClick={() => transcriptInputRef.current?.click()}
-          className="flex items-center gap-1 text-[11px] text-ink-muted hover:text-ink px-2 py-1 rounded border border-border hover:border-border-strong transition-colors"
+          className="flex items-center gap-1 text-[11px] text-ink-muted hover:text-ink px-2 py-1 rounded-md border border-border hover:border-border-strong transition-colors"
           title="Replace the mock transcript with a .json file matching the Transcript type"
         >
           <UploadIcon />
@@ -201,7 +201,7 @@ export default function TopBar({
           <button
             onClick={onTranscribe}
             disabled={!canTranscribe || transcribing}
-            className="flex items-center gap-1 text-[11px] px-2 py-1 rounded border transition-colors border-focus/40 text-focus bg-focus-bg hover:border-focus/60 disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-surface disabled:text-ink-muted disabled:border-border"
+            className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md border transition-colors border-focus/40 text-focus bg-focus-bg hover:border-focus/60 disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-surface disabled:text-ink-muted disabled:border-border"
             title={canTranscribe ? 'Run the ASR models on the loaded audio' : 'Load an audio file first'}
           >
             {transcribing ? (
@@ -227,7 +227,7 @@ export default function TopBar({
           onClick={onToggleRecord}
           disabled={!recordingSupported}
           className={[
-            'flex items-center gap-1 text-[11px] px-2 py-1 rounded border transition-colors',
+            'flex items-center gap-1 text-[11px] px-2 py-1 rounded-md border transition-colors',
             recording
               ? 'border-risk-high/40 text-risk-high bg-risk-high-bg hover:border-risk-high/60'
               : 'border-border text-ink-muted hover:text-ink hover:border-border-strong disabled:opacity-40 disabled:hover:text-ink-muted disabled:hover:border-border',
@@ -263,7 +263,7 @@ export default function TopBar({
           <a
             href={recordingDownloadUrl}
             download={recordingDownloadName}
-            className="flex items-center gap-1 text-[11px] text-ink-muted hover:text-ink px-2 py-1 rounded border border-border hover:border-border-strong transition-colors"
+            className="flex items-center gap-1 text-[11px] text-ink-muted hover:text-ink px-2 py-1 rounded-md border border-border hover:border-border-strong transition-colors"
             title="Save the recorded audio to disk (for external transcription)"
           >
             <DownloadIcon />
@@ -277,7 +277,7 @@ export default function TopBar({
       {allowOutline && (
         <button
           onClick={onOpenOutline}
-          className="flex items-center gap-1 text-[11px] text-ink-muted hover:text-focus px-2 py-1 rounded border border-border hover:border-focus/50 transition-colors"
+          className="flex items-center gap-1 text-[11px] text-ink-muted hover:text-focus px-2 py-1 rounded-md border border-border hover:border-focus/50 transition-colors"
           title="Open a chaptered outline of the whole recording"
         >
           <OutlineIcon />
@@ -291,11 +291,11 @@ export default function TopBar({
 
       <div className="flex items-center gap-3">
         <label className="flex items-center gap-1.5">
-          <span className="text-[10px] text-ink-faint uppercase tracking-widest">Model</span>
+          <span className="text-[11px] text-ink-faint">Model</span>
           <select
             value={model}
             onChange={(e) => onModelChange(e.target.value as ModelName)}
-            className="text-xs border border-border rounded px-2 py-1 bg-surface text-ink hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong min-w-[11rem]"
+            className="text-xs border border-border rounded-md px-2 py-1 bg-surface text-ink hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong min-w-[11rem]"
           >
             {availableModels.map((name) => (
               <option key={name} value={name}>{name}</option>
@@ -308,11 +308,11 @@ export default function TopBar({
           className="flex items-center gap-1.5"
           title="Which risk signal drives the word highlights"
         >
-          <span className="text-[10px] text-ink-faint uppercase tracking-widest">Risk</span>
+          <span className="text-[11px] text-ink-faint">Risk</span>
           <select
             value={dimension}
             onChange={(e) => onDimensionChange(e.target.value as RiskDimension)}
-            className="text-xs border border-border rounded px-2 py-1 bg-surface text-ink hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
+            className="text-xs border border-border rounded-md px-2 py-1 bg-surface text-ink hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
           >
             <option value="combined">Combined (2×2)</option>
             <option value="uncertainty">Uncertainty</option>
@@ -328,7 +328,7 @@ export default function TopBar({
             }
             title="Flagging regime for the Combined view — Deployment: quiet (statutory always-red + require both signals + per-segment budget). Study: importance-dominant, denser. Click to switch."
             className={[
-              'flex items-center gap-1.5 text-[11px] px-2 py-1 rounded border transition-colors',
+              'flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-md border transition-colors',
               riskRegime === 'study'
                 ? 'border-accent/60 text-ink bg-accent/10'
                 : 'border-border text-ink-muted bg-surface hover:border-border-strong',
@@ -348,7 +348,7 @@ export default function TopBar({
             onClick={onToggleChanges}
             title={showChanges ? 'Hide reviewer changes (clean read)' : 'Show reviewer changes'}
             className={[
-              'flex items-center gap-1.5 text-[11px] px-2 py-1 rounded border transition-colors',
+              'flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-md border transition-colors',
               showChanges
                 ? 'border-change-ins/50 text-change-ins bg-change-ins-bg'
                 : 'border-border text-ink-muted bg-surface hover:border-border-strong',
@@ -366,7 +366,7 @@ export default function TopBar({
             onClick={onToggleTheme}
             title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
             aria-label="Toggle dark mode"
-            className="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded border border-border text-ink-muted bg-surface hover:border-border-strong transition-colors"
+            className="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-md border border-border text-ink-muted bg-surface hover:border-border-strong transition-colors"
           >
             {theme === 'dark' ? (
               // Sun — click to go light
@@ -386,7 +386,7 @@ export default function TopBar({
 
         {predicting && (
           <span
-            className="flex items-center gap-1.5 text-[10px] text-ink-muted uppercase tracking-widest"
+            className="flex items-center gap-1.5 text-[11px] text-ink-muted"
             aria-live="polite"
           >
             <svg

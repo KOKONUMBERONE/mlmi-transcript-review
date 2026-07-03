@@ -6,8 +6,8 @@ const BY_RANK: Risk[] = ['low', 'med', 'high']
 /**
  * The upstream `segment.paraRisk` is computed from the *uncertainty* signal
  * only. When the reviewer switches to the importance or combined view, the
- * left-bar colour, the "HIGH RISK" badge, the per-segment filter, the sort
- * order, and the chip counts in the header all need to follow that signal.
+ * left-bar colour, the "HIGH RISK" badge, the per-segment filter, and the
+ * chip counts in the header all need to follow that signal.
  *
  * We re-aggregate from per-word risk = max of the selected dimension's risk
  * across the segment's words (under the currently selected ASR model). The
@@ -42,8 +42,8 @@ export function segmentRiskFor(
 
 /**
  * Focus-aware segment risk (2b overlay). A segment that contains a focus match
- * reads HIGH regardless of the default dimension, so the left bar, the "By
- * risk" sort and the header chips agree with the focus highlights. When focus
+ * reads HIGH regardless of the default dimension, so the left bar, the
+ * segment filter and the header chips agree with the focus highlights. When focus
  * is inactive this is exactly `segmentRiskFor`, so default behaviour is
  * unchanged. The underlying 2a scores are never mutated — this is display only.
  */

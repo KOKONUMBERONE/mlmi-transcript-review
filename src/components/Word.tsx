@@ -25,6 +25,9 @@ interface Props {
   // Soft vs pure: when true, a collapsed HIGH word still gets a subtle underline
   // so it can be scanned; when false, a collapsed word shows nothing at all.
   collapsedHighUnderline?: boolean
+  // Word-highlight level: 'high' hides the amber MED treatment (quieter read).
+  // Display-only — data, tooltips, clicks and events are untouched.
+  highlightLevel?: 'all' | 'high'
   // Karaoke: this is the word currently being spoken (audio playhead ∈ [start,end)).
   // Gets a cool background pill, distinct from the warm risk colours.
   isActiveWord?: boolean
@@ -57,6 +60,7 @@ function Word({
   showChanges = true,
   expanded = true,
   collapsedHighUnderline = true,
+  highlightLevel = 'all',
   isActiveWord = false,
   segId,
   wordIdx,
@@ -74,11 +78,15 @@ function Word({
   const base =
     'relative inline-block rounded-sm px-0.5 cursor-pointer transition-colors hover:bg-surface-subtle'
 
-  // Risk styling is split into INK (text colour + underline — the risk signal)
-  // and BG (background fill), so the karaoke pill can replace the BG while the
-  // risk underline still shows on top. Progressive disclosure (supervisor's
-  // "too busy" fix): focus → violet both states; expanded → full red/amber;
-  // collapsed → quiet (HIGH thin underline only, gated by collapsedHighUnderline).
+  // Risk styling is split into RULE (coloured underline — the risk signal) and
+  // BG (background fill), so the karaoke pill can replace the BG while the risk
+  // underline still shows on top. "Highlighter + rule" scheme: the letters
+  // themselves keep the normal ink (recolouring every risky word made dense
+  // segments read like confetti); the signal is carried by the tinted
+  // background + underline, with HIGH > MED encoded by underline weight/style.
+  // Progressive disclosure unchanged: focus → violet both states; expanded →
+  // full treatment; collapsed → quiet (HIGH thin underline only, gated by
+  // collapsedHighUnderline).
   const showRisk = !isEdit && !deleted
   let focusCls = ''
   let riskInk = ''
@@ -86,13 +94,13 @@ function Word({
   if (showRisk) {
     if (focusHit) {
       focusCls =
-        'bg-focus-bg text-focus underline decoration-focus decoration-2 underline-offset-[3px] ring-1 ring-focus/40 hover:bg-focus/15'
+        'bg-focus-bg underline decoration-focus decoration-2 underline-offset-[3px] hover:bg-focus/15'
     } else if (expanded) {
       if (activeRisk === 'high') {
-        riskInk = 'text-risk-high underline decoration-risk-high decoration-dotted underline-offset-[3px]'
+        riskInk = 'underline decoration-risk-high decoration-2 underline-offset-[3px]'
         riskBg = 'bg-risk-high-bg hover:bg-risk-high/15'
-      } else if (activeRisk === 'med') {
-        riskInk = 'text-risk-med underline decoration-risk-med decoration-dotted underline-offset-[3px]'
+      } else if (activeRisk === 'med' && highlightLevel === 'all') {
+        riskInk = 'underline decoration-risk-med decoration-dotted underline-offset-[3px]'
         riskBg = 'bg-risk-med-bg hover:bg-risk-med/15'
       }
     } else if (activeRisk === 'high' && collapsedHighUnderline) {
@@ -103,7 +111,7 @@ function Word({
   // Karaoke pill (cool: Echo light-blue + navy ring) — unmistakably not a warm
   // risk colour. It replaces the risk BG so the two never fight in the
   // stylesheet; the risk underline/text stays on top. Focus (violet) wins.
-  const pill = isActiveWord && !focusHit ? 'bg-brand-active ring-1 ring-brand/40' : ''
+  const pill = isActiveWord && !focusHit ? 'bg-brand-active ring-1 ring-brand/30' : ''
   const risk = focusHit ? focusCls : `${riskInk} ${pill || riskBg}`
 
   // Deleted (track-changes view): struck-through in the deletion colour.

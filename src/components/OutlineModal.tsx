@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { OutlineChapter, OutlinePart, OutlineResult } from '../types'
+import { findCurrentId, match, mmss } from '../lib/outlineUtils'
 
 interface Props {
   result: OutlineResult | null
   running: boolean
   error?: string | null
-  /** Total recording length, shown in the header. */
-  audioDuration: number
+  /** Total recording length (accepted for prop parity; the narrow panel omits it). */
+  audioDuration?: number
   /** Drives the "you are here" highlight + auto-expands the current Part. */
   currentTime: number
   onRegenerate: () => void
@@ -14,21 +15,15 @@ interface Props {
   /** Jump to a Part / Chapter (seeks the audio). */
   onPartClick: (part: OutlinePart) => void
   onChapterClick: (chapter: OutlineChapter) => void
-  /** When true, render as a left side-panel column instead of a centre modal. */
-  docked: boolean
-  /** Toggle between the centre modal and the docked side panel. */
+  /** Expand back into the full-screen storyboard view. */
   onToggleDock: () => void
 }
 
 // ---------------------------------------------------------------------------
-// The Outline is a two-level table of contents for a long recording: a Summary
-// at the top, then coarse Parts (each with a longer description) that expand to
-// reveal finer Chapters. It renders in one of two shells:
-//   • centre "sub-page" modal — for a focused read of the whole structure;
-//   • docked left panel — pinned beside the transcript so you can navigate and
-//     read at the same time.
-// Clicking a Part/Chapter seeks the audio (and, in modal mode, closes the
-// sub-page so the reviewer lands on that passage).
+// The DOCKED Outline: a compact two-level table of contents pinned beside the
+// transcript, so the reviewer can navigate and read at the same time. The
+// immersive full-screen counterpart is OutlineStoryboard.tsx — the expand
+// button in this header switches to it.
 //
 // Colour: the Outline is navigation/structure, so it uses the Echo brand navy —
 // NOT the violet `focus` colour, which is reserved for case-relevance hits.
@@ -38,13 +33,11 @@ export default function OutlineModal({
   result,
   running,
   error,
-  audioDuration,
   currentTime,
   onRegenerate,
   onClose,
   onPartClick,
   onChapterClick,
-  docked,
   onToggleDock,
 }: Props) {
   const [filter, setFilter] = useState('')
@@ -59,17 +52,6 @@ export default function OutlineModal({
     const all = parts.flatMap((p) => p.chapters)
     return findCurrentId(all, currentTime)
   }, [parts, currentTime])
-
-  // Esc closes — but only in the blocking modal. A docked panel is non-blocking,
-  // so Esc-to-dismiss would be surprising (and clash with the filter input).
-  useEffect(() => {
-    if (docked) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose, docked])
 
   // Auto-expand the Part the playhead sits in, whenever a fresh outline arrives.
   useEffect(() => {
@@ -108,14 +90,8 @@ export default function OutlineModal({
           <h2 className="text-sm font-semibold text-brand uppercase tracking-[0.18em] shrink-0">
             Outline
           </h2>
-          {audioDuration > 0 && !docked && (
-            <span className="text-[11px] font-mono text-ink-faint tabular-nums">
-              {fmtDuration(audioDuration)} recording
-            </span>
-          )}
           {hasParts && (
             <span className="text-[11px] text-ink-faint shrink-0">
-              {docked ? '' : '· '}
               {parts.length} {parts.length === 1 ? 'part' : 'parts'}
             </span>
           )}
@@ -131,25 +107,16 @@ export default function OutlineModal({
               {running ? 'Generating…' : 'Regenerate'}
             </button>
           )}
-          {/* Dock / undock: swap between the centre modal and the side panel. */}
+          {/* Expand back into the full-screen storyboard. */}
           <button
             onClick={onToggleDock}
-            aria-label={docked ? 'Expand to centre' : 'Dock to side panel'}
-            title={docked ? 'Expand to centre' : 'Dock beside the transcript'}
+            aria-label="Expand to full-screen storyboard"
+            title="Expand to full-screen storyboard"
             className="w-7 h-7 flex items-center justify-center rounded text-ink-muted hover:text-brand hover:bg-surface-muted transition-colors"
           >
-            {docked ? (
-              // expand / pop-out icon
-              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4">
-                <path d="M8.5 2.5H11.5V5.5M5.5 11.5H2.5V8.5M11.5 2.5l-4 4M2.5 11.5l4-4" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            ) : (
-              // dock-to-left icon (panel with a highlighted left rail)
-              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
-                <rect x="1.5" y="2.5" width="11" height="9" rx="1.5" />
-                <rect x="1.5" y="2.5" width="4" height="9" rx="1.5" fill="currentColor" stroke="none" opacity="0.5" />
-              </svg>
-            )}
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4">
+              <path d="M8.5 2.5H11.5V5.5M5.5 11.5H2.5V8.5M11.5 2.5l-4 4M2.5 11.5l4-4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </button>
           <button
             onClick={onClose}
@@ -328,67 +295,13 @@ export default function OutlineModal({
     </>
   )
 
-  // Docked: a left side-panel column, pinned beside the transcript.
-  if (docked) {
-    return (
-      <aside
-        className="w-80 shrink-0 border-r border-border bg-surface flex flex-col overflow-hidden"
-        aria-label="Transcript outline"
-      >
-        {inner}
-      </aside>
-    )
-  }
-
-  // Centre "sub-page" modal.
+  // A left side-panel column, pinned beside the transcript.
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 backdrop-blur-[2px] px-4 py-[6vh]"
-      onClick={onClose}
+    <aside
+      className="w-80 shrink-0 border-r border-border bg-surface flex flex-col overflow-hidden"
+      aria-label="Transcript outline"
     >
-      <div
-        className="w-full max-w-3xl max-h-[85vh] bg-surface rounded-lg shadow-xl border border-border flex flex-col overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Transcript outline"
-      >
-        {inner}
-      </div>
-    </div>
+      {inner}
+    </aside>
   )
-}
-
-// Item (Part or Chapter) whose start is the greatest one ≤ t — i.e. the one the
-// playhead currently sits in. Returns null if t is before everything.
-function findCurrentId(
-  items: { id: number; segment_start: number; segment_end: number }[],
-  t: number,
-): number | null {
-  let best: number | null = null
-  for (const it of items) {
-    if (it.segment_start <= t + 0.001) best = it.id
-    else break
-  }
-  return best
-}
-
-function match(s: string, q: string): boolean {
-  return (s || '').toLowerCase().includes(q)
-}
-
-function mmss(seconds: number): string {
-  const m = Math.floor(seconds / 60)
-  const s = Math.floor(seconds % 60)
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
-
-function fmtDuration(seconds: number): string {
-  const sec = Math.max(0, Math.round(seconds))
-  const h = Math.floor(sec / 3600)
-  const m = Math.floor((sec % 3600) / 60)
-  const s = sec % 60
-  if (h > 0) return `${h}h ${m}m`
-  if (m > 0) return s === 0 ? `${m}m` : `${m}m ${s}s`
-  return `${s}s`
 }

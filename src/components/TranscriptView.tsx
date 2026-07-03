@@ -23,7 +23,7 @@ interface Props {
   // Single-click a segment → seek there + play it (and pin it open).
   onPlaySegment: (segId: number) => void
   collapsedHighUnderline: boolean
-  // C1 hides the risk chips + Show/Order controls (plain text, no risk shown).
+  // C1 hides the risk chips + Show/Highlights/Marks controls (plain text, no risk shown).
   showViewControls?: boolean
   // Focus mode (2b): which segments hold a hit + a per-word marker lookup.
   focusActive: boolean
@@ -39,7 +39,13 @@ interface Props {
   onMergeNext?: (segId: number) => void
   onChangeSpeaker?: (segId: number, speaker: string) => void
   onFilterChange?: (filter: string) => void
-  onSortChange?: (sort: string) => void
+  // Header "Highlights" toggle (full build only): hide MED word highlights.
+  showHighlightLevel?: boolean
+  onHighlightLevelChange?: (level: HighlightLevel) => void
+  // Header "Marks" toggle (full build only): keep every segment's word-level
+  // risk marks visible without hovering (vs the default hover/play reveal).
+  showRevealAll?: boolean
+  onRevealAllChange?: (revealAll: boolean) => void
   // Fires when a segment scrolls ≥60% into view (complements segment_focus,
   // which only fires from audio playback). Must be a *stable* callback.
   onSegmentView?: (segId: number, start: number, risk: Risk) => void
@@ -52,15 +58,15 @@ interface Props {
 }
 
 const RISK_CHIP: Record<Risk, string> = {
-  high: 'bg-risk-high-bg text-risk-high border-risk-high/30',
-  med: 'bg-risk-med-bg text-risk-med border-risk-med/30',
-  low: 'bg-surface-muted text-ink-muted border-border',
+  high: 'bg-risk-high-bg/80 text-risk-high',
+  med: 'bg-risk-med-bg/80 text-risk-med',
+  low: 'bg-surface-subtle text-ink-muted',
 }
 
 type RiskFilter = 'all' | 'high+med' | 'high'
-type SortMode = 'chrono' | 'risk'
-
-const RISK_RANK: Record<Risk, number> = { high: 0, med: 1, low: 2 }
+// Word-highlight level: 'all' = full red + amber treatment; 'high' = hide the
+// amber MED word highlights (quieter read; data/events untouched).
+export type HighlightLevel = 'all' | 'high'
 
 // Dwell before a hover counts as a logged segment_hover (ms). Long enough that a
 // quick sweep across segments logs nothing; short enough to catch real reading.
@@ -74,18 +80,6 @@ function applyFilter(
   if (filter === 'all') return segments
   if (filter === 'high') return segments.filter((s) => riskOf(s) === 'high')
   return segments.filter((s) => riskOf(s) !== 'low')
-}
-
-function applySort(
-  segments: SegmentType[],
-  mode: SortMode,
-  riskOf: (s: SegmentType) => Risk,
-): SegmentType[] {
-  if (mode === 'chrono') return segments
-  return [...segments].sort((a, b) => {
-    const r = RISK_RANK[riskOf(a)] - RISK_RANK[riskOf(b)]
-    return r !== 0 ? r : a.start - b.start
-  })
 }
 
 export default function TranscriptView({
@@ -114,14 +108,20 @@ export default function TranscriptView({
   onMergeNext,
   onChangeSpeaker,
   onFilterChange,
-  onSortChange,
+  showHighlightLevel = false,
+  onHighlightLevelChange,
+  showRevealAll = false,
+  onRevealAllChange,
   onSegmentView,
   onSegmentHover,
   showChanges = true,
   editInfo,
 }: Props) {
   const [filter, setFilter] = useState<RiskFilter>('all')
-  const [sort, setSort] = useState<SortMode>('chrono')
+  const [highlightLevel, setHighlightLevel] = useState<HighlightLevel>('all')
+  // 'Marks: always' — pin word-level risk marks on every segment (no hover
+  // needed). Pairs well with highlightLevel='high' to scan all red words.
+  const [revealAll, setRevealAll] = useState(false)
   // Transient hover-reveal (local + unlogged): hovering a segment shows its
   // word-level risk; moving away collapses it (unless pinned/playing).
   const [hoveredId, setHoveredId] = useState<number | null>(null)
@@ -131,13 +131,17 @@ export default function TranscriptView({
     setFilter(next)
     onFilterChange?.(next)
   }
-  const setSortAndLog = (next: SortMode) => {
-    setSort(next)
-    onSortChange?.(next)
+  const setHighlightLevelAndLog = (next: HighlightLevel) => {
+    setHighlightLevel(next)
+    onHighlightLevelChange?.(next)
+  }
+  const setRevealAllAndLog = (next: boolean) => {
+    setRevealAll(next)
+    onRevealAllChange?.(next)
   }
 
   // Active segment is always computed from the FULL transcript, so the
-  // "currently playing" highlight tracks audio regardless of filter/sort.
+  // "currently playing" highlight tracks audio regardless of filter.
   const activeId = useMemo(() => {
     const seg = transcript.segments.find(
       (s) => currentTime >= s.start && currentTime < s.end,
@@ -159,10 +163,9 @@ export default function TranscriptView({
     return null
   }, [transcript, model, activeId, currentTime])
 
-  // Capture the active dimension's risk lookup so filter, sort and counts
-  // all agree with the segment-level bar shown on the left. In focus mode a
-  // segment with a hit reads HIGH, so it surfaces under "High risk only" /
-  // "By risk" too.
+  // Capture the active dimension's risk lookup so the filter and counts
+  // agree with the segment-level bar shown on the left. In focus mode a
+  // segment with a hit reads HIGH, so it surfaces under "High risk only" too.
   const riskOf = useMemo(
     () => (s: SegmentType) => {
       const focused = focusActive && focusSegmentIds.has(s.id)
@@ -174,8 +177,8 @@ export default function TranscriptView({
   )
 
   const displaySegments = useMemo(
-    () => applySort(applyFilter(transcript.segments, filter, riskOf), sort, riskOf),
-    [transcript, filter, sort, riskOf],
+    () => applyFilter(transcript.segments, filter, riskOf),
+    [transcript, filter, riskOf],
   )
 
   // Debounced segment_hover: log only when the pointer DWELLS on a segment
@@ -234,15 +237,17 @@ export default function TranscriptView({
     [transcript, riskOf],
   )
 
-  const isDefaultView = filter === 'all' && sort === 'chrono'
+  // The amber view-state pill only reflects the segment FILTER (where "N of M"
+  // is meaningful). Highlight level / marks are self-evident on screen.
+  const isDefaultView = filter === 'all'
 
   return (
     <main ref={scrollRootRef} className="flex-1 overflow-y-auto">
       <div className="max-w-5xl mx-auto px-8 py-5">
         <div className="mb-6 pb-4 border-b border-border">
           <div className="flex items-baseline justify-between mb-3">
-            <h1 className="text-[11px] text-ink-faint uppercase tracking-[0.2em]">
-              Transcript · {heading ?? 'Case 447'}
+            <h1 className="text-sm font-semibold text-ink">
+              {heading ?? 'Case 447'}
             </h1>
             <p className="font-mono text-[11px] text-ink-faint">{model}</p>
           </div>
@@ -250,43 +255,56 @@ export default function TranscriptView({
           {/* Risk chips + view controls (hidden in C1 — plain text). */}
           {showViewControls && (
           <div className="flex flex-wrap items-center gap-2 text-[11px]">
-            <span className="text-ink-faint uppercase tracking-widest text-[10px]">
-              Risk
-            </span>
-            <span className={`px-2 py-0.5 rounded-sm border font-mono tabular-nums ${RISK_CHIP.high}`}>
+            <span className={`px-2 py-0.5 rounded-full font-mono tabular-nums ${RISK_CHIP.high}`}>
               {counts.high} high
             </span>
-            <span className={`px-2 py-0.5 rounded-sm border font-mono tabular-nums ${RISK_CHIP.med}`}>
+            <span className={`px-2 py-0.5 rounded-full font-mono tabular-nums ${RISK_CHIP.med}`}>
               {counts.med} med
             </span>
-            <span className={`px-2 py-0.5 rounded-sm border font-mono tabular-nums ${RISK_CHIP.low}`}>
+            <span className={`px-2 py-0.5 rounded-full font-mono tabular-nums ${RISK_CHIP.low}`}>
               {counts.low} low
             </span>
 
             <span className="ml-auto flex items-center gap-2">
-              <label className="flex items-center gap-1">
-                <span className="text-ink-faint uppercase tracking-widest text-[10px]">Show</span>
+              <select
+                value={filter}
+                onChange={(e) => setFilterAndLog(e.target.value as RiskFilter)}
+                title="Show"
+                className="text-[11px] border border-border rounded-md px-1.5 py-0.5 bg-surface hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
+              >
+                <option value="all">All segments</option>
+                <option value="high+med">High + medium</option>
+                <option value="high">High risk only</option>
+              </select>
+              {showHighlightLevel && (
                 <select
-                  value={filter}
-                  onChange={(e) => setFilterAndLog(e.target.value as RiskFilter)}
-                  className="text-[11px] border border-border rounded px-1.5 py-0.5 bg-surface hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
+                  value={highlightLevel}
+                  onChange={(e) => setHighlightLevelAndLog(e.target.value as HighlightLevel)}
+                  title="Which word highlights are shown — hiding medium keeps only the red high-risk marks"
+                  className="text-[11px] border border-border rounded-md px-1.5 py-0.5 bg-surface hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
                 >
-                  <option value="all">All segments</option>
-                  <option value="high+med">High + medium</option>
-                  <option value="high">High risk only</option>
+                  <option value="all">All highlights</option>
+                  <option value="high">Hide medium</option>
                 </select>
-              </label>
-              <label className="flex items-center gap-1">
-                <span className="text-ink-faint uppercase tracking-widest text-[10px]">Order</span>
-                <select
-                  value={sort}
-                  onChange={(e) => setSortAndLog(e.target.value as SortMode)}
-                  className="text-[11px] border border-border rounded px-1.5 py-0.5 bg-surface hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
+              )}
+              {showRevealAll && (
+                <button
+                  onClick={() => setRevealAllAndLog(!revealAll)}
+                  title={
+                    revealAll
+                      ? 'Word marks are pinned on every segment — click to reveal on hover/play only'
+                      : 'Word marks appear on hover/play — click to pin them on every segment'
+                  }
+                  className={[
+                    'text-[11px] px-2 py-0.5 rounded-md border transition-colors',
+                    revealAll
+                      ? 'border-brand/50 text-brand bg-brand-bg'
+                      : 'border-border text-ink-muted bg-surface hover:border-border-strong',
+                  ].join(' ')}
                 >
-                  <option value="chrono">Chronological</option>
-                  <option value="risk">By risk</option>
-                </select>
-              </label>
+                  {revealAll ? 'Marks: always' : 'Marks: hover'}
+                </button>
+              )}
             </span>
           </div>
           )}
@@ -302,16 +320,11 @@ export default function TranscriptView({
                   {displaySegments.length} of {transcript.segments.length}
                 </span>
                 <span>
-                  {filter !== 'all' && (filter === 'high' ? 'high-risk only' : 'high + medium')}
-                  {filter !== 'all' && sort !== 'chrono' && ' · '}
-                  {sort === 'risk' && 'sorted by risk'}
+                  {filter === 'high' ? 'high-risk only' : 'high + medium'}
                 </span>
               </span>
               <button
-                onClick={() => {
-                  setFilterAndLog('all')
-                  setSortAndLog('chrono')
-                }}
+                onClick={() => setFilterAndLog('all')}
                 className="text-[11px] text-ink-muted hover:text-ink underline decoration-dotted underline-offset-2"
               >
                 Reset view
@@ -321,7 +334,7 @@ export default function TranscriptView({
 
           {onBulkVerify && (
             <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
-              <span className="text-ink-faint uppercase tracking-widest text-[10px]">Verify</span>
+              <span className="text-[11px] text-ink-faint">Verify</span>
               <button
                 onClick={() => onBulkVerify(displaySegments.map((s) => s.id), true)}
                 className="px-2 py-0.5 rounded border border-verified/50 text-verified bg-surface hover:bg-verified-bg transition-colors"
@@ -341,7 +354,7 @@ export default function TranscriptView({
           )}
         </div>
 
-        <div className="space-y-1">
+        <div className="space-y-2">
           {displaySegments.length === 0 ? (
             <p className="py-12 text-center text-xs text-ink-faint italic">
               No segments match the current filter.
@@ -362,12 +375,13 @@ export default function TranscriptView({
                   verified={!!verified[segment.id]}
                   edits={edits}
                   dimension={dimension}
-                  expanded={segment.id === expandedSegmentId || segment.id === hoveredId}
+                  expanded={revealAll || segment.id === expandedSegmentId || segment.id === hoveredId}
                   onToggleExpand={onToggleExpand}
                   onPlaySegment={onPlaySegment}
                   onHover={handleHover}
                   segmentRisk={riskOf(segment)}
                   collapsedHighUnderline={collapsedHighUnderline}
+                  highlightLevel={highlightLevel}
                   activeWordIndex={segment.id === activeId ? activeWordIndex : null}
                   activeTime={segment.id === activeId ? currentTime : undefined}
                   displayRiskMap={displayRiskMap}

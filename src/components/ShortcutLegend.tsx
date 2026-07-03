@@ -42,7 +42,7 @@ export default function ShortcutLegend({
     <div className="fixed bottom-[4.25rem] right-3 z-40">
       {open && (
         <div className="mb-2 w-64 bg-surface border border-border rounded-md shadow-lg p-3">
-          <p className="text-[10px] text-ink-faint uppercase tracking-[0.2em] mb-2">
+          <p className="text-[10px] text-ink-faint uppercase tracking-[0.1em] mb-2">
             Keyboard shortcuts
           </p>
           <ul className="space-y-1.5 mb-3">
@@ -68,7 +68,7 @@ export default function ShortcutLegend({
 
           {/* Researcher-only controls. Not for the reviewer. */}
           <div className="pt-2 border-t border-border">
-            <p className="text-[10px] text-ink-faint uppercase tracking-[0.2em] mb-2">
+            <p className="text-[10px] text-ink-faint uppercase tracking-[0.1em] mb-2">
               Researcher
             </p>
 

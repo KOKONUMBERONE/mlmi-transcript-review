@@ -27,6 +27,9 @@ interface Props {
 
   collapsed?: boolean
   onToggleCollapse?: () => void
+  /** Optional tab strip (Find | Assistant) rendered in place of the "Find"
+   *  title when the assistant chat is enabled (full build). */
+  tabStrip?: React.ReactNode
 }
 
 // Distinct from the risk palette (red/amber): focus uses violet so a
@@ -74,6 +77,7 @@ export default function FocusPanel({
   readOnly = false,
   collapsed = false,
   onToggleCollapse,
+  tabStrip,
 }: Props) {
   const [showHelp, setShowHelp] = useState(false)
   const hits = totalHits(result)
@@ -90,7 +94,7 @@ export default function FocusPanel({
             <path d="M4.5 2.5 8 6l-3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
-        <span className="[writing-mode:vertical-rl] text-[10px] text-brand uppercase tracking-[0.2em] font-semibold">
+        <span className="[writing-mode:vertical-rl] text-[10px] text-brand uppercase tracking-[0.1em] font-semibold">
           Find
         </span>
         {active && (
@@ -104,9 +108,11 @@ export default function FocusPanel({
     <aside className="w-80 shrink-0 border-r border-border bg-surface overflow-y-auto flex flex-col">
       <div className="px-4 py-3 border-b border-border sticky top-0 bg-surface z-10">
         <div className="flex items-center justify-between mb-2">
-          <p className="text-[10px] text-brand uppercase tracking-[0.2em] font-semibold">
-            Find
-          </p>
+          {tabStrip ?? (
+            <p className="text-[10px] text-brand uppercase tracking-[0.1em] font-semibold">
+              Find
+            </p>
+          )}
           <div className="flex items-center gap-2">
             {active && (
               <p className="text-[10px] font-mono text-ink-faint tabular-nums">
@@ -334,7 +340,7 @@ function FindResults({
                       >
                         <div className="flex items-center gap-1.5 mb-0.5">
                           <span
-                            className={`text-[9px] font-mono uppercase tracking-wide px-1 py-px rounded-sm border ${MATCH_CHIP[s.match_type]}`}
+                            className={`text-[10px] font-mono uppercase px-1 py-px rounded-sm border ${MATCH_CHIP[s.match_type]}`}
                           >
                             {MATCH_LABEL[s.match_type]}
                           </span>

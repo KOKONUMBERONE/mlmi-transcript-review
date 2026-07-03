@@ -226,7 +226,7 @@ export type EventType =
   | 'verify'
   | 'unverify'
   | 'filter_change'
-  | 'sort_change'
+  | 'sort_change' // legacy — Order sort control removed 2026-07-02; never emitted since, may appear in earlier v2 logs
   | 'export'
   | 'transcript_load'
   | 'audio_load'
@@ -246,6 +246,11 @@ export type EventType =
   | 'outline_open'
   | 'outline_part_click'
   | 'outline_chapter_click'
+  // Assistant chat (full build): metadata-only events — see the chat_* fields.
+  | 'chat_send'
+  | 'chat_answer'
+  | 'chat_citation_click'
+  | 'chat_clear'
 
 export type SeekTrigger = 'waveform' | 'segment' | 'marker' | 'keyboard' | 'programmatic' | 'word'
 
@@ -294,8 +299,14 @@ export interface LogEvent {
   occurrences?: number         // batch correct-all: how many identical tokens one decision fixed
   chosen_model?: string        // which ASR model produced the chosen candidate
   reason?: string
+  // filter_change payload. Three value namespaces share this field — match on
+  // the full string, NOT a prefix ('high' is the Show filter; 'highlights:high'
+  // is the word-highlight toggle):
+  //   Show segment filter (both builds): 'all' | 'high+med' | 'high'
+  //   Highlights toggle  (full only):    'highlights:all' | 'highlights:high'
+  //   Marks toggle       (both builds):  'marks:hover' | 'marks:always'
   filter?: string
-  sort?: string
+  sort?: string // legacy — populated only by pre-2026-07-02 sort_change events
   from_dimension?: RiskDimension
   to_dimension?: RiskDimension
   export_kind?: string
@@ -319,6 +330,12 @@ export interface LogEvent {
   chapter_title?: string
   chapter_start?: number    // seconds
   chapter_end?: number      // seconds
+  // Assistant chat (full build): metadata ONLY — message text / answers are
+  // ephemeral and must never enter the log (it is exportable).
+  chat_turn?: number        // 1-based turn index within the conversation
+  chat_chars?: number       // length of the sent question / received answer
+  chat_citations?: number   // citations attached to an answer
+  chat_latency_ms?: number  // round-trip time of the /chat call
 }
 
 export interface HistoryEntry {

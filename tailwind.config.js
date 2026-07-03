@@ -17,6 +17,37 @@ export default {
         // Mono kept for tabular timestamps / counters only.
         mono: ['JetBrains Mono', 'Menlo', 'Consolas', 'monospace'],
       },
+      // Motion is used ONLY by the Outline storyboard (SPEC §3 keeps the rest
+      // of the tool static); everything is applied via motion-safe: variants.
+      keyframes: {
+        'card-in': {
+          from: { opacity: '0', transform: 'translateY(14px) scale(0.98)' },
+          to: { opacity: '1', transform: 'none' },
+        },
+        'fade-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+        draw: {
+          from: { strokeDashoffset: '1' },
+          to: { strokeDashoffset: '0' },
+        },
+        'slide-in-r': {
+          from: { transform: 'translateX(100%)' },
+          to: { transform: 'none' },
+        },
+        'pulse-brand': {
+          '0%, 100%': { boxShadow: '0 0 0 0 rgb(var(--brand) / 0.25)' },
+          '60%': { boxShadow: '0 0 0 8px rgb(var(--brand) / 0)' },
+        },
+      },
+      animation: {
+        'card-in': 'card-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both',
+        'fade-in': 'fade-in 0.3s ease-out both',
+        draw: 'draw 0.5s ease-out both',
+        'slide-in-r': 'slide-in-r 0.25s cubic-bezier(0.22, 1, 0.36, 1) both',
+        'pulse-brand': 'pulse-brand 2.4s ease-out infinite',
+      },
       colors: {
         // Cool, calm surfaces (was warm "forensic" gray).
         surface: {
@@ -29,7 +60,7 @@ export default {
           strong: v('border-strong'),
         },
         ink: {
-          DEFAULT: v('ink'), // primary text (near-black in light)
+          DEFAULT: v('ink'), // primary text (soft near-black in light)
           muted: v('ink-muted'),
           faint: v('ink-faint'),
         },

@@ -147,7 +147,7 @@ export default function HistorySidebar({
             <path d="M7.5 2.5 4 6l3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
-        <span className="[writing-mode:vertical-rl] text-[10px] text-ink-faint uppercase tracking-[0.2em]">
+        <span className="[writing-mode:vertical-rl] text-[10px] text-ink-faint uppercase tracking-[0.1em]">
           Review
         </span>
         <span className="font-mono text-[10px] text-ink-faint tabular-nums">
@@ -173,7 +173,7 @@ export default function HistorySidebar({
       {/* Review progress — the reviewer's "how much is left" panel. */}
       <div className="px-4 py-3 border-b border-border shrink-0">
         <div className="flex items-center justify-between mb-2">
-          <p className="text-[10px] text-ink-faint uppercase tracking-[0.2em]">Review</p>
+          <p className="text-[10px] text-ink-faint uppercase tracking-[0.1em]">Review</p>
           {onToggleCollapse && (
             <button
               onClick={onToggleCollapse}
@@ -216,7 +216,7 @@ export default function HistorySidebar({
 
       {/* Recent changes */}
       <div className="px-4 pt-3 pb-1 flex items-center justify-between shrink-0">
-        <p className="text-[10px] text-ink-faint uppercase tracking-[0.2em]">Recent changes</p>
+        <p className="text-[10px] text-ink-faint uppercase tracking-[0.1em]">Recent changes</p>
         <p className="text-[10px] font-mono text-ink-faint tabular-nums">
           {history.length} {history.length === 1 ? 'entry' : 'entries'}
         </p>
@@ -282,7 +282,7 @@ export default function HistorySidebar({
       <div className="border-t border-border px-4 py-2 shrink-0">
         <button
           onClick={() => setExportOpen((v) => !v)}
-          className="w-full flex items-center justify-between text-[10px] text-ink-faint uppercase tracking-[0.2em] hover:text-ink"
+          className="w-full flex items-center justify-between text-[10px] text-ink-faint uppercase tracking-[0.1em] hover:text-ink"
         >
           <span>Export</span>
           <svg
@@ -309,21 +309,21 @@ export default function HistorySidebar({
               Download report (HTML)
             </button>
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-ink-faint uppercase tracking-widest w-20 shrink-0" title="Chronological log of every edit, deletion, and verification.">
+              <span className="text-[11px] text-ink-muted w-20 shrink-0" title="Chronological log of every edit, deletion, and verification.">
                 Audit log
               </span>
               <ExportButton label="CSV" disabled={!hasHistory} onClick={() => { exportHistoryAsCSV(history); onExport?.('audit_csv', history.length) }} />
               <ExportButton label="JSON" disabled={!hasHistory} onClick={() => { exportHistoryAsJSON(history); onExport?.('audit_json', history.length) }} />
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-ink-faint uppercase tracking-widest w-20 shrink-0" title="The reviewed transcript itself, with all edits and deletions applied (active model only).">
+              <span className="text-[11px] text-ink-muted w-20 shrink-0" title="The reviewed transcript itself, with all edits and deletions applied (active model only).">
                 Reviewed
               </span>
               <ExportButton label="TXT" onClick={() => { exportTranscriptText(exportArgs); onExport?.('transcript_txt', totalSegments) }} />
               <ExportButton label="JSON" onClick={() => { exportTranscriptJson(exportArgs); onExport?.('transcript_json', totalSegments) }} />
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-ink-faint uppercase tracking-widest w-20 shrink-0" title="The original multi-model pipeline output, unedited. Re-upload it later to reuse this audio without re-transcribing.">
+              <span className="text-[11px] text-ink-muted w-20 shrink-0" title="The original multi-model pipeline output, unedited. Re-upload it later to reuse this audio without re-transcribing.">
                 Original
               </span>
               <ExportButton label="JSON" onClick={() => { exportSourceTranscriptJson({ ...exportArgs, transcript: sourceTranscript ?? transcript }); onExport?.('transcript_source_json', totalSegments) }} />

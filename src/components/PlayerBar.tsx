@@ -32,7 +32,7 @@ export default function PlayerBar({
     <div className="h-14 grid grid-cols-[1fr_auto_1fr] items-center px-5 bg-surface border-t border-border shrink-0">
       {/* Reviewer identity (left cell) */}
       <label className="flex items-center gap-1.5 justify-self-start" title="Recorded on every audit-trail entry">
-        <span className="text-[10px] text-ink-muted uppercase tracking-widest">
+        <span className="text-[11px] text-ink-muted">
           Reviewer
         </span>
         <input
@@ -85,7 +85,7 @@ export default function PlayerBar({
         {audio.duration > 0 && (
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-risk-high ring-2 ring-surface shadow"
+            className="pointer-events-none absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-brand ring-2 ring-surface shadow"
             style={{ left: `${(audio.currentTime / audio.duration) * 100}%` }}
           />
         )}
@@ -97,7 +97,7 @@ export default function PlayerBar({
 
       {/* Speed (right cell) */}
       <label className="flex items-center gap-1.5 justify-self-end">
-        <span className="text-[10px] text-ink-muted uppercase tracking-widest">Speed</span>
+        <span className="text-[11px] text-ink-muted">Speed</span>
         <select
           defaultValue="1"
           onChange={(e) => {
