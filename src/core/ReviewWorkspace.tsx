@@ -148,10 +148,11 @@ export default function ReviewWorkspace({
   // revoke it cleanly when a new recording arrives or the file changes.
   const [recordingDownloadUrl, setRecordingDownloadUrl] = useState<string | null>(null)
   // UI: collapsible side panels + shift-click range-verify anchor.
-  const [focusCollapsed, setFocusCollapsed] = useState(false)
-  // Right audit/review panel starts collapsed to keep the initial view calm;
-  // the reviewer expands it when they want the change log + exports.
-  const [auditCollapsed, setAuditCollapsed] = useState(true)
+  // Startup layout: the left Find/Assistant/Outline column starts collapsed
+  // (opened on demand) while the right review/audit panel stays open, so the
+  // initial focus is the transcript + its progress.
+  const [focusCollapsed, setFocusCollapsed] = useState(true)
+  const [auditCollapsed, setAuditCollapsed] = useState(false)
   // Left column tab (full build with allowChat): Find | Assistant.
   const [leftTab, setLeftTab] = useState<LeftTab>('find')
   // Assistant chat — ephemeral by design: in-memory only, cleared on transcript
