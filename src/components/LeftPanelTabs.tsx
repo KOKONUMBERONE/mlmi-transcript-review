@@ -8,9 +8,13 @@ export type LeftTab = 'find' | 'chat'
 export function LeftTabStrip({
   active,
   onSelect,
+  onOpenOutline,
 }: {
   active: LeftTab
   onSelect: (tab: LeftTab) => void
+  /** When set, an "Outline" launcher appears after Assistant. It is a button,
+   *  not a selectable panel — clicking it opens the full-screen storyboard. */
+  onOpenOutline?: () => void
 }) {
   const cls = (tab: LeftTab) =>
     [
@@ -27,6 +31,15 @@ export function LeftTabStrip({
       <button role="tab" aria-selected={active === 'chat'} className={cls('chat')} onClick={() => onSelect('chat')}>
         Assistant
       </button>
+      {onOpenOutline && (
+        <button
+          onClick={onOpenOutline}
+          title="Open the recording storyboard"
+          className="text-[10px] uppercase tracking-[0.1em] font-semibold pb-0.5 border-b-2 border-transparent text-ink-faint hover:text-ink transition-colors"
+        >
+          Outline
+        </button>
+      )}
     </div>
   )
 }
@@ -36,10 +49,13 @@ export function LeftTabStrip({
 export function CollapsedLeftRail({
   findHits,
   onExpand,
+  onOpenOutline,
 }: {
   /** Find hit count shown under its label when a retrieval is active. */
   findHits?: number | null
   onExpand: (tab: LeftTab) => void
+  /** Same Outline launcher as the expanded strip (full build). */
+  onOpenOutline?: () => void
 }) {
   return (
     <aside className="w-9 shrink-0 border-r border-border bg-surface flex flex-col items-center gap-3 py-3">
@@ -69,6 +85,15 @@ export function CollapsedLeftRail({
       >
         Assistant
       </button>
+      {onOpenOutline && (
+        <button
+          onClick={onOpenOutline}
+          title="Open the recording storyboard"
+          className="[writing-mode:vertical-rl] text-[10px] text-ink-faint uppercase tracking-[0.1em] font-semibold hover:text-brand"
+        >
+          Outline
+        </button>
+      )}
     </aside>
   )
 }

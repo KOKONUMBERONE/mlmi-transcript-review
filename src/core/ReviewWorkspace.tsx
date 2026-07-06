@@ -149,7 +149,9 @@ export default function ReviewWorkspace({
   const [recordingDownloadUrl, setRecordingDownloadUrl] = useState<string | null>(null)
   // UI: collapsible side panels + shift-click range-verify anchor.
   const [focusCollapsed, setFocusCollapsed] = useState(false)
-  const [auditCollapsed, setAuditCollapsed] = useState(false)
+  // Right audit/review panel starts collapsed to keep the initial view calm;
+  // the reviewer expands it when they want the change log + exports.
+  const [auditCollapsed, setAuditCollapsed] = useState(true)
   // Left column tab (full build with allowChat): Find | Assistant.
   const [leftTab, setLeftTab] = useState<LeftTab>('find')
   // Assistant chat — ephemeral by design: in-memory only, cleared on transcript
@@ -172,6 +174,14 @@ export default function ReviewWorkspace({
   // The standing "AI-generated" notice can be dismissed (session-level — it
   // reappears on reload so the legal reminder is never permanently gone).
   const [warningDismissed, setWarningDismissed] = useState(false)
+  // The machine-generated-transcript notice shows briefly, then auto-dismisses
+  // after 4s so it doesn't sit in the way (it reappears on reload). Manual
+  // dismissal (the ✕) still works and cancels the timer.
+  useEffect(() => {
+    if (warningDismissed) return
+    const t = setTimeout(() => setWarningDismissed(true), 4000)
+    return () => clearTimeout(t)
+  }, [warningDismissed])
 
   const availableModels = useMemo(() => modelsOf(transcript), [transcript])
   const [model, setModel] = useState<ModelName>(availableModels[0])
@@ -1635,8 +1645,6 @@ export default function ReviewWorkspace({
         canTranscribe={!!audioBlob}
         transcribing={transcribing}
         onTranscribe={handleTranscribe}
-        allowOutline={config.allowOutline}
-        onOpenOutline={handleOpenOutline}
         allowChangeToggle={config.allowChangeToggle}
         showChanges={showChanges}
         onToggleChanges={() => setShowChanges((v) => !v)}
@@ -1727,6 +1735,7 @@ export default function ReviewWorkspace({
                 setLeftTab(tab)
                 setFocusCollapsed(false)
               }}
+              onOpenOutline={config.allowOutline ? handleOpenOutline : undefined}
             />
           ) : config.allowChat && leftTab === 'chat' ? (
             <ChatPanel
@@ -1736,7 +1745,13 @@ export default function ReviewWorkspace({
               onSend={handleChatSend}
               onClear={handleChatClear}
               onCitationClick={handleChatCitationClick}
-              tabStrip={<LeftTabStrip active="chat" onSelect={setLeftTab} />}
+              tabStrip={
+                <LeftTabStrip
+                  active="chat"
+                  onSelect={setLeftTab}
+                  onOpenOutline={config.allowOutline ? handleOpenOutline : undefined}
+                />
+              }
               onToggleCollapse={() => setFocusCollapsed(true)}
             />
           ) : (
@@ -1755,7 +1770,13 @@ export default function ReviewWorkspace({
               onToggleCollapse={() => setFocusCollapsed((v) => !v)}
               onSnippetClick={handleFocusSnippetClick}
               tabStrip={
-                config.allowChat ? <LeftTabStrip active="find" onSelect={setLeftTab} /> : undefined
+                config.allowChat ? (
+                  <LeftTabStrip
+                    active="find"
+                    onSelect={setLeftTab}
+                    onOpenOutline={config.allowOutline ? handleOpenOutline : undefined}
+                  />
+                ) : undefined
               }
             />
           ))}
@@ -1825,6 +1846,9 @@ export default function ReviewWorkspace({
         onReviewerChange={setReviewer}
         onSpeedChange={handleSpeedChange}
         onTogglePlay={togglePlayWithRewind}
+        onSkip={(delta) =>
+          seekWithLog(Math.max(0, Math.min(audio.duration, audio.currentTime + delta)), 'keyboard')
+        }
       />
 
       <ShortcutLegend

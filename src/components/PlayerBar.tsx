@@ -8,6 +8,9 @@ interface Props {
   // Play/pause with the auto-rewind-on-resume convention; falls back to the raw
   // audio toggle when not provided.
   onTogglePlay?: () => void
+  // Relative seek for the ±10s buttons (logged as a 'keyboard' seek, like the
+  // arrow-key shortcuts); falls back to a raw clamped audio.seek when absent.
+  onSkip?: (deltaSeconds: number) => void
 }
 
 function formatTime(seconds: number): string {
@@ -25,8 +28,14 @@ export default function PlayerBar({
   onReviewerChange,
   onSpeedChange,
   onTogglePlay,
+  onSkip,
 }: Props) {
   const reviewerMissing = reviewer.trim() === ''
+
+  const skip = (delta: number) => {
+    if (onSkip) onSkip(delta)
+    else audio.seek(Math.max(0, Math.min(audio.duration, audio.currentTime + delta)))
+  }
 
   return (
     <div className="h-14 grid grid-cols-[1fr_auto_1fr] items-center px-5 bg-surface border-t border-border shrink-0">
@@ -50,7 +59,20 @@ export default function PlayerBar({
       </label>
 
       {/* Transport cluster — perfectly centred by the 1fr/auto/1fr grid */}
-      <div className="flex items-center gap-3 justify-self-center">
+      <div className="flex items-center gap-2 justify-self-center">
+      <button
+        onClick={() => skip(-10)}
+        disabled={!audio.ready}
+        aria-label="Back 10 seconds"
+        title="Back 10 seconds"
+        className="w-8 h-8 flex items-center justify-center rounded text-ink-muted hover:text-ink hover:bg-surface-muted disabled:opacity-40 transition-colors shrink-0"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+          <path d="M3 3v5h5" />
+          <text x="12" y="15.5" fontSize="8.5" fontWeight="700" fill="currentColor" stroke="none" textAnchor="middle">10</text>
+        </svg>
+      </button>
       <button
         onClick={onTogglePlay ?? audio.togglePlay}
         disabled={!audio.ready}
@@ -67,6 +89,19 @@ export default function PlayerBar({
             <polygon points="2,1 11,6 2,11" />
           </svg>
         )}
+      </button>
+      <button
+        onClick={() => skip(10)}
+        disabled={!audio.ready}
+        aria-label="Forward 10 seconds"
+        title="Forward 10 seconds"
+        className="w-8 h-8 flex items-center justify-center rounded text-ink-muted hover:text-ink hover:bg-surface-muted disabled:opacity-40 transition-colors shrink-0"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+          <path d="M21 3v5h-5" />
+          <text x="12" y="15.5" fontSize="8.5" fontWeight="700" fill="currentColor" stroke="none" textAnchor="middle">10</text>
+        </svg>
       </button>
 
       <span className="font-mono text-xs text-ink-muted w-10 text-right tabular-nums shrink-0">

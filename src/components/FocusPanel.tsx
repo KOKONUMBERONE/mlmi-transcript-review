@@ -212,7 +212,7 @@ function FindControls({
           }
         }}
         rows={3}
-        placeholder={'weapon: gun, knife\nsilver hatchback\nwho paid for the taxi'}
+        placeholder={'Add a name, object, or topic…'}
         className="w-full text-[13px] leading-snug border border-border rounded px-2 py-1.5 bg-surface resize-y placeholder:text-ink-faint/60 focus:outline-none focus:ring-1 focus:ring-brand/50 focus:border-brand/50"
       />
 

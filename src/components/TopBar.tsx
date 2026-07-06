@@ -35,10 +35,6 @@ interface Props {
   canTranscribe?: boolean
   transcribing?: boolean
   onTranscribe?: () => void
-  // "Outline" opens the centre sub-page (chaptered table of contents of the
-  // whole recording). Full build only — the study uses short, frozen clips.
-  allowOutline?: boolean
-  onOpenOutline?: () => void
   // Track-changes view toggle (full build only; study keeps it always on).
   allowChangeToggle?: boolean
   showChanges?: boolean
@@ -76,13 +72,6 @@ function StopIcon() {
   )
 }
 
-function OutlineIcon() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3">
-      <path d="M2 2.5h1M2 6h1M2 9.5h1M4.5 2.5h5.5M4.5 6h5.5M4.5 9.5h5.5" strokeLinecap="round" />
-    </svg>
-  )
-}
 
 function DownloadIcon() {
   return (
@@ -145,8 +134,6 @@ export default function TopBar({
   canTranscribe = false,
   transcribing = false,
   onTranscribe,
-  allowOutline = false,
-  onOpenOutline,
   allowChangeToggle = false,
   showChanges = true,
   onToggleChanges,
@@ -163,7 +150,6 @@ export default function TopBar({
     allowUpload ||
     allowRecord ||
     allowTranscribe ||
-    allowOutline ||
     allowRiskRegime ||
     allowChangeToggle ||
     Boolean(allowThemeToggle)
@@ -350,21 +336,6 @@ export default function TopBar({
                         Save recording
                       </MenuItem>
                     )}
-                  </MenuSection>
-                )}
-
-                {allowOutline && (
-                  <MenuSection label="Tools">
-                    <MenuItem
-                      icon={<OutlineIcon />}
-                      title="Open a chaptered outline of the whole recording"
-                      onClick={() => {
-                        onOpenOutline?.()
-                        close()
-                      }}
-                    >
-                      Outline
-                    </MenuItem>
                   </MenuSection>
                 )}
 
