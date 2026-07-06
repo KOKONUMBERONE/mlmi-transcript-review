@@ -315,9 +315,7 @@ function FindResults({
       )}
       {!active || !result ? (
         <p className="py-8 px-2 text-center text-[11px] text-ink-faint italic leading-relaxed">
-          Declare the people, objects, or topics that matter for this case.
-          Matching spans are elevated to high risk and the audio is anchored
-          to each piece of evidence.
+          Add the names, objects, or topics that matter — matches jump the audio there.
         </p>
       ) : hits === 0 ? (
         <p className="py-8 px-2 text-center text-[11px] text-ink-faint italic">

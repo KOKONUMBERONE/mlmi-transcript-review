@@ -3,6 +3,7 @@ import type { EditState, FocusWordHit, HighlightLayer, ModelName, Risk, Segment 
 import { segmentRiskWithFocus } from '../lib/segmentRisk'
 import { combinedSegmentRisk } from '../lib/displayRisk'
 import Segment from './Segment'
+import { Menu, MenuRow } from './Menu'
 
 interface Props {
   transcript: Transcript
@@ -249,10 +250,9 @@ export default function TranscriptView({
             <h1 className="text-sm font-semibold text-ink">
               {heading ?? 'Case 447'}
             </h1>
-            <p className="font-mono text-[11px] text-ink-faint">{model}</p>
           </div>
 
-          {/* Risk chips + view controls (hidden in C1 — plain text). */}
+          {/* Risk chips + a "View" menu (hidden in C1 — plain text). */}
           {showViewControls && (
           <div className="flex flex-wrap items-center gap-2 text-[11px]">
             <span className={`px-2 py-0.5 rounded-full font-mono tabular-nums ${RISK_CHIP.high}`}>
@@ -261,51 +261,78 @@ export default function TranscriptView({
             <span className={`px-2 py-0.5 rounded-full font-mono tabular-nums ${RISK_CHIP.med}`}>
               {counts.med} med
             </span>
-            <span className={`px-2 py-0.5 rounded-full font-mono tabular-nums ${RISK_CHIP.low}`}>
-              {counts.low} low
-            </span>
 
-            <span className="ml-auto flex items-center gap-2">
-              <select
-                value={filter}
-                onChange={(e) => setFilterAndLog(e.target.value as RiskFilter)}
-                title="Show"
-                className="text-[11px] border border-border rounded-md px-1.5 py-0.5 bg-surface hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
-              >
-                <option value="all">All segments</option>
-                <option value="high+med">High + medium</option>
-                <option value="high">High risk only</option>
-              </select>
-              {showHighlightLevel && (
-                <select
-                  value={highlightLevel}
-                  onChange={(e) => setHighlightLevelAndLog(e.target.value as HighlightLevel)}
-                  title="Which word highlights are shown — hiding medium keeps only the red high-risk marks"
-                  className="text-[11px] border border-border rounded-md px-1.5 py-0.5 bg-surface hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
-                >
-                  <option value="all">All highlights</option>
-                  <option value="high">Hide medium</option>
-                </select>
+            <Menu
+              className="ml-auto"
+              align="right"
+              title="View options"
+              triggerClassName="flex items-center gap-1 text-[11px] text-ink-muted hover:text-ink border border-border rounded-md px-2 py-0.5 bg-surface hover:border-border-strong transition-colors"
+              trigger={(open) => (
+                <>
+                  View
+                  <svg
+                    width="8"
+                    height="8"
+                    viewBox="0 0 8 8"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.3"
+                    className={`transition-transform ${open ? 'rotate-180' : ''}`}
+                  >
+                    <path d="M1.5 3 4 5.5 6.5 3" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </>
               )}
-              {showRevealAll && (
-                <button
-                  onClick={() => setRevealAllAndLog(!revealAll)}
-                  title={
-                    revealAll
-                      ? 'Word marks are pinned on every segment — click to reveal on hover/play only'
-                      : 'Word marks appear on hover/play — click to pin them on every segment'
-                  }
-                  className={[
-                    'text-[11px] px-2 py-0.5 rounded-md border transition-colors',
-                    revealAll
-                      ? 'border-brand/50 text-brand bg-brand-bg'
-                      : 'border-border text-ink-muted bg-surface hover:border-border-strong',
-                  ].join(' ')}
-                >
-                  {revealAll ? 'Marks: always' : 'Marks: hover'}
-                </button>
+            >
+              {() => (
+                <>
+                  <MenuRow label="Show">
+                    <select
+                      value={filter}
+                      onChange={(e) => setFilterAndLog(e.target.value as RiskFilter)}
+                      className="text-[11px] border border-border rounded-md px-1.5 py-0.5 bg-surface hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
+                    >
+                      <option value="all">All segments</option>
+                      <option value="high+med">High + medium</option>
+                      <option value="high">High risk only</option>
+                    </select>
+                  </MenuRow>
+                  {showHighlightLevel && (
+                    <MenuRow label="Highlights">
+                      <select
+                        value={highlightLevel}
+                        onChange={(e) => setHighlightLevelAndLog(e.target.value as HighlightLevel)}
+                        title="Hiding medium keeps only the red high-risk marks"
+                        className="text-[11px] border border-border rounded-md px-1.5 py-0.5 bg-surface hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
+                      >
+                        <option value="all">All highlights</option>
+                        <option value="high">Hide medium</option>
+                      </select>
+                    </MenuRow>
+                  )}
+                  {showRevealAll && (
+                    <MenuRow label="Marks">
+                      <button
+                        onClick={() => setRevealAllAndLog(!revealAll)}
+                        title={
+                          revealAll
+                            ? 'Word marks are pinned on every segment — click to reveal on hover/play only'
+                            : 'Word marks appear on hover/play — click to pin them on every segment'
+                        }
+                        className={[
+                          'text-[11px] px-2 py-0.5 rounded-md border transition-colors',
+                          revealAll
+                            ? 'border-brand/50 text-brand bg-brand-bg'
+                            : 'border-border text-ink-muted bg-surface hover:border-border-strong',
+                        ].join(' ')}
+                      >
+                        {revealAll ? 'Always' : 'On hover'}
+                      </button>
+                    </MenuRow>
+                  )}
+                </>
               )}
-            </span>
+            </Menu>
           </div>
           )}
 
@@ -349,7 +376,6 @@ export default function TranscriptView({
               >
                 Un-verify all shown
               </button>
-              <span className="text-ink-faint hidden md:inline">· or Shift-click a segment's Verify to select a range</span>
             </div>
           )}
         </div>

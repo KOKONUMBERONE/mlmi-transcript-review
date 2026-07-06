@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import type { ModelName, RiskDimension } from '../types'
 import type { RiskRegime } from '../core/config'
+import { Menu, MenuItem, MenuSection } from './Menu'
 
 interface Props {
   model: ModelName
@@ -92,6 +93,24 @@ function DownloadIcon() {
   )
 }
 
+function MoreIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden>
+      <circle cx="3" cy="7" r="1.3" />
+      <circle cx="7" cy="7" r="1.3" />
+      <circle cx="11" cy="7" r="1.3" />
+    </svg>
+  )
+}
+
+function TranscribeIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.3">
+      <path d="M2 4v2M4 2.5v5M6 1.5v7M8 3.5v3" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 function formatElapsed(ms: number): string {
   const total = Math.floor(ms / 1000)
   const m = Math.floor(total / 60)
@@ -138,6 +157,17 @@ export default function TopBar({
   const audioInputRef = useRef<HTMLInputElement>(null)
   const transcriptInputRef = useRef<HTMLInputElement>(null)
 
+  // The "⋯" menu is built entirely from full-build-only gates, so it renders
+  // nothing (and the trigger is hidden) in the study build.
+  const hasMenu =
+    allowUpload ||
+    allowRecord ||
+    allowTranscribe ||
+    allowOutline ||
+    allowRiskRegime ||
+    allowChangeToggle ||
+    Boolean(allowThemeToggle)
+
   return (
     <header className="h-14 flex items-center px-5 gap-4 bg-surface border-b border-border shrink-0">
       {/* Filename block */}
@@ -154,135 +184,32 @@ export default function TopBar({
         </span>
       </div>
 
-      {/* Upload + record controls (hidden when the study build locks them). */}
-      {(allowUpload || allowRecord) && (
-      <div className="flex items-center gap-1">
-        <input
-          ref={audioInputRef}
-          type="file"
-          accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac,.aac,.webm,.mp4"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0]
-            if (f) onUploadAudio(f)
-            e.target.value = ''
-          }}
-        />
-        <input
-          ref={transcriptInputRef}
-          type="file"
-          accept=".json,application/json"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0]
-            if (f) onUploadTranscript(f)
-            e.target.value = ''
-          }}
-        />
-
-        <button
-          onClick={() => audioInputRef.current?.click()}
-          className="flex items-center gap-1 text-[11px] text-ink-muted hover:text-ink px-2 py-1 rounded-md border border-border hover:border-border-strong transition-colors"
-          title="Replace the placeholder audio with a real .wav / .mp3 file"
-        >
-          <UploadIcon />
-          Audio
-        </button>
-        <button
-          onClick={() => transcriptInputRef.current?.click()}
-          className="flex items-center gap-1 text-[11px] text-ink-muted hover:text-ink px-2 py-1 rounded-md border border-border hover:border-border-strong transition-colors"
-          title="Replace the mock transcript with a .json file matching the Transcript type"
-        >
-          <UploadIcon />
-          Transcript
-        </button>
-
-        {allowTranscribe && (
-          <button
-            onClick={onTranscribe}
-            disabled={!canTranscribe || transcribing}
-            className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md border transition-colors border-focus/40 text-focus bg-focus-bg hover:border-focus/60 disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-surface disabled:text-ink-muted disabled:border-border"
-            title={canTranscribe ? 'Run the ASR models on the loaded audio' : 'Load an audio file first'}
-          >
-            {transcribing ? (
-              <>
-                <svg className="animate-spin" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <circle cx="5" cy="5" r="3.5" strokeOpacity="0.25" />
-                  <path d="M5 1.5a3.5 3.5 0 0 1 3.5 3.5" strokeLinecap="round" />
-                </svg>
-                Transcribing…
-              </>
-            ) : (
-              <>
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.3">
-                  <path d="M2 4v2M4 2.5v5M6 1.5v7M8 3.5v3" strokeLinecap="round" />
-                </svg>
-                Transcribe
-              </>
-            )}
-          </button>
-        )}
-
-        <button
-          onClick={onToggleRecord}
-          disabled={!recordingSupported}
-          className={[
-            'flex items-center gap-1 text-[11px] px-2 py-1 rounded-md border transition-colors',
-            recording
-              ? 'border-risk-high/40 text-risk-high bg-risk-high-bg hover:border-risk-high/60'
-              : 'border-border text-ink-muted hover:text-ink hover:border-border-strong disabled:opacity-40 disabled:hover:text-ink-muted disabled:hover:border-border',
-          ].join(' ')}
-          title={
-            recordingSupported
-              ? recording
-                ? 'Stop recording and load it as the current audio'
-                : 'Record audio from your microphone'
-              : 'Recording is not supported in this browser'
-          }
-        >
-          {recording ? (
-            <>
-              <span
-                className="w-1.5 h-1.5 rounded-full bg-risk-high animate-pulse"
-                aria-hidden
-              />
-              <StopIcon />
-              <span className="font-mono tabular-nums">
-                {formatElapsed(recordingElapsedMs)}
-              </span>
-            </>
-          ) : (
-            <>
-              <MicIcon />
-              Record
-            </>
-          )}
-        </button>
-
-        {recordingDownloadUrl && recordingDownloadName && !recording && (
-          <a
-            href={recordingDownloadUrl}
-            download={recordingDownloadName}
-            className="flex items-center gap-1 text-[11px] text-ink-muted hover:text-ink px-2 py-1 rounded-md border border-border hover:border-border-strong transition-colors"
-            title="Save the recorded audio to disk (for external transcription)"
-          >
-            <DownloadIcon />
-            Save
-          </a>
-        )}
-      </div>
-      )}
-
-      {/* Outline sub-page launcher (full build only). */}
-      {allowOutline && (
-        <button
-          onClick={onOpenOutline}
-          className="flex items-center gap-1 text-[11px] text-ink-muted hover:text-focus px-2 py-1 rounded-md border border-border hover:border-focus/50 transition-colors"
-          title="Open a chaptered outline of the whole recording"
-        >
-          <OutlineIcon />
-          Outline
-        </button>
+      {/* Hidden file inputs — triggered from the "⋯" menu's File rows. */}
+      {allowUpload && (
+        <>
+          <input
+            ref={audioInputRef}
+            type="file"
+            accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac,.aac,.webm,.mp4"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              if (f) onUploadAudio(f)
+              e.target.value = ''
+            }}
+          />
+          <input
+            ref={transcriptInputRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              if (f) onUploadTranscript(f)
+              e.target.value = ''
+            }}
+          />
+        </>
       )}
 
       {/* Spacer: pushes the config group to the right (playback moved to the
@@ -321,69 +248,6 @@ export default function TopBar({
         </label>
         )}
 
-        {allowRiskRegime && (
-          <button
-            onClick={() =>
-              onRiskRegimeChange?.(riskRegime === 'deployment' ? 'study' : 'deployment')
-            }
-            title="Flagging regime for the Combined view — Deployment: quiet (statutory always-red + require both signals + per-segment budget). Study: importance-dominant, denser. Click to switch."
-            className={[
-              'flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-md border transition-colors',
-              riskRegime === 'study'
-                ? 'border-accent/60 text-ink bg-accent/10'
-                : 'border-border text-ink-muted bg-surface hover:border-border-strong',
-            ].join(' ')}
-          >
-            <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3">
-              <path d="M2 3.5h8M2 8.5h8" strokeLinecap="round" />
-              <circle cx={riskRegime === 'study' ? 8 : 4} cy="3.5" r="1.5" fill="currentColor" stroke="none" />
-              <circle cx={riskRegime === 'study' ? 4 : 8} cy="8.5" r="1.5" fill="currentColor" stroke="none" />
-            </svg>
-            {riskRegime === 'study' ? 'Flagging: Study' : 'Flagging: Deployment'}
-          </button>
-        )}
-
-        {allowChangeToggle && (
-          <button
-            onClick={onToggleChanges}
-            title={showChanges ? 'Hide reviewer changes (clean read)' : 'Show reviewer changes'}
-            className={[
-              'flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-md border transition-colors',
-              showChanges
-                ? 'border-change-ins/50 text-change-ins bg-change-ins-bg'
-                : 'border-border text-ink-muted bg-surface hover:border-border-strong',
-            ].join(' ')}
-          >
-            <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3">
-              <path d="M8.5 1.5 10.5 3.5 4 10 1.5 10.5 2 8z" strokeLinejoin="round" />
-            </svg>
-            {showChanges ? 'Changes: on' : 'Changes: off'}
-          </button>
-        )}
-
-        {allowThemeToggle && (
-          <button
-            onClick={onToggleTheme}
-            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            aria-label="Toggle dark mode"
-            className="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-md border border-border text-ink-muted bg-surface hover:border-border-strong transition-colors"
-          >
-            {theme === 'dark' ? (
-              // Sun — click to go light
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2">
-                <circle cx="6" cy="6" r="2.3" />
-                <path d="M6 .8v1.4M6 9.8v1.4M.8 6h1.4M9.8 6h1.4M2.3 2.3l1 1M8.7 8.7l1 1M9.7 2.3l-1 1M3.3 8.7l-1 1" strokeLinecap="round" />
-              </svg>
-            ) : (
-              // Moon — click to go dark
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
-                <path d="M9.5 7.2A4 4 0 0 1 4.8 2.5a.5.5 0 0 0-.7-.6A4.5 4.5 0 1 0 10.1 8a.5.5 0 0 0-.6-.8z" />
-              </svg>
-            )}
-            {theme === 'dark' ? 'Light' : 'Dark'}
-          </button>
-        )}
-
         {predicting && (
           <span
             className="flex items-center gap-1.5 text-[11px] text-ink-muted"
@@ -403,6 +267,140 @@ export default function TopBar({
             </svg>
             scoring…
           </span>
+        )}
+
+        {/* Everything non-essential lives here (full build only — every row is
+            gated by a full-only flag, so this button is absent in the study). */}
+        {hasMenu && (
+          <Menu
+            align="right"
+            title="More"
+            triggerClassName="flex items-center text-ink-muted hover:text-ink px-1.5 py-1 rounded-md border border-border hover:border-border-strong transition-colors"
+            trigger={() => <MoreIcon />}
+          >
+            {(close) => (
+              <>
+                {(allowUpload || allowTranscribe || allowRecord) && (
+                  <MenuSection label="File">
+                    {allowUpload && (
+                      <MenuItem
+                        icon={<UploadIcon />}
+                        title="Replace the placeholder audio with a real .wav / .mp3 file"
+                        onClick={() => {
+                          audioInputRef.current?.click()
+                          close()
+                        }}
+                      >
+                        Audio…
+                      </MenuItem>
+                    )}
+                    {allowUpload && (
+                      <MenuItem
+                        icon={<UploadIcon />}
+                        title="Replace the mock transcript with a .json file"
+                        onClick={() => {
+                          transcriptInputRef.current?.click()
+                          close()
+                        }}
+                      >
+                        Transcript…
+                      </MenuItem>
+                    )}
+                    {allowTranscribe && (
+                      <MenuItem
+                        icon={<TranscribeIcon />}
+                        disabled={!canTranscribe || transcribing}
+                        title={canTranscribe ? 'Run the ASR models on the loaded audio' : 'Load an audio file first'}
+                        onClick={() => {
+                          onTranscribe?.()
+                          close()
+                        }}
+                      >
+                        {transcribing ? 'Transcribing…' : 'Transcribe'}
+                      </MenuItem>
+                    )}
+                    {allowRecord && (
+                      <MenuItem
+                        icon={recording ? <StopIcon /> : <MicIcon />}
+                        disabled={!recordingSupported}
+                        active={recording}
+                        title={
+                          recordingSupported
+                            ? recording
+                              ? 'Stop recording and load it as the current audio'
+                              : 'Record audio from your microphone'
+                            : 'Recording is not supported in this browser'
+                        }
+                        onClick={() => {
+                          onToggleRecord()
+                          close()
+                        }}
+                      >
+                        {recording ? `Stop recording (${formatElapsed(recordingElapsedMs)})` : 'Record'}
+                      </MenuItem>
+                    )}
+                    {recordingDownloadUrl && recordingDownloadName && !recording && (
+                      <MenuItem
+                        icon={<DownloadIcon />}
+                        href={recordingDownloadUrl}
+                        download={recordingDownloadName}
+                        title="Save the recorded audio to disk (for external transcription)"
+                        onClick={close}
+                      >
+                        Save recording
+                      </MenuItem>
+                    )}
+                  </MenuSection>
+                )}
+
+                {allowOutline && (
+                  <MenuSection label="Tools">
+                    <MenuItem
+                      icon={<OutlineIcon />}
+                      title="Open a chaptered outline of the whole recording"
+                      onClick={() => {
+                        onOpenOutline?.()
+                        close()
+                      }}
+                    >
+                      Outline
+                    </MenuItem>
+                  </MenuSection>
+                )}
+
+                {(allowRiskRegime || allowChangeToggle || allowThemeToggle) && (
+                  <MenuSection label="Display">
+                    {allowRiskRegime && (
+                      <MenuItem
+                        active={riskRegime === 'study'}
+                        title="Flagging regime for the Combined view — Deployment: quiet · Study: importance-dominant, denser"
+                        onClick={() => onRiskRegimeChange?.(riskRegime === 'deployment' ? 'study' : 'deployment')}
+                      >
+                        Flagging: {riskRegime === 'study' ? 'Study' : 'Deployment'}
+                      </MenuItem>
+                    )}
+                    {allowChangeToggle && (
+                      <MenuItem
+                        active={showChanges}
+                        title={showChanges ? 'Hide reviewer changes (clean read)' : 'Show reviewer changes'}
+                        onClick={() => onToggleChanges?.()}
+                      >
+                        Changes: {showChanges ? 'on' : 'off'}
+                      </MenuItem>
+                    )}
+                    {allowThemeToggle && (
+                      <MenuItem
+                        title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                        onClick={() => onToggleTheme?.()}
+                      >
+                        {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+                      </MenuItem>
+                    )}
+                  </MenuSection>
+                )}
+              </>
+            )}
+          </Menu>
         )}
       </div>
     </header>
