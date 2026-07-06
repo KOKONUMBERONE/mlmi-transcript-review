@@ -210,7 +210,9 @@ export default function ReviewWorkspace({
   // Which risk dimension drives word colouring. Default to the combined
   // signal — that's the one the 2x2 policy is designed for.
   const [dimension, setDimension] = useState<RiskDimension>('combined')
-  const [predicting, setPredicting] = useState<boolean>(false)
+  // Classifier in-flight flag: still tracked around /predict calls, but no
+  // longer surfaced in the UI (the transient "scoring…" indicator was removed).
+  const [, setPredicting] = useState<boolean>(false)
   // True while the ASR service (:8001) is transcribing an uploaded/recorded
   // audio file. Drives a progress banner — transcription runs on CPU and is slow.
   const [transcribing, setTranscribing] = useState<boolean>(false)
@@ -1635,7 +1637,6 @@ export default function ReviewWorkspace({
         }
         dimension={dimension}
         onDimensionChange={handleDimensionChange}
-        predicting={predicting}
         showRiskSelect={config.allowFreeDimension}
         allowRiskRegime={config.allowRiskRegimeToggle}
         riskRegime={riskRegime}

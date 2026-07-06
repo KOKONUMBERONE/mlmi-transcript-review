@@ -1,7 +1,7 @@
 import { useRef } from 'react'
 import type { ModelName, RiskDimension } from '../types'
 import type { RiskRegime } from '../core/config'
-import { Menu, MenuItem, MenuSection } from './Menu'
+import { Menu, MenuItem, MenuRow, MenuSection } from './Menu'
 
 interface Props {
   model: ModelName
@@ -19,7 +19,6 @@ interface Props {
   recordingDownloadName: string | null
   dimension: RiskDimension
   onDimensionChange: (d: RiskDimension) => void
-  predicting: boolean
   // Study build gates: hide the free risk toggle and the upload/record
   // controls when the condition is locked by the experiment.
   showRiskSelect?: boolean
@@ -107,6 +106,10 @@ function formatElapsed(ms: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
+// Shared style for the visible File toolbar buttons in the header.
+const TOOL_BTN =
+  'flex items-center gap-1 text-[11px] text-ink-muted hover:text-ink px-2 py-1 rounded-md border border-border hover:border-border-strong transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-ink-muted disabled:hover:border-border'
+
 export default function TopBar({
   model,
   availableModels,
@@ -123,7 +126,6 @@ export default function TopBar({
   recordingDownloadName,
   dimension,
   onDimensionChange,
-  predicting,
   showRiskSelect = true,
   allowRiskRegime = false,
   riskRegime = 'deployment',
@@ -144,16 +146,6 @@ export default function TopBar({
   const audioInputRef = useRef<HTMLInputElement>(null)
   const transcriptInputRef = useRef<HTMLInputElement>(null)
 
-  // The "⋯" menu is built entirely from full-build-only gates, so it renders
-  // nothing (and the trigger is hidden) in the study build.
-  const hasMenu =
-    allowUpload ||
-    allowRecord ||
-    allowTranscribe ||
-    allowRiskRegime ||
-    allowChangeToggle ||
-    Boolean(allowThemeToggle)
-
   return (
     <header className="h-14 flex items-center px-5 gap-4 bg-surface border-b border-border shrink-0">
       {/* Filename block */}
@@ -170,7 +162,7 @@ export default function TopBar({
         </span>
       </div>
 
-      {/* Hidden file inputs — triggered from the "⋯" menu's File rows. */}
+      {/* Hidden file inputs — triggered from the visible Audio / Transcript buttons. */}
       {allowUpload && (
         <>
           <input
@@ -198,150 +190,117 @@ export default function TopBar({
         </>
       )}
 
+      {/* Visible File actions (full build only — every button is flag-gated). */}
+      {(allowUpload || allowTranscribe || allowRecord) && (
+        <div className="flex items-center gap-1">
+          {allowUpload && (
+            <button
+              onClick={() => audioInputRef.current?.click()}
+              title="Replace the placeholder audio with a real .wav / .mp3 file"
+              className={TOOL_BTN}
+            >
+              <UploadIcon />
+              Audio…
+            </button>
+          )}
+          {allowUpload && (
+            <button
+              onClick={() => transcriptInputRef.current?.click()}
+              title="Replace the mock transcript with a .json file"
+              className={TOOL_BTN}
+            >
+              <UploadIcon />
+              Transcript…
+            </button>
+          )}
+          {allowTranscribe && (
+            <button
+              onClick={onTranscribe}
+              disabled={!canTranscribe || transcribing}
+              title={canTranscribe ? 'Run the ASR models on the loaded audio' : 'Load an audio file first'}
+              className={TOOL_BTN}
+            >
+              <TranscribeIcon />
+              {transcribing ? 'Transcribing…' : 'Transcribe'}
+            </button>
+          )}
+          {allowRecord && (
+            <button
+              onClick={onToggleRecord}
+              disabled={!recordingSupported}
+              title={
+                recordingSupported
+                  ? recording
+                    ? 'Stop recording and load it as the current audio'
+                    : 'Record audio from your microphone'
+                  : 'Recording is not supported in this browser'
+              }
+              className={[TOOL_BTN, recording ? 'border-warning-border/60 text-warning' : ''].join(' ')}
+            >
+              {recording ? <StopIcon /> : <MicIcon />}
+              {recording ? `Stop (${formatElapsed(recordingElapsedMs)})` : 'Record'}
+            </button>
+          )}
+          {recordingDownloadUrl && recordingDownloadName && !recording && (
+            <a
+              href={recordingDownloadUrl}
+              download={recordingDownloadName}
+              title="Save the recorded audio to disk (for external transcription)"
+              className={TOOL_BTN}
+            >
+              <DownloadIcon />
+              Save
+            </a>
+          )}
+        </div>
+      )}
+
       {/* Spacer: pushes the config group to the right (playback moved to the
           bottom bar). */}
       <div className="flex-1" />
 
       <div className="flex items-center gap-3">
-        <label className="flex items-center gap-1.5">
-          <span className="text-[11px] text-ink-faint">Model</span>
-          <select
-            value={model}
-            onChange={(e) => onModelChange(e.target.value as ModelName)}
-            className="text-xs border border-border rounded-md px-2 py-1 bg-surface text-ink hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong min-w-[11rem]"
-          >
-            {availableModels.map((name) => (
-              <option key={name} value={name}>{name}</option>
-            ))}
-          </select>
-        </label>
-
-        {showRiskSelect && (
-        <label
-          className="flex items-center gap-1.5"
-          title="Which risk signal drives the word highlights"
+        {/* Model / Risk / scoring now live in this menu (full + study). The
+            View (Model / Risk) + Display live in it. */}
+        <Menu
+          align="right"
+          title="Settings"
+          triggerClassName="flex items-center gap-1.5 text-ink-muted hover:text-ink px-1.5 py-1 rounded-md border border-border hover:border-border-strong transition-colors"
+          trigger={() => <MoreIcon />}
         >
-          <span className="text-[11px] text-ink-faint">Risk</span>
-          <select
-            value={dimension}
-            onChange={(e) => onDimensionChange(e.target.value as RiskDimension)}
-            className="text-xs border border-border rounded-md px-2 py-1 bg-surface text-ink hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
-          >
-            <option value="combined">Combined (2×2)</option>
-            <option value="uncertainty">Uncertainty</option>
-            <option value="importance">Importance</option>
-          </select>
-        </label>
-        )}
-
-        {predicting && (
-          <span
-            className="flex items-center gap-1.5 text-[11px] text-ink-muted"
-            aria-live="polite"
-          >
-            <svg
-              width="10"
-              height="10"
-              viewBox="0 0 10 10"
-              className="animate-spin"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-            >
-              <circle cx="5" cy="5" r="3.5" strokeOpacity="0.25" />
-              <path d="M5 1.5a3.5 3.5 0 0 1 3.5 3.5" strokeLinecap="round" />
-            </svg>
-            scoring…
-          </span>
-        )}
-
-        {/* Everything non-essential lives here (full build only — every row is
-            gated by a full-only flag, so this button is absent in the study). */}
-        {hasMenu && (
-          <Menu
-            align="right"
-            title="More"
-            triggerClassName="flex items-center text-ink-muted hover:text-ink px-1.5 py-1 rounded-md border border-border hover:border-border-strong transition-colors"
-            trigger={() => <MoreIcon />}
-          >
-            {(close) => (
-              <>
-                {(allowUpload || allowTranscribe || allowRecord) && (
-                  <MenuSection label="File">
-                    {allowUpload && (
-                      <MenuItem
-                        icon={<UploadIcon />}
-                        title="Replace the placeholder audio with a real .wav / .mp3 file"
-                        onClick={() => {
-                          audioInputRef.current?.click()
-                          close()
-                        }}
-                      >
-                        Audio…
-                      </MenuItem>
-                    )}
-                    {allowUpload && (
-                      <MenuItem
-                        icon={<UploadIcon />}
-                        title="Replace the mock transcript with a .json file"
-                        onClick={() => {
-                          transcriptInputRef.current?.click()
-                          close()
-                        }}
-                      >
-                        Transcript…
-                      </MenuItem>
-                    )}
-                    {allowTranscribe && (
-                      <MenuItem
-                        icon={<TranscribeIcon />}
-                        disabled={!canTranscribe || transcribing}
-                        title={canTranscribe ? 'Run the ASR models on the loaded audio' : 'Load an audio file first'}
-                        onClick={() => {
-                          onTranscribe?.()
-                          close()
-                        }}
-                      >
-                        {transcribing ? 'Transcribing…' : 'Transcribe'}
-                      </MenuItem>
-                    )}
-                    {allowRecord && (
-                      <MenuItem
-                        icon={recording ? <StopIcon /> : <MicIcon />}
-                        disabled={!recordingSupported}
-                        active={recording}
-                        title={
-                          recordingSupported
-                            ? recording
-                              ? 'Stop recording and load it as the current audio'
-                              : 'Record audio from your microphone'
-                            : 'Recording is not supported in this browser'
-                        }
-                        onClick={() => {
-                          onToggleRecord()
-                          close()
-                        }}
-                      >
-                        {recording ? `Stop recording (${formatElapsed(recordingElapsedMs)})` : 'Record'}
-                      </MenuItem>
-                    )}
-                    {recordingDownloadUrl && recordingDownloadName && !recording && (
-                      <MenuItem
-                        icon={<DownloadIcon />}
-                        href={recordingDownloadUrl}
-                        download={recordingDownloadName}
-                        title="Save the recorded audio to disk (for external transcription)"
-                        onClick={close}
-                      >
-                        Save recording
-                      </MenuItem>
-                    )}
-                  </MenuSection>
+          {() => (
+            <>
+              <MenuSection label="View">
+                <MenuRow label="Model">
+                  <select
+                    value={model}
+                    onChange={(e) => onModelChange(e.target.value as ModelName)}
+                    className="text-[11px] border border-border rounded-md px-1.5 py-0.5 bg-surface text-ink hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong max-w-[9rem]"
+                  >
+                    {availableModels.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </MenuRow>
+                {showRiskSelect && (
+                  <MenuRow label="Risk">
+                    <select
+                      value={dimension}
+                      onChange={(e) => onDimensionChange(e.target.value as RiskDimension)}
+                      title="Which risk signal drives the word highlights"
+                      className="text-[11px] border border-border rounded-md px-1.5 py-0.5 bg-surface text-ink hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
+                    >
+                      <option value="combined">Combined (2×2)</option>
+                      <option value="uncertainty">Uncertainty</option>
+                      <option value="importance">Importance</option>
+                    </select>
+                  </MenuRow>
                 )}
+              </MenuSection>
 
-                {(allowRiskRegime || allowChangeToggle || allowThemeToggle) && (
-                  <MenuSection label="Display">
-                    {allowRiskRegime && (
+              {(allowRiskRegime || allowChangeToggle || allowThemeToggle) && (
+                <MenuSection label="Display">
+                  {allowRiskRegime && (
                       <MenuItem
                         active={riskRegime === 'study'}
                         title="Flagging regime for the Combined view — Deployment: quiet · Study: importance-dominant, denser"
@@ -367,12 +326,11 @@ export default function TopBar({
                         {theme === 'dark' ? 'Light mode' : 'Dark mode'}
                       </MenuItem>
                     )}
-                  </MenuSection>
-                )}
-              </>
-            )}
-          </Menu>
-        )}
+                </MenuSection>
+              )}
+            </>
+          )}
+        </Menu>
       </div>
     </header>
   )
