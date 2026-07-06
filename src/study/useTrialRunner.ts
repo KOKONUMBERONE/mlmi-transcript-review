@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { TrialSpec } from './trials'
 
-// setup → intro → (trial → break)* → done
-export type Phase = 'setup' | 'intro' | 'trial' | 'break' | 'done'
+// setup → intro → (brief? → trial → break)* → done
+// A trial carrying `briefText` (the long F trials + practice) shows a case-brief
+// screen before its review window opens; the countdown starts only on 'trial'.
+export type Phase = 'setup' | 'intro' | 'brief' | 'trial' | 'break' | 'done'
 
 export interface TrialRunner {
   phase: Phase
@@ -13,9 +15,10 @@ export interface TrialRunner {
   timeRemainingMs: number
   locked: boolean // fixed-time budget elapsed — the review window is closed
   startSession: (trials: TrialSpec[]) => void
-  beginTrials: () => void // intro → first trial
+  beginTrials: () => void // intro → first trial (or its brief)
+  beginReview: () => void // brief → trial (opens the review window / starts T)
   endTrial: () => void // trial → break (questionnaire)
-  continueNext: () => void // break → next trial, or done
+  continueNext: () => void // break → next trial (or its brief), or done
   reset: () => void
 }
 
@@ -43,6 +46,12 @@ export function useTrialRunner(): TrialRunner {
 
   const beginTrials = useCallback(() => {
     setLocked(false)
+    // First trial (index 0) — show its brief first if it has one.
+    setPhase(trials[0]?.briefText ? 'brief' : 'trial')
+  }, [trials])
+
+  const beginReview = useCallback(() => {
+    setLocked(false)
     setPhase('trial')
   }, [])
 
@@ -59,10 +68,11 @@ export function useTrialRunner(): TrialRunner {
         return i
       }
       setLocked(false)
-      setPhase('trial')
+      // Gate the next trial behind its brief screen when it carries one.
+      setPhase(trials[nextIdx]?.briefText ? 'brief' : 'trial')
       return nextIdx
     })
-  }, [trials.length])
+  }, [trials])
 
   const reset = useCallback(() => {
     clearTimer()
@@ -100,7 +110,8 @@ export function useTrialRunner(): TrialRunner {
 
   useEffect(() => () => clearTimer(), [])
 
-  const active = phase === 'trial' || phase === 'break'
+  // 'brief' also has a "current" trial (the upcoming one, whose brief we show).
+  const active = phase === 'trial' || phase === 'break' || phase === 'brief'
   return {
     phase,
     trials,
@@ -111,6 +122,7 @@ export function useTrialRunner(): TrialRunner {
     locked,
     startSession,
     beginTrials,
+    beginReview,
     endTrial,
     continueNext,
     reset,

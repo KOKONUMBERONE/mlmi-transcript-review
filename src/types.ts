@@ -271,6 +271,7 @@ export interface LogEvent {
   trial_index?: number
   difficulty?: string
   stimulus_id?: string
+  task_type?: string     // 2×2 task factor: 'general' (short read-through) | 'targeted' (long case-focused). Assistance factor is derivable from `condition`: C1→plain, C4→full.
 
   // Event-specific fields (all optional, flat for pandas):
   audio_position?: number

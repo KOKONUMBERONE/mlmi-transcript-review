@@ -81,6 +81,11 @@ export default function FocusPanel({
 }: Props) {
   const [showHelp, setShowHelp] = useState(false)
   const hits = totalHits(result)
+  // Study "general" task on the Full interface: focus is read-only with no preset
+  // terms → the panel is present (interface parity) but has nothing to search.
+  // Show a plain note instead of the search box + "declare your terms" hint, so
+  // it doesn't look broken. Never triggers in the full build (readOnly=false).
+  const dormant = readOnly && text.trim() === '' && !active
 
   if (collapsed) {
     return (
@@ -133,28 +138,37 @@ export default function FocusPanel({
           </div>
         </div>
 
-        <FindControls
-          text={text}
-          onTextChange={onTextChange}
-          onRun={onRun}
-          onClear={onClear}
-          running={running}
-          aiEnriching={aiEnriching}
-          active={active}
-          result={result}
-          readOnly={readOnly}
-          showHelp={showHelp}
-          setShowHelp={setShowHelp}
-        />
+        {dormant ? (
+          <p className="text-[11px] text-ink-faint italic leading-snug">
+            No case-focus terms for this review — read through and correct the
+            errors that change the meaning.
+          </p>
+        ) : (
+          <FindControls
+            text={text}
+            onTextChange={onTextChange}
+            onRun={onRun}
+            onClear={onClear}
+            running={running}
+            aiEnriching={aiEnriching}
+            active={active}
+            result={result}
+            readOnly={readOnly}
+            showHelp={showHelp}
+            setShowHelp={setShowHelp}
+          />
+        )}
       </div>
 
-      <FindResults
-        active={active}
-        result={result}
-        hits={hits}
-        error={error}
-        onSnippetClick={onSnippetClick}
-      />
+      {!dormant && (
+        <FindResults
+          active={active}
+          result={result}
+          hits={hits}
+          error={error}
+          onSnippetClick={onSnippetClick}
+        />
+      )}
     </aside>
   )
 }

@@ -99,6 +99,7 @@ export interface TrialContext {
   block: number
   trialIndex: number
   condition: Condition
+  task?: 'general' | 'targeted' // 2×2 task factor — stamped into the log as task_type
   difficulty: string
   stimulusId: string
   timeBudgetMs: number
@@ -108,6 +109,10 @@ export interface TrialContext {
   // placeholder. Absent → keep using defaultTranscript (pre-curation behaviour).
   transcriptUrl?: string
   audioUrl?: string
+  // Frozen focus result for the long F-Full clips. Study focus is FROZEN: when
+  // present, running focus uses this instead of calling :8000 (which fails on
+  // the deployed build). Resolved from STIMULI[id].focus.
+  focusUrl?: string
 }
 
 export default function ReviewWorkspace({
@@ -218,6 +223,9 @@ export default function ReviewWorkspace({
   // Guards the async AI merge: a stale run (user re-searched / cleared) must not
   // clobber the current result.
   const focusRunIdRef = useRef(0)
+  // Study only: the frozen FocusResult for this trial's clip (from STIMULI.focus).
+  // When set, running focus uses it directly — zero network to :8000.
+  const frozenFocusRef = useRef<FocusResult | null>(null)
   // Focus-only error (e.g. the AI pass when Ollama isn't running). Kept separate
   // from the global `errorMsg` banner so a missing local LLM degrades
   // gracefully: it surfaces *inside* the panel and never blocks lexical search
@@ -393,6 +401,7 @@ export default function ReviewWorkspace({
       condition: trial.condition,
       difficulty: trial.difficulty,
       stimulusId: trial.stimulusId,
+      taskType: trial.task,
     })
     events.log('trial_start', { time_budget_ms: trial.timeBudgetMs })
   }, [trial, events])
@@ -431,6 +440,22 @@ export default function ReviewWorkspace({
           setAudioFilename(trial.stimulusId)
         })
         .catch((e) => console.warn('Stimulus audio not loaded:', (e as Error).message))
+    }
+    // Frozen focus result (F-Full clips). Loaded up front so running focus is
+    // instant and never touches the network. Cleared for clips without one.
+    if (trial.focusUrl) {
+      fetch(trial.focusUrl)
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`focus HTTP ${r.status}`))))
+        .then((json) => {
+          if (cancelled) return
+          frozenFocusRef.current = json as FocusResult
+        })
+        .catch((e) => {
+          if (!cancelled) frozenFocusRef.current = null
+          console.warn('Frozen focus not loaded:', (e as Error).message)
+        })
+    } else {
+      frozenFocusRef.current = null
     }
     return () => {
       cancelled = true
@@ -1108,6 +1133,27 @@ export default function ReviewWorkspace({
     }
     const runId = ++focusRunIdRef.current
     setFocusError(null)
+
+    // Study build: focus is FROZEN. Use the pre-baked FocusResult shipped with
+    // the clip instead of calling :8000 (which fails on the deployed build) — so
+    // the C4 manipulation is deterministic and the study runs fully client-side.
+    // A clip with no frozen file (e.g. the dormant general-task Full panel)
+    // simply stays inactive rather than hitting the network.
+    if (!config.allowFocusFreeInput) {
+      const frozen = frozenFocusRef.current
+      if (frozen) {
+        setFocusResult(frozen)
+        setFocusActive(true)
+        const hits = frozen.terms.reduce((n, t) => n + t.snippets.length, 0)
+        events.log('focus_apply', {
+          focus_terms: items.map((i) => i.label).join(', '),
+          focus_hits: hits,
+          focus_mode: 'lexical',
+        })
+      }
+      return
+    }
+
     setFocusRunning(true)
     let lexical: FocusResult | null = null
     try {
@@ -1134,7 +1180,6 @@ export default function ReviewWorkspace({
 
     // Full build only: enrich with the local LLM in the background. A failure
     // here (Ollama down) only sets the panel error; the lexical hits stay.
-    if (!config.allowFocusFreeInput) return
     setAiEnriching(true)
     try {
       const ai = await runFocusAi(transcript, parseFocusQueries(focusText))

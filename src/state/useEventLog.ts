@@ -12,6 +12,7 @@ interface Context {
   trialIndex?: number
   difficulty?: string
   stimulusId?: string
+  taskType?: string
 }
 
 export interface EventLog {
@@ -78,6 +79,7 @@ export function useEventLog(): EventLog {
         trial_index: ctx.trialIndex,
         difficulty: ctx.difficulty,
         stimulus_id: ctx.stimulusId,
+        task_type: ctx.taskType,
         ...fields,
       })
       // Debounced backup so a crash / closed tab can't lose the session.
@@ -102,6 +104,7 @@ export function useEventLog(): EventLog {
     if (ctx.trialIndex !== undefined) c.trialIndex = ctx.trialIndex
     if (ctx.difficulty !== undefined) c.difficulty = ctx.difficulty
     if (ctx.stimulusId !== undefined) c.stimulusId = ctx.stimulusId
+    if (ctx.taskType !== undefined) c.taskType = ctx.taskType
   }, [])
 
   const setTrial = useCallback((ctx: Partial<Context>) => {
@@ -110,6 +113,7 @@ export function useEventLog(): EventLog {
     if (ctx.trialIndex !== undefined) c.trialIndex = ctx.trialIndex
     if (ctx.difficulty !== undefined) c.difficulty = ctx.difficulty
     if (ctx.stimulusId !== undefined) c.stimulusId = ctx.stimulusId
+    if (ctx.taskType !== undefined) c.taskType = ctx.taskType
     if (ctx.condition !== undefined) c.condition = ctx.condition
     // Reset the per-trial clock so t_in_trial_ms starts at 0 for this trial.
     trialStartRef.current = performance.now()

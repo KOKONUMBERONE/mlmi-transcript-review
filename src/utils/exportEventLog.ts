@@ -33,6 +33,7 @@ const KNOWN_COLUMNS = [
   'trial_index',
   'difficulty',
   'stimulus_id',
+  'task_type',
   'reviewer',
   'model',
   'segment_id',
