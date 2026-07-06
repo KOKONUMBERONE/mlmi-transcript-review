@@ -1812,6 +1812,8 @@ export default function ReviewWorkspace({
           onHighlightLevelChange={(level) =>
             events.log('filter_change', { filter: `highlights:${level}` })
           }
+          defaultHighlightLevel={config.defaultHighlightLevel}
+          defaultRevealAll={config.defaultRevealAll}
           showRevealAll={config.allowRevealAllToggle}
           onRevealAllChange={(revealAll) =>
             events.log('filter_change', { filter: `marks:${revealAll ? 'always' : 'hover'}` })

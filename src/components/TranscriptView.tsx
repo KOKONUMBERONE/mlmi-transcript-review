@@ -43,6 +43,9 @@ interface Props {
   // Header "Highlights" toggle (full build only): hide MED word highlights.
   showHighlightLevel?: boolean
   onHighlightLevelChange?: (level: HighlightLevel) => void
+  // Initial highlight level / marks mode (build-specific defaults from config).
+  defaultHighlightLevel?: HighlightLevel
+  defaultRevealAll?: boolean
   // Header "Marks" toggle (full build only): keep every segment's word-level
   // risk marks visible without hovering (vs the default hover/play reveal).
   showRevealAll?: boolean
@@ -111,6 +114,8 @@ export default function TranscriptView({
   onFilterChange,
   showHighlightLevel = false,
   onHighlightLevelChange,
+  defaultHighlightLevel = 'all',
+  defaultRevealAll = false,
   showRevealAll = false,
   onRevealAllChange,
   onSegmentView,
@@ -119,10 +124,10 @@ export default function TranscriptView({
   editInfo,
 }: Props) {
   const [filter, setFilter] = useState<RiskFilter>('all')
-  const [highlightLevel, setHighlightLevel] = useState<HighlightLevel>('all')
+  const [highlightLevel, setHighlightLevel] = useState<HighlightLevel>(defaultHighlightLevel)
   // 'Marks: always' — pin word-level risk marks on every segment (no hover
   // needed). Pairs well with highlightLevel='high' to scan all red words.
-  const [revealAll, setRevealAll] = useState(false)
+  const [revealAll, setRevealAll] = useState(defaultRevealAll)
   // Transient hover-reveal (local + unlogged): hovering a segment shows its
   // word-level risk; moving away collapses it (unless pinned/playing).
   const [hoveredId, setHoveredId] = useState<number | null>(null)
