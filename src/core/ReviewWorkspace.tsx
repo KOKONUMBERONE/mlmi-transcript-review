@@ -27,6 +27,11 @@ import {
 } from '../lib/focusApi'
 import { runOutline } from '../lib/outlineApi'
 import { runTriage } from '../lib/triageApi'
+import { runAnomalies } from '../lib/anomalyApi'
+import { runTimeline } from '../lib/timelineApi'
+import TimelinePanel, { type TimelineItem } from '../components/TimelinePanel'
+import ConflictPanel, { type ConflictItem } from '../components/ConflictPanel'
+import { adaptAsrPipelineOutput, isAsrPipelineOutput } from '../lib/asrAdapter'
 import defaultTriageJson from '../data/defaultTriage.json'
 import { runChat, type ChatCitation } from '../lib/chatApi'
 import { transcribeAudio } from '../lib/transcribeApi'
@@ -41,9 +46,11 @@ import type {
   HighlightLayer,
   HistoryEntry,
   ModelName,
+  AnomalyResult,
   OutlineChapter,
   OutlinePart,
   OutlineResult,
+  TimelineResult,
   TriageResult,
   Risk,
   RiskDimension,
@@ -144,6 +151,10 @@ export default function ReviewWorkspace({
   // Pristine snapshot of the loaded transcript (raw pipeline output) so the
   // "Original (JSON)" export stays untouched by manual split/merge/sentence edits.
   const originalTranscriptRef = useRef<Transcript>(defaultTranscript)
+  // Exact JSON the backend returned, BEFORE the ASR adapter — for the "Pipeline
+  // raw (JSON)" export. For a normal backend this is just the transcript; for
+  // the teammate pipeline it's the nested sentence/confidence format.
+  const rawSourceRef = useRef<unknown>(defaultTranscript)
   const [transcriptFilename, setTranscriptFilename] = useState<string | null>(null)
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
   const [audioFilename, setAudioFilename] = useState<string | null>(null)
@@ -153,11 +164,18 @@ export default function ReviewWorkspace({
   // UI: collapsible side panels + shift-click range-verify anchor.
   // Startup layout: the left Find/Assistant/Outline column starts collapsed
   // (opened on demand) while the right review/audit panel stays open, so the
-  // initial focus is the transcript + its progress.
-  const [focusCollapsed, setFocusCollapsed] = useState(true)
+  // initial focus is the transcript + its progress. EXCEPT in the timeline /
+  // conflicts builds, whose paradigm lives in that column — there it starts
+  // open on the version's own tab.
+  const [focusCollapsed, setFocusCollapsed] = useState(
+    !(config.timelineView || config.anomalyDetection),
+  )
   const [auditCollapsed, setAuditCollapsed] = useState(false)
-  // Left column tab (full build with allowChat): Find | Assistant.
-  const [leftTab, setLeftTab] = useState<LeftTab>('find')
+  // Left column tab (full build with allowChat): Find | Assistant (+ the
+  // per-version Timeline / Conflicts tabs).
+  const [leftTab, setLeftTab] = useState<LeftTab>(
+    config.timelineView ? 'timeline' : config.anomalyDetection ? 'conflicts' : 'find',
+  )
   // Assistant chat — ephemeral by design: in-memory only, cleared on transcript
   // change, never written to the audit trail or any export.
   const [chatMessages, setChatMessages] = useState<ChatUiTurn[]>([])
@@ -301,6 +319,81 @@ export default function ReviewWorkspace({
     }
   }, [config.sentenceTriage, transcript, model, events])
 
+  // ---- Contradiction check (anomaly build) — local-LLM conflict pairs ------
+  // Auto-runs like triage (the paradigm is meaningless without it); errors stay
+  // panel-local so a dead Ollama never reads as a whole-app failure. The nonce
+  // is the panel's Retry button.
+  const [anomalyResult, setAnomalyResult] = useState<AnomalyResult | null>(null)
+  const [anomalyRunning, setAnomalyRunning] = useState<boolean>(false)
+  const [anomalyError, setAnomalyError] = useState<string | null>(null)
+  const [anomalyNonce, setAnomalyNonce] = useState(0)
+  useEffect(() => {
+    if (!config.anomalyDetection) return
+    setAnomalyResult(null)
+    setAnomalyError(null)
+    let cancelled = false
+    setAnomalyRunning(true)
+    runAnomalies(transcript, model)
+      .then((result) => {
+        if (cancelled) return
+        setAnomalyResult(result)
+        events.log('anomaly_run', {
+          segment_count: transcript.segments.length,
+          anomaly_count: result.conflicts.length,
+        })
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setAnomalyError(
+          err instanceof PredictError
+            ? err.message
+            : `Conflict check failed: ${(err as Error).message}`,
+        )
+      })
+      .finally(() => {
+        if (!cancelled) setAnomalyRunning(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [config.anomalyDetection, transcript, model, events, anomalyNonce])
+
+  // ---- Event timeline (timeline build) — local-LLM event list --------------
+  const [timelineResult, setTimelineResult] = useState<TimelineResult | null>(null)
+  const [timelineRunning, setTimelineRunning] = useState<boolean>(false)
+  const [timelineError, setTimelineError] = useState<string | null>(null)
+  const [timelineNonce, setTimelineNonce] = useState(0)
+  useEffect(() => {
+    if (!config.timelineView) return
+    setTimelineResult(null)
+    setTimelineError(null)
+    let cancelled = false
+    setTimelineRunning(true)
+    runTimeline(transcript, model)
+      .then((result) => {
+        if (cancelled) return
+        setTimelineResult(result)
+        events.log('timeline_run', {
+          segment_count: transcript.segments.length,
+          timeline_count: result.events.length,
+        })
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setTimelineError(
+          err instanceof PredictError
+            ? err.message
+            : `Timeline failed: ${(err as Error).message}`,
+        )
+      })
+      .finally(() => {
+        if (!cancelled) setTimelineRunning(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [config.timelineView, transcript, model, events, timelineNonce])
+
   // Whole-sentence highlighter overlay for the two sentence versions. Both
   // produce a per-segment tint level + tooltip; only the SOURCE differs:
   //   sentenceTriage      → LLM importance (high sentences), tooltip = rank·reason
@@ -326,15 +419,33 @@ export default function ReviewWorkspace({
           titles.set(s.id, 'Some ASR uncertainty in this sentence')
         }
       }
+    } else if (config.anomalyDetection && anomalyResult) {
+      // Conflict pairs: both sides get the amber tint; the Conflicts panel
+      // carries the pairing + jump. AI-suggested only — wording stays hedged.
+      for (const c of anomalyResult.conflicts) {
+        for (const sid of [c.a, c.b]) {
+          map.set(sid, 'med')
+          titles.set(sid, `Possible ${c.type} conflict — ${c.note} (see the Conflicts panel)`)
+        }
+      }
     }
     return { sentenceTintMap: map, sentenceTintTitleMap: titles }
-  }, [config.sentenceTriage, config.sentenceUncertainty, triageResult, transcript])
+  }, [
+    config.sentenceTriage,
+    config.sentenceUncertainty,
+    config.anomalyDetection,
+    triageResult,
+    anomalyResult,
+    transcript,
+  ])
   const sentenceTintTitleFor = useCallback(
     (segId: number) => sentenceTintTitleMap.get(segId),
     [sentenceTintTitleMap],
   )
   const sentenceLayerActive =
-    (config.sentenceTriage && !!triageResult) || config.sentenceUncertainty
+    (config.sentenceTriage && !!triageResult) ||
+    config.sentenceUncertainty ||
+    (config.anomalyDetection && !!anomalyResult && anomalyResult.conflicts.length > 0)
 
   // Derive, from the retrieval result, the per-word marker lookup and the set
   // of segments that hold any hit. The hit shown on a word is the
@@ -1391,6 +1502,57 @@ export default function ReviewWorkspace({
     [events, seekWithLog],
   )
 
+  // ----- Timeline / Conflicts panels (per-version builds) -------------------
+  // Join each LLM citation to its segment (start time + text preview) so the
+  // panels can seek and show context without re-deriving anything themselves.
+  const timelineItems = useMemo<TimelineItem[]>(() => {
+    if (!config.timelineView || !timelineResult) return []
+    const byId = new Map(transcript.segments.map((s) => [s.id, s]))
+    return timelineResult.events.map((e) => ({
+      ...e,
+      segment_start: byId.get(e.id)?.start ?? 0,
+    }))
+  }, [config.timelineView, timelineResult, transcript])
+
+  const conflictItems = useMemo<ConflictItem[]>(() => {
+    if (!config.anomalyDetection || !anomalyResult) return []
+    const byId = new Map(transcript.segments.map((s) => [s.id, s]))
+    const sideOf = (id: number) => {
+      const seg = byId.get(id)
+      if (!seg) return { start: 0, text: `segment ${id}` }
+      const text = (seg.words[model] ?? []).map((w) => w.text).join(' ')
+      return { start: seg.start, text }
+    }
+    return anomalyResult.conflicts.map((c) => {
+      const a = sideOf(c.a)
+      const b = sideOf(c.b)
+      return { ...c, aStart: a.start, bStart: b.start, aText: a.text, bText: b.text }
+    })
+  }, [config.anomalyDetection, anomalyResult, transcript, model])
+
+  const handleTimelineEventClick = useCallback(
+    (item: TimelineItem) => {
+      events.log('timeline_event_click', {
+        segment_id: item.id,
+        segment_start: item.segment_start,
+      })
+      seekWithLog(item.segment_start, 'marker')
+    },
+    [events, seekWithLog],
+  )
+
+  const handleConflictJump = useCallback(
+    (segId: number, start: number, item: ConflictItem) => {
+      events.log('anomaly_jump', {
+        segment_id: segId,
+        partner_id: segId === item.a ? item.b : item.a,
+        anomaly_type: item.type,
+      })
+      seekWithLog(start, 'marker')
+    },
+    [events, seekWithLog],
+  )
+
   // ----- Assistant chat (full build, config.allowChat) ---------------------
   // Content is NEVER logged — only metadata (turn index, lengths, counts).
   const handleChatSend = useCallback(
@@ -1456,13 +1618,19 @@ export default function ReviewWorkspace({
   // Used by manual JSON upload AND by auto-transcription of uploaded audio.
   const applyTranscript = useCallback(
     async (parsed: unknown, sourceName: string) => {
-      const result = validateTranscript(parsed)
+      // Teammate ASR pipeline JSON (nested sentences + sentence confidence) is
+      // adapted to our flat Transcript before validation; a normal Transcript
+      // passes straight through (guard is false).
+      const input = isAsrPipelineOutput(parsed) ? adaptAsrPipelineOutput(parsed) : parsed
+      const result = validateTranscript(input)
       if (!result.ok) {
         setErrorMsg(`${sourceName}: ${result.error}`)
         return
       }
       setTranscript(result.transcript)
       originalTranscriptRef.current = result.transcript
+      // Keep the untouched backend JSON (pre-adapter) for the raw export.
+      rawSourceRef.current = parsed
       setTranscriptFilename(sourceName)
       const pickedModel = modelsOf(result.transcript)[0]
       setModel(pickedModel)
@@ -1830,6 +1998,9 @@ export default function ReviewWorkspace({
                 setFocusCollapsed(false)
               }}
               onOpenOutline={config.allowOutline ? handleOpenOutline : undefined}
+              showTimeline={config.timelineView}
+              showConflicts={config.anomalyDetection}
+              conflictCount={anomalyResult ? anomalyResult.conflicts.length : null}
             />
           ) : config.allowChat && leftTab === 'chat' ? (
             <ChatPanel
@@ -1844,9 +2015,47 @@ export default function ReviewWorkspace({
                   active="chat"
                   onSelect={setLeftTab}
                   onOpenOutline={config.allowOutline ? handleOpenOutline : undefined}
+                  showTimeline={config.timelineView}
+                  showConflicts={config.anomalyDetection}
                 />
               }
               onToggleCollapse={() => setFocusCollapsed(true)}
+            />
+          ) : config.timelineView && leftTab === 'timeline' ? (
+            <TimelinePanel
+              items={timelineItems}
+              running={timelineRunning}
+              error={timelineError}
+              onEventClick={handleTimelineEventClick}
+              onRetry={() => setTimelineNonce((n) => n + 1)}
+              onToggleCollapse={() => setFocusCollapsed(true)}
+              tabStrip={
+                <LeftTabStrip
+                  active="timeline"
+                  onSelect={setLeftTab}
+                  onOpenOutline={config.allowOutline ? handleOpenOutline : undefined}
+                  showTimeline={config.timelineView}
+                  showConflicts={config.anomalyDetection}
+                />
+              }
+            />
+          ) : config.anomalyDetection && leftTab === 'conflicts' ? (
+            <ConflictPanel
+              items={conflictItems}
+              running={anomalyRunning}
+              error={anomalyError}
+              onJump={handleConflictJump}
+              onRetry={() => setAnomalyNonce((n) => n + 1)}
+              onToggleCollapse={() => setFocusCollapsed(true)}
+              tabStrip={
+                <LeftTabStrip
+                  active="conflicts"
+                  onSelect={setLeftTab}
+                  onOpenOutline={config.allowOutline ? handleOpenOutline : undefined}
+                  showTimeline={config.timelineView}
+                  showConflicts={config.anomalyDetection}
+                />
+              }
             />
           ) : (
             <FocusPanel
@@ -1869,6 +2078,8 @@ export default function ReviewWorkspace({
                     active="find"
                     onSelect={setLeftTab}
                     onOpenOutline={config.allowOutline ? handleOpenOutline : undefined}
+                    showTimeline={config.timelineView}
+                    showConflicts={config.anomalyDetection}
                   />
                 ) : undefined
               }
@@ -1893,6 +2104,7 @@ export default function ReviewWorkspace({
           focusHitFor={focusHitFor}
           sentenceTintMap={sentenceLayerActive ? sentenceTintMap : undefined}
           sentenceTintTitleFor={sentenceLayerActive ? sentenceTintTitleFor : undefined}
+          keepRiskDot={config.anomalyDetection}
           wordDimension={config.sentenceUncertainty ? 'none' : undefined}
           onSeek={(t) => seekWithLog(t, 'segment')}
           onWordClick={openPopup}
@@ -1929,6 +2141,7 @@ export default function ReviewWorkspace({
           edits={edits}
           segmentTextEdits={segmentTextEdits}
           sourceTranscript={originalTranscriptRef.current}
+          rawSource={rawSourceRef.current}
           reviewer={reviewer}
           audioFilename={audioFilename}
           transcriptFilename={transcriptFilename}

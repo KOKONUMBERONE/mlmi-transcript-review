@@ -227,6 +227,22 @@ export function exportSourceTranscriptJson(args: ExportArgs): void {
 }
 
 // --------------------------------------------------------------------------
+// Raw ASR-backend output — the exact JSON the transcription backend returned,
+// BEFORE any front-end adaptation. For the teammate's ASR pipeline this is the
+// nested { segments: [{ sentences: [...] }] } shape with the selector's raw
+// per-sentence confidence/score/alignment; for a normal backend that already
+// speaks our schema, `rawSource` IS the transcript, so this equals "Original".
+// Purpose: archive/inspect each run's untouched backend output (diagnose the
+// pipeline vs. the adapter).
+export function exportRawPipelineJson(rawSource: unknown, args: ExportArgs): void {
+  downloadBlob(
+    `pipeline-raw-${fileStem(args)}-${safeFsStamp()}.json`,
+    JSON.stringify(rawSource, null, 2),
+    'application/json',
+  )
+}
+
+// --------------------------------------------------------------------------
 // Human-readable single-file HTML report.
 //
 // One self-contained .html (all CSS/JS inlined, no external deps) intended for

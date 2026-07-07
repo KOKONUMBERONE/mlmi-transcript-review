@@ -50,3 +50,8 @@ server/.triage_cache/
 # ASR transcribe service (Python venv + CI)
 .github/
 .venv/
+# Local LLM conflict-check + timeline caches (regenerated on demand).
+server/.anomaly_cache/
+server/.timeline_cache/
+# Runtime service logs
+server/*.log

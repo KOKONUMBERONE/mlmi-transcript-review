@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import ReviewWorkspace from './core/ReviewWorkspace'
 import {
+  ANOMALY_CONFIG,
   FULL_CONFIG,
   SENTENCE_CONFIG,
   SENTENCE_UNCERTAINTY_CONFIG,
+  TIMELINE_CONFIG,
   type WorkspaceConfig,
 } from './core/config'
 import { useEventLog } from './state/useEventLog'
@@ -40,6 +42,20 @@ const VERSIONS: Version[] = [
     blurb:
       'Whole sentences are highlighted by how confident the speech-recognition was — the ones most likely to be mis-transcribed stand out for a listen.',
     config: SENTENCE_UNCERTAINTY_CONFIG,
+  },
+  {
+    id: 'conflicts',
+    title: 'Contradiction alerts',
+    blurb:
+      'Everything in the word version, plus AI cross-checks the statements and flags pairs that seem to conflict — times, places, people — for a re-listen.',
+    config: ANOMALY_CONFIG,
+  },
+  {
+    id: 'timeline',
+    title: 'Timeline',
+    blurb:
+      'Everything in the word version, plus AI lays out the events described in the recording as a clickable timeline — jump straight to the moment each one is said.',
+    config: TIMELINE_CONFIG,
   },
 ]
 

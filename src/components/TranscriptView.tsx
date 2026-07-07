@@ -35,6 +35,10 @@ interface Props {
   sentenceTintMap?: Map<number, Risk>
   /** Sentence builds: tooltip for a tinted sentence. */
   sentenceTintTitleFor?: (segId: number) => string | undefined
+  /** Keep the segment head risk dot even when a tint map is present. The
+   *  anomaly build sets this: it is "FULL plus conflict tints", so the word
+   *  version's dot must survive (the sentence builds drop it). */
+  keepRiskDot?: boolean
   /** Override the dimension used for WORD marks only (segment risk / chips
    *  still follow `dimension`). The sentence-uncertainty version passes 'none'
    *  to suppress word marks while chips reflect paraRisk. */
@@ -114,6 +118,7 @@ export default function TranscriptView({
   focusHitFor,
   sentenceTintMap,
   sentenceTintTitleFor,
+  keepRiskDot = false,
   wordDimension,
   onSeek,
   onWordClick,
@@ -418,7 +423,7 @@ export default function TranscriptView({
                   verified={!!verified[segment.id]}
                   edits={edits}
                   dimension={wordDimension ?? dimension}
-                  hideRiskDot={!!sentenceTintMap}
+                  hideRiskDot={!!sentenceTintMap && !keepRiskDot}
                   sentenceTint={sentenceTintMap?.get(segment.id)}
                   sentenceTintTitle={sentenceTintTitleFor?.(segment.id)}
                   expanded={revealAll || segment.id === expandedSegmentId || segment.id === hoveredId}

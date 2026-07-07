@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { EditState, HistoryEntry, ModelName, Transcript } from '../types'
 import { exportHistoryAsCSV, exportHistoryAsJSON } from '../utils/exportHistory'
 import {
+  exportRawPipelineJson,
   exportSourceTranscriptJson,
   exportTranscriptJson,
   exportTranscriptReportHtml,
@@ -23,6 +24,9 @@ interface Props {
   // Pristine raw transcript for the "Original (JSON)" export (manual structural
   // edits live in `transcript`, not here).
   sourceTranscript?: Transcript
+  // Exact backend JSON before the ASR adapter, for the "Pipeline raw (JSON)"
+  // export. For a normal backend this equals the transcript.
+  rawSource?: unknown
   reviewer: string
   audioFilename: string | null
   transcriptFilename: string | null
@@ -122,6 +126,7 @@ export default function HistorySidebar({
   edits,
   segmentTextEdits,
   sourceTranscript,
+  rawSource,
   reviewer,
   audioFilename,
   transcriptFilename,
@@ -327,6 +332,12 @@ export default function HistorySidebar({
                 Original
               </span>
               <ExportButton label="JSON" onClick={() => { exportSourceTranscriptJson({ ...exportArgs, transcript: sourceTranscript ?? transcript }); onExport?.('transcript_source_json', totalSegments) }} />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-ink-muted w-20 shrink-0" title="The exact JSON the transcription backend returned, BEFORE any front-end adaptation (the ASR pipeline's raw nested sentence/confidence format). For a normal backend this equals Original. Use it to archive/inspect each run's untouched output.">
+                Pipeline raw
+              </span>
+              <ExportButton label="JSON" onClick={() => { exportRawPipelineJson(rawSource ?? sourceTranscript ?? transcript, exportArgs); onExport?.('pipeline_raw_json', totalSegments) }} />
             </div>
           </div>
         )}

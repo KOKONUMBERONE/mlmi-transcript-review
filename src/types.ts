@@ -164,6 +164,37 @@ export interface TriageResult {
   segments: TriageSegment[]
 }
 
+// Cross-sentence contradiction check (anomaly build): the local LLM flags
+// PAIRS of segments that appear to conflict. Pointing overlay only — each pair
+// carries the two segment ids, a coarse type, and a short note; the reviewer
+// re-checks both against the audio. "No conflicts" is a valid result.
+export type ConflictType = 'time' | 'place' | 'person' | 'statement'
+
+export interface ConflictPair {
+  a: number               // first segment id
+  b: number               // second segment id (≠ a)
+  type: ConflictType
+  note: string            // ≤12-word what-conflicts note
+}
+
+export interface AnomalyResult {
+  conflicts: ConflictPair[]
+}
+
+// Event timeline (timeline build): the local LLM lists the concrete events
+// described in the recording, each citing the segment it is stated in (`id`)
+// plus any spoken time reference. Clicking an event seeks the audio to the
+// cited segment — a navigation overlay, nothing asserted without a citation.
+export interface TimelineEvent {
+  id: number              // segment id the event is stated in
+  time: string            // spoken time reference ("9:42", "last Saturday…") or ""
+  event: string           // ≤10-word what-happened
+}
+
+export interface TimelineResult {
+  events: TimelineEvent[]
+}
+
 // Per-word overlay used by the transcript view: which focus term marked this
 // word and how. Derived on the front-end from FocusResult — kept off `Word` so
 // the transcript's 2a scores are never overwritten.
@@ -262,6 +293,12 @@ export type EventType =
   | 'outline_chapter_click'
   // Sentence-importance triage (sentence build only).
   | 'triage_run'
+  // Contradiction check (anomaly build only).
+  | 'anomaly_run'
+  | 'anomaly_jump'
+  // Event timeline (timeline build only).
+  | 'timeline_run'
+  | 'timeline_event_click'
   // Assistant chat (full build): metadata-only events — see the chat_* fields.
   | 'chat_send'
   | 'chat_answer'
@@ -346,6 +383,13 @@ export interface LogEvent {
   // Sentence triage (sentence build): how many sentences the LLM marked
   // important (part_count doubles as the window count on triage_run rows).
   triage_high?: number
+  // Contradiction check (anomaly build): pairs returned by an anomaly_run;
+  // on anomaly_jump, the other half of the pair + its coarse type.
+  anomaly_count?: number
+  partner_id?: number
+  anomaly_type?: ConflictType
+  // Event timeline (timeline build): events returned by a timeline_run.
+  timeline_count?: number
   chapter_id?: number       // which part/chapter a click belongs to (chapter_* reused for parts)
   chapter_title?: string
   chapter_start?: number    // seconds
