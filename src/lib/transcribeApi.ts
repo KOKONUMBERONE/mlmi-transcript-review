@@ -13,15 +13,27 @@ const TRANSCRIBE_URL = 'http://127.0.0.1:8001/transcribe'
  * optional: if it isn't running, this throws a PredictError with an actionable
  * message and the caller keeps the audio loaded for playback. Transcription is
  * slow (the models run on CPU), so callers should show a progress indicator.
+ *
+ * `numSpeakers` is a diarisation hint forwarded as `?num_speakers=N` (the
+ * pipeline pins WhisperX to exactly N speakers — e.g. 2 for an interview).
+ * Omit / null for automatic speaker detection.
  */
-export async function transcribeAudio(file: Blob): Promise<Transcript> {
+export async function transcribeAudio(
+  file: Blob,
+  numSpeakers?: number | null,
+): Promise<Transcript> {
+  const url =
+    numSpeakers && numSpeakers > 0
+      ? `${TRANSCRIBE_URL}?num_speakers=${numSpeakers}`
+      : TRANSCRIBE_URL
+
   const form = new FormData()
   // Field name must be `audio` to match transcribe_api.py's UploadFile param.
   form.append('audio', file, file instanceof File ? file.name : 'audio')
 
   let res: Response
   try {
-    res = await fetch(TRANSCRIBE_URL, { method: 'POST', body: form })
+    res = await fetch(url, { method: 'POST', body: form })
   } catch (e) {
     throw new PredictError(
       'Could not reach the transcription service at http://127.0.0.1:8001. ' +

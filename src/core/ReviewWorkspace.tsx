@@ -1754,11 +1754,14 @@ export default function ReviewWorkspace({
   // Auto-transcribe an audio file via the ASR service (:8001), then load the
   // resulting transcript. If the service is off, the audio still loaded for
   // playback above and we surface a clear, non-fatal message — nothing breaks.
+  // `numSpeakers` is the reviewer-set diarisation hint (TopBar "Speakers" box);
+  // null = automatic detection.
+  const [numSpeakers, setNumSpeakers] = useState<number | null>(null)
   const transcribeAndApply = useCallback(
     async (file: Blob) => {
       setTranscribing(true)
       try {
-        const transcript = await transcribeAudio(file)
+        const transcript = await transcribeAudio(file, numSpeakers)
         const name = file instanceof File ? file.name : 'recording'
         await applyTranscript(transcript, `${name} (auto-transcribed)`)
       } catch (err) {
@@ -1771,7 +1774,7 @@ export default function ReviewWorkspace({
         setTranscribing(false)
       }
     },
-    [applyTranscript],
+    [applyTranscript, numSpeakers],
   )
 
   // Run the ASR models on the currently-loaded audio. Explicit (not on upload)
@@ -1977,6 +1980,8 @@ export default function ReviewWorkspace({
         canTranscribe={!!audioBlob}
         transcribing={transcribing}
         onTranscribe={handleTranscribe}
+        numSpeakers={numSpeakers}
+        onNumSpeakersChange={setNumSpeakers}
         allowChangeToggle={config.allowChangeToggle}
         showChanges={showChanges}
         onToggleChanges={() => setShowChanges((v) => !v)}

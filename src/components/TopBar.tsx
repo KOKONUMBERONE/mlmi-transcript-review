@@ -34,6 +34,11 @@ interface Props {
   canTranscribe?: boolean
   transcribing?: boolean
   onTranscribe?: () => void
+  /** Diarisation hint for the ASR service: exactly N speakers (e.g. 2 for an
+   *  interview). null/empty = automatic. Rendered as a small "Speakers" box
+   *  next to Transcribe when the handler is provided. */
+  numSpeakers?: number | null
+  onNumSpeakersChange?: (n: number | null) => void
   // Track-changes view toggle (full build only; study keeps it always on).
   allowChangeToggle?: boolean
   showChanges?: boolean
@@ -138,6 +143,8 @@ export default function TopBar({
   canTranscribe = false,
   transcribing = false,
   onTranscribe,
+  numSpeakers = null,
+  onNumSpeakersChange,
   allowChangeToggle = false,
   showChanges = true,
   onToggleChanges,
@@ -226,6 +233,27 @@ export default function TopBar({
               <TranscribeIcon />
               {transcribing ? 'Transcribing…' : 'Transcribe'}
             </button>
+          )}
+          {allowTranscribe && onNumSpeakersChange && (
+            <label
+              title="How many speakers are in the audio (diarisation hint — e.g. 2 for an interview). Leave empty for automatic detection."
+              className="flex items-center gap-1 text-[11px] text-ink-muted"
+            >
+              <span>Speakers</span>
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={numSpeakers ?? ''}
+                disabled={transcribing}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value, 10)
+                  onNumSpeakersChange(Number.isFinite(v) && v > 0 ? v : null)
+                }}
+                placeholder="auto"
+                className="w-14 text-[11px] border border-border rounded-md px-1.5 py-1 bg-surface text-ink placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-border-strong disabled:opacity-50"
+              />
+            </label>
           )}
           {allowRecord && (
             <button
