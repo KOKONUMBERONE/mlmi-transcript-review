@@ -150,6 +150,20 @@ export interface OutlineResult {
   parts: OutlinePart[]
 }
 
+// Sentence-importance triage (sentence build): binary per-segment overlay from
+// a local LLM — which SENTENCES a reviewer should re-listen to first. The
+// transcript's 2a scores are never touched; this is navigation/colour overlay.
+export interface TriageSegment {
+  id: number
+  importance: 'high' | 'low'
+  rank?: number           // 1-based, across the whole transcript (high only)
+  reason?: string         // ≤8-word why (head-dot tooltip)
+}
+
+export interface TriageResult {
+  segments: TriageSegment[]
+}
+
 // Per-word overlay used by the transcript view: which focus term marked this
 // word and how. Derived on the front-end from FocusResult — kept off `Word` so
 // the transcript's 2a scores are never overwritten.
@@ -246,6 +260,8 @@ export type EventType =
   | 'outline_open'
   | 'outline_part_click'
   | 'outline_chapter_click'
+  // Sentence-importance triage (sentence build only).
+  | 'triage_run'
   // Assistant chat (full build): metadata-only events — see the chat_* fields.
   | 'chat_send'
   | 'chat_answer'
@@ -327,6 +343,9 @@ export interface LogEvent {
   // Outline (long-transcript two-level chapters):
   part_count?: number       // top-level Parts returned by an outline_run
   chapter_count?: number    // fine chapters returned by an outline_run
+  // Sentence triage (sentence build): how many sentences the LLM marked
+  // important (part_count doubles as the window count on triage_run rows).
+  triage_high?: number
   chapter_id?: number       // which part/chapter a click belongs to (chapter_* reused for parts)
   chapter_title?: string
   chapter_start?: number    // seconds

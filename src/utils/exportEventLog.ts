@@ -88,6 +88,8 @@ const KNOWN_COLUMNS = [
   'chat_chars',
   'chat_citations',
   'chat_latency_ms',
+  // Sentence-triage (sentence build; appended).
+  'triage_high',
 ] as const
 
 function summary(events: LogEvent[]): Record<string, unknown> {

@@ -21,6 +21,16 @@ interface Props {
   // Policy-aware segment risk, computed once in TranscriptView (riskOf). Drives
   // the sentence-head dot — reused here, never recomputed.
   segmentRisk: Risk
+  /** Hide the segment-head risk dot. Sentence builds: the whole-sentence
+   *  highlighter already conveys the signal, so the dot is redundant. */
+  hideRiskDot?: boolean
+  /** Sentence builds: highlighter-mark the WHOLE sentence at this level
+   *  ('high' = red tint, 'med' = amber tint). Source is importance (LLM triage)
+   *  or uncertainty (paraRisk) depending on the version. undefined = no tint. */
+  sentenceTint?: Risk
+  /** Sentence builds: tooltip on the highlighted sentence (rank·reason, or
+   *  the confidence level). */
+  sentenceTintTitle?: string
   // Soft vs pure collapsed look — threaded straight to Word.
   collapsedHighUnderline: boolean
   // Word-highlight level ('all' | 'high') — 'high' hides MED highlights.
@@ -81,6 +91,9 @@ export default function Segment({
   onPlaySegment,
   onHover,
   segmentRisk,
+  hideRiskDot = false,
+  sentenceTint,
+  sentenceTintTitle,
   collapsedHighUnderline,
   highlightLevel = 'all',
   activeWordIndex,
@@ -209,6 +222,17 @@ export default function Segment({
     startEdit()
   }
 
+  // Whole-sentence highlighter (sentence builds): the entire sentence text gets
+  // a soft tint at the given level — the sentence-level layer sits ON TOP of any
+  // word-level marks. Reviewer edits keep their own (green) treatment; the tint
+  // yields to it (see the rewrite branch below).
+  const sentenceCls =
+    sentenceTint === 'high'
+      ? 'text-[15px] leading-[1.6] text-ink bg-risk-high-bg/70 rounded-sm px-1.5 py-0.5 -mx-1.5 ring-1 ring-risk-high/20'
+      : sentenceTint === 'med'
+        ? 'text-[15px] leading-[1.6] text-ink bg-risk-med-bg/70 rounded-sm px-1.5 py-0.5 -mx-1.5 ring-1 ring-risk-med/20'
+        : 'text-[15px] leading-[1.6] text-ink'
+
   return (
     <article
       onMouseEnter={() => onHover?.(segment.id)}
@@ -247,8 +271,9 @@ export default function Segment({
               </svg>
             </button>
             {/* Only HIGH risk gets a head dot; medium shows nothing (just the
-                chevron). Keeps the overview quiet — red means "look here". */}
-            {segmentRisk === 'high' && (
+                chevron). Keeps the overview quiet — red means "look here".
+                Hidden in the sentence build (the sentence tint says it). */}
+            {!hideRiskDot && segmentRisk === 'high' && (
               <span
                 aria-hidden="true"
                 title="High risk"
@@ -426,10 +451,11 @@ export default function Segment({
               // inserted words/clauses render in the blue "inserted" style — a
               // clause run is one block that karaokes together.
               <p
+                title={sentenceTint ? sentenceTintTitle : undefined}
                 className={
                   showChanges
                     ? 'text-[15px] leading-[1.6] text-ink bg-change-ins-bg rounded px-1.5 py-0.5 -mx-1 ring-1 ring-change-ins/25'
-                    : 'text-[15px] leading-[1.6] text-ink'
+                    : sentenceCls
                 }
               >
                 {groups.map((g, gi) => (
@@ -477,7 +503,7 @@ export default function Segment({
                 )}
               </p>
             ) : (
-              <p className="text-[15px] leading-[1.6] text-ink">
+              <p title={sentenceTint ? sentenceTintTitle : undefined} className={sentenceCls}>
                 {words.map((word, i) => {
                   const key = `${segment.id}-${i}`
                   const edit = edits[key]

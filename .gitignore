@@ -43,6 +43,9 @@ CLAUDE_CODE_PROMPTS.md
 server/__pycache__/
 # Local LLM outline cache (full build only; regenerated on demand, not frozen).
 server/.outline_cache/
+# Local LLM sentence-triage cache (regenerated on demand; the demo result is
+# baked into src/data/defaultTriage.json, which IS committed).
+server/.triage_cache/
 
 # ASR transcribe service (Python venv + CI)
 .github/

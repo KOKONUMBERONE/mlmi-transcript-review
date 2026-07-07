@@ -26,6 +26,8 @@ import {
   parseFocusQueries,
 } from '../lib/focusApi'
 import { runOutline } from '../lib/outlineApi'
+import { runTriage } from '../lib/triageApi'
+import defaultTriageJson from '../data/defaultTriage.json'
 import { runChat, type ChatCitation } from '../lib/chatApi'
 import { transcribeAudio } from '../lib/transcribeApi'
 import { segmentRiskWithFocus } from '../lib/segmentRisk'
@@ -42,6 +44,7 @@ import type {
   OutlineChapter,
   OutlinePart,
   OutlineResult,
+  TriageResult,
   Risk,
   RiskDimension,
   SeekTrigger,
@@ -250,6 +253,89 @@ export default function ReviewWorkspace({
   const [outlineRunning, setOutlineRunning] = useState<boolean>(false)
   const [outlineError, setOutlineError] = useState<string | null>(null)
 
+  // ---- Sentence triage (sentence build) — local-LLM importance overlay ------
+  const [triageResult, setTriageResult] = useState<TriageResult | null>(null)
+  const [triageRunning, setTriageRunning] = useState<boolean>(false)
+
+  // Sentence build: triage runs automatically — the paradigm is meaningless
+  // without it. The bundled demo case uses the BAKED result (zero backend, so
+  // a hosted demo link works); any other transcript (upload / transcription)
+  // goes through the live local service. A failure surfaces in the global
+  // error banner; the transcript then simply renders unranked.
+  useEffect(() => {
+    if (!config.sentenceTriage) return
+    setTriageResult(null)
+    if (transcript === defaultTranscript) {
+      const baked = defaultTriageJson as unknown as TriageResult
+      setTriageResult(baked)
+      events.log('triage_run', {
+        segment_count: transcript.segments.length,
+        triage_high: baked.segments.filter((s) => s.importance === 'high').length,
+      })
+      return
+    }
+    let cancelled = false
+    setTriageRunning(true)
+    runTriage(transcript, model)
+      .then((result) => {
+        if (cancelled) return
+        setTriageResult(result)
+        events.log('triage_run', {
+          segment_count: transcript.segments.length,
+          triage_high: result.segments.filter((s) => s.importance === 'high').length,
+        })
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setErrorMsg(
+          err instanceof PredictError
+            ? err.message
+            : `Sentence triage failed: ${(err as Error).message}`,
+        )
+      })
+      .finally(() => {
+        if (!cancelled) setTriageRunning(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [config.sentenceTriage, transcript, model, events])
+
+  // Whole-sentence highlighter overlay for the two sentence versions. Both
+  // produce a per-segment tint level + tooltip; only the SOURCE differs:
+  //   sentenceTriage      → LLM importance (high sentences), tooltip = rank·reason
+  //   sentenceUncertainty → upstream paraRisk (high/med), tooltip = confidence
+  const { sentenceTintMap, sentenceTintTitleMap } = useMemo(() => {
+    const map = new Map<number, Risk>()
+    const titles = new Map<number, string>()
+    if (config.sentenceTriage && triageResult) {
+      for (const s of triageResult.segments) {
+        if (s.importance === 'high') {
+          map.set(s.id, 'high')
+          const rank = s.rank != null ? `#${s.rank}` : ''
+          titles.set(s.id, [rank, s.reason ?? ''].filter(Boolean).join(' · '))
+        }
+      }
+    } else if (config.sentenceUncertainty) {
+      for (const s of transcript.segments) {
+        if (s.paraRisk === 'high') {
+          map.set(s.id, 'high')
+          titles.set(s.id, 'Low ASR confidence — check this sentence against the audio')
+        } else if (s.paraRisk === 'med') {
+          map.set(s.id, 'med')
+          titles.set(s.id, 'Some ASR uncertainty in this sentence')
+        }
+      }
+    }
+    return { sentenceTintMap: map, sentenceTintTitleMap: titles }
+  }, [config.sentenceTriage, config.sentenceUncertainty, triageResult, transcript])
+  const sentenceTintTitleFor = useCallback(
+    (segId: number) => sentenceTintTitleMap.get(segId),
+    [sentenceTintTitleMap],
+  )
+  const sentenceLayerActive =
+    (config.sentenceTriage && !!triageResult) || config.sentenceUncertainty
+
   // Derive, from the retrieval result, the per-word marker lookup and the set
   // of segments that hold any hit. The hit shown on a word is the
   // highest-priority one (exact > alias > semantic, then score). Declared here
@@ -368,9 +454,14 @@ export default function ReviewWorkspace({
   const effectiveCondition: Condition =
     trial?.condition ?? lockedCondition ?? config.condition ?? 'C3'
   const conditionCfg = CONDITION_CONFIG[effectiveCondition]
-  const activeHighlight: HighlightLayer = config.allowFreeDimension
-    ? dimension
-    : conditionCfg.highlight
+  // Sentence-uncertainty version: segment risk / chips / filter follow the
+  // upstream sentence confidence (`paraRisk` = the 'uncertainty' dimension);
+  // word marks are suppressed separately via wordDimension below.
+  const activeHighlight: HighlightLayer = config.sentenceUncertainty
+    ? 'uncertainty'
+    : config.allowFreeDimension
+      ? dimension
+      : conditionCfg.highlight
   const focusEnabled = config.allowFreeDimension ? true : conditionCfg.focus
   // Focus only paints when it's enabled *and* a retrieval has actually run.
   const showFocus = focusEnabled && focusActive
@@ -1653,6 +1744,7 @@ export default function ReviewWorkspace({
         allowThemeToggle={config.allowThemeToggle}
         theme={theme}
         onToggleTheme={toggleTheme}
+        triageRunning={triageRunning}
       />
 
       {transcribing && (
@@ -1799,6 +1891,9 @@ export default function ReviewWorkspace({
           focusActive={showFocus}
           focusSegmentIds={focusSegmentIds}
           focusHitFor={focusHitFor}
+          sentenceTintMap={sentenceLayerActive ? sentenceTintMap : undefined}
+          sentenceTintTitleFor={sentenceLayerActive ? sentenceTintTitleFor : undefined}
+          wordDimension={config.sentenceUncertainty ? 'none' : undefined}
           onSeek={(t) => seekWithLog(t, 'segment')}
           onWordClick={openPopup}
           onToggleVerify={toggleVerify}

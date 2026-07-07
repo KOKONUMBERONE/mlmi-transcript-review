@@ -42,6 +42,8 @@ interface Props {
   allowThemeToggle?: boolean
   theme?: 'light' | 'dark'
   onToggleTheme?: () => void
+  // Sentence build: the LLM is triaging which sentences matter (auto-run).
+  triageRunning?: boolean
 }
 
 function UploadIcon() {
@@ -142,6 +144,7 @@ export default function TopBar({
   allowThemeToggle,
   theme,
   onToggleTheme,
+  triageRunning = false,
 }: Props) {
   const audioInputRef = useRef<HTMLInputElement>(null)
   const transcriptInputRef = useRef<HTMLInputElement>(null)
@@ -260,6 +263,28 @@ export default function TopBar({
       <div className="flex-1" />
 
       <div className="flex items-center gap-3">
+        {/* Sentence build: the local LLM is picking the important sentences. */}
+        {triageRunning && (
+          <span
+            className="flex items-center gap-1.5 text-[11px] text-ink-muted"
+            aria-live="polite"
+          >
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 10 10"
+              className="animate-spin"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            >
+              <circle cx="5" cy="5" r="3.5" strokeOpacity="0.25" />
+              <path d="M5 1.5a3.5 3.5 0 0 1 3.5 3.5" strokeLinecap="round" />
+            </svg>
+            ranking sentences…
+          </span>
+        )}
+
         {/* Model / Risk / scoring now live in this menu (full + study). The
             View (Model / Risk) + Display live in it. */}
         <Menu

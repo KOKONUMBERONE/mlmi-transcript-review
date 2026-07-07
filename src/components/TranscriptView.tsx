@@ -30,6 +30,15 @@ interface Props {
   focusActive: boolean
   focusSegmentIds: Set<number>
   focusHitFor?: (segId: number, wordIdx: number) => FocusWordHit | undefined
+  /** Sentence builds: per-segment whole-sentence tint level (importance from
+   *  the LLM, or uncertainty from paraRisk). Present → head dot hidden. */
+  sentenceTintMap?: Map<number, Risk>
+  /** Sentence builds: tooltip for a tinted sentence. */
+  sentenceTintTitleFor?: (segId: number) => string | undefined
+  /** Override the dimension used for WORD marks only (segment risk / chips
+   *  still follow `dimension`). The sentence-uncertainty version passes 'none'
+   *  to suppress word marks while chips reflect paraRisk. */
+  wordDimension?: HighlightLayer
   onSeek: (seconds: number) => void
   onWordClick: (segId: number, wordIdx: number, rect: DOMRect) => void
   onToggleVerify: (segId: number, opts?: { range?: boolean }) => void
@@ -103,6 +112,9 @@ export default function TranscriptView({
   focusActive,
   focusSegmentIds,
   focusHitFor,
+  sentenceTintMap,
+  sentenceTintTitleFor,
+  wordDimension,
   onSeek,
   onWordClick,
   onToggleVerify,
@@ -405,7 +417,10 @@ export default function TranscriptView({
                   active={segment.id === activeId}
                   verified={!!verified[segment.id]}
                   edits={edits}
-                  dimension={dimension}
+                  dimension={wordDimension ?? dimension}
+                  hideRiskDot={!!sentenceTintMap}
+                  sentenceTint={sentenceTintMap?.get(segment.id)}
+                  sentenceTintTitle={sentenceTintTitleFor?.(segment.id)}
                   expanded={revealAll || segment.id === expandedSegmentId || segment.id === hoveredId}
                   onToggleExpand={onToggleExpand}
                   onPlaySegment={onPlaySegment}
