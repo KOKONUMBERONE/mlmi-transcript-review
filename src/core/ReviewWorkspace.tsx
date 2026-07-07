@@ -56,6 +56,7 @@ import type {
   RiskDimension,
   SeekTrigger,
   Segment,
+  SentenceSignal,
   Transcript,
   Word,
 } from '../types'
@@ -275,13 +276,31 @@ export default function ReviewWorkspace({
   const [triageResult, setTriageResult] = useState<TriageResult | null>(null)
   const [triageRunning, setTriageRunning] = useState<boolean>(false)
 
-  // Sentence build: triage runs automatically — the paradigm is meaningless
-  // without it. The bundled demo case uses the BAKED result (zero backend, so
-  // a hosted demo link works); any other transcript (upload / transcription)
-  // goes through the live local service. A failure surfaces in the global
-  // error banner; the transcript then simply renders unranked.
+  // Sentence-layer signal (launcher sentence versions): what the whole-sentence
+  // tint encodes. Confidence is free (paraRisk is already in the transcript);
+  // importance/both lazily fetch the triage ranking below on first use.
+  const [sentenceSignal, setSentenceSignal] = useState<SentenceSignal>(config.sentenceSignal)
+  const handleSentenceSignalChange = useCallback(
+    (s: SentenceSignal) => {
+      setSentenceSignal(s)
+      events.log('filter_change', { filter: `sentence_signal:${s}` })
+    },
+    [events],
+  )
+
+  // Triage runs when the paradigm needs it: always in the legacy sentence
+  // build, lazily in the launcher sentence versions (only once the reviewer
+  // switches the signal to Importance/Both — confidence alone never calls it).
+  // The bundled demo case uses the BAKED result (zero backend, so a hosted
+  // demo link works); any other transcript (upload / transcription) goes
+  // through the live local service. A failure surfaces in the global error
+  // banner; the transcript then simply renders unranked.
+  const triageWanted =
+    config.sentenceTriage ||
+    (config.sentenceUncertainty &&
+      (sentenceSignal === 'importance' || sentenceSignal === 'both'))
   useEffect(() => {
-    if (!config.sentenceTriage) return
+    if (!triageWanted) return
     setTriageResult(null)
     if (transcript === defaultTranscript) {
       const baked = defaultTriageJson as unknown as TriageResult
@@ -317,7 +336,7 @@ export default function ReviewWorkspace({
     return () => {
       cancelled = true
     }
-  }, [config.sentenceTriage, transcript, model, events])
+  }, [triageWanted, transcript, model, events])
 
   // ---- Contradiction check (anomaly build) — local-LLM conflict pairs ------
   // Auto-runs like triage (the paradigm is meaningless without it); errors stay
@@ -394,22 +413,41 @@ export default function ReviewWorkspace({
     }
   }, [config.timelineView, transcript, model, events, timelineNonce])
 
-  // Whole-sentence highlighter overlay for the two sentence versions. Both
-  // produce a per-segment tint level + tooltip; only the SOURCE differs:
-  //   sentenceTriage      → LLM importance (high sentences), tooltip = rank·reason
-  //   sentenceUncertainty → upstream paraRisk (high/med), tooltip = confidence
+  // Whole-sentence highlighter overlay. The tint SOURCE is a signal:
+  //   confidence → upstream paraRisk (high/med), tooltip = ASR confidence
+  //   importance → LLM triage (high sentences), tooltip = rank · reason
+  //   both       → gated combine — the word-level deployment principle at
+  //                sentence level: red only when likely mis-transcribed AND
+  //                important; one signal alone shows amber; quiet otherwise.
+  // The legacy sentence build is importance-only; the launcher sentence
+  // versions follow the runtime selector. Conflict tints compose on top.
   const { sentenceTintMap, sentenceTintTitleMap } = useMemo(() => {
     const map = new Map<number, Risk>()
     const titles = new Map<number, string>()
-    if (config.sentenceTriage && triageResult) {
+
+    // Importance lookup from triage: id -> "#rank · reason".
+    const importantNote = new Map<number, string>()
+    if (triageResult) {
       for (const s of triageResult.segments) {
         if (s.importance === 'high') {
-          map.set(s.id, 'high')
           const rank = s.rank != null ? `#${s.rank}` : ''
-          titles.set(s.id, [rank, s.reason ?? ''].filter(Boolean).join(' · '))
+          importantNote.set(s.id, [rank, s.reason ?? ''].filter(Boolean).join(' · '))
         }
       }
-    } else if (config.sentenceUncertainty) {
+    }
+
+    const signal: SentenceSignal | null = config.sentenceTriage
+      ? 'importance'
+      : config.sentenceUncertainty
+        ? sentenceSignal
+        : null
+
+    if (signal === 'importance') {
+      for (const [sid, note] of importantNote) {
+        map.set(sid, 'high')
+        titles.set(sid, note || 'Marked important by the AI — re-listen first')
+      }
+    } else if (signal === 'confidence') {
       for (const s of transcript.segments) {
         if (s.paraRisk === 'high') {
           map.set(s.id, 'high')
@@ -419,21 +457,48 @@ export default function ReviewWorkspace({
           titles.set(s.id, 'Some ASR uncertainty in this sentence')
         }
       }
-    } else if (config.anomalyDetection && anomalyResult) {
-      // Conflict pairs: both sides get the amber tint; the Conflicts panel
-      // carries the pairing + jump. AI-suggested only — wording stays hedged.
-      for (const c of anomalyResult.conflicts) {
-        for (const sid of [c.a, c.b]) {
-          map.set(sid, 'med')
-          titles.set(sid, `Possible ${c.type} conflict — ${c.note} (see the Conflicts panel)`)
+    } else if (signal === 'both') {
+      for (const s of transcript.segments) {
+        const important = importantNote.has(s.id)
+        let tint: Risk | null = null
+        let title = ''
+        if (important && s.paraRisk === 'high') {
+          tint = 'high'
+          title = 'Likely mis-transcribed AND important — check this first'
+        } else if (important && s.paraRisk === 'med') {
+          tint = 'med'
+          title = 'Important, with some ASR uncertainty'
+        } else if (!important && s.paraRisk === 'high') {
+          tint = 'med'
+          title = 'Low ASR confidence (content ranked less critical)'
+        }
+        if (tint) {
+          const note = importantNote.get(s.id)
+          map.set(s.id, tint)
+          titles.set(s.id, note ? `${title} (${note})` : title)
         }
       }
     }
+
+    // Conflict pairs compose on top (the complete version runs both): fill
+    // untinted segments with amber and append to the tooltip either way.
+    // AI-suggested only — wording stays hedged.
+    if (config.anomalyDetection && anomalyResult) {
+      for (const c of anomalyResult.conflicts) {
+        const note = `Possible ${c.type} conflict — ${c.note} (see the Conflicts panel)`
+        for (const sid of [c.a, c.b]) {
+          if (!map.has(sid)) map.set(sid, 'med')
+          titles.set(sid, titles.has(sid) ? `${titles.get(sid)} · ${note}` : note)
+        }
+      }
+    }
+
     return { sentenceTintMap: map, sentenceTintTitleMap: titles }
   }, [
     config.sentenceTriage,
     config.sentenceUncertainty,
     config.anomalyDetection,
+    sentenceSignal,
     triageResult,
     anomalyResult,
     transcript,
@@ -573,7 +638,10 @@ export default function ReviewWorkspace({
     : config.allowFreeDimension
       ? dimension
       : conditionCfg.highlight
-  const focusEnabled = config.allowFreeDimension ? true : conditionCfg.focus
+  // allowFind hides the whole left column (clean launcher versions); inside
+  // that, the study's condition config still decides per-condition presence.
+  const focusEnabled =
+    config.allowFind && (config.allowFreeDimension ? true : conditionCfg.focus)
   // Focus only paints when it's enabled *and* a retrieval has actually run.
   const showFocus = focusEnabled && focusActive
 
@@ -1642,11 +1710,14 @@ export default function ReviewWorkspace({
       setExpandedSegmentId(null)
       autoExpandedRef.current = null
       // A new transcript invalidates any prior focus retrieval + outline +
-      // assistant conversation (its citations point into the old transcript).
+      // triage ranking + assistant conversation (their citations point into
+      // the old transcript). The triage/anomaly/timeline effects re-fetch for
+      // the new transcript on their own when their paradigm needs them.
       setFocusResult(null)
       setFocusActive(false)
       setOutlineResult(null)
       setOutlineError(null)
+      setTriageResult(null)
       chatRunIdRef.current++
       setChatMessages([])
       setChatError(null)
@@ -2105,7 +2176,18 @@ export default function ReviewWorkspace({
           sentenceTintMap={sentenceLayerActive ? sentenceTintMap : undefined}
           sentenceTintTitleFor={sentenceLayerActive ? sentenceTintTitleFor : undefined}
           keepRiskDot={config.anomalyDetection}
-          wordDimension={config.sentenceUncertainty ? 'none' : undefined}
+          wordDimension={config.wordMarks ? undefined : 'none'}
+          sentenceSignal={
+            config.sentenceUncertainty && config.allowSentenceSignalToggle
+              ? sentenceSignal
+              : undefined
+          }
+          onSentenceSignalChange={
+            config.sentenceUncertainty && config.allowSentenceSignalToggle
+              ? handleSentenceSignalChange
+              : undefined
+          }
+          sentenceSignalBusy={triageRunning}
           onSeek={(t) => seekWithLog(t, 'segment')}
           onWordClick={openPopup}
           onToggleVerify={toggleVerify}

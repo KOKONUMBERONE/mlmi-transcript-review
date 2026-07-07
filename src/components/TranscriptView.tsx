@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { EditState, FocusWordHit, HighlightLayer, ModelName, Risk, Segment as SegmentType, Transcript } from '../types'
+import type { EditState, FocusWordHit, HighlightLayer, ModelName, Risk, Segment as SegmentType, SentenceSignal, Transcript } from '../types'
 import { segmentRiskWithFocus } from '../lib/segmentRisk'
 import { combinedSegmentRisk } from '../lib/displayRisk'
 import Segment from './Segment'
@@ -39,6 +39,13 @@ interface Props {
    *  anomaly build sets this: it is "FULL plus conflict tints", so the word
    *  version's dot must survive (the sentence builds drop it). */
   keepRiskDot?: boolean
+  /** Sentence-layer signal selector (sentence launcher versions): current
+   *  value + change handler render a "Sentences: Confidence | Importance |
+   *  Both" segmented control in the header; busy shows while the importance
+   *  ranking is being fetched. Absent handler → no control. */
+  sentenceSignal?: SentenceSignal
+  onSentenceSignalChange?: (signal: SentenceSignal) => void
+  sentenceSignalBusy?: boolean
   /** Override the dimension used for WORD marks only (segment risk / chips
    *  still follow `dimension`). The sentence-uncertainty version passes 'none'
    *  to suppress word marks while chips reflect paraRisk. */
@@ -80,6 +87,18 @@ const RISK_CHIP: Record<Risk, string> = {
   low: 'bg-surface-subtle text-ink-muted',
 }
 
+// Sentence-signal segmented control (sentence launcher versions).
+const SIGNAL_LABEL: Record<SentenceSignal, string> = {
+  confidence: 'Confidence',
+  importance: 'Importance',
+  both: 'Both',
+}
+const SIGNAL_TIP: Record<SentenceSignal, string> = {
+  confidence: 'Tint sentences by how confident the speech-recognition was — low confidence stands out',
+  importance: 'Tint the sentences where a transcription error would matter most (AI-ranked)',
+  both: 'Red = likely mis-transcribed AND important; one signal alone shows amber',
+}
+
 type RiskFilter = 'all' | 'high+med' | 'high'
 // Word-highlight level: 'all' = full red + amber treatment; 'high' = hide the
 // amber MED word highlights (quieter read; data/events untouched).
@@ -119,6 +138,9 @@ export default function TranscriptView({
   sentenceTintMap,
   sentenceTintTitleFor,
   keepRiskDot = false,
+  sentenceSignal,
+  onSentenceSignalChange,
+  sentenceSignalBusy = false,
   wordDimension,
   onSeek,
   onWordClick,
@@ -284,8 +306,38 @@ export default function TranscriptView({
               {counts.med} med
             </span>
 
+            {/* Sentence-signal selector (sentence launcher versions): switches
+                what the whole-sentence tint encodes; switches are logged. */}
+            {onSentenceSignalChange && sentenceSignal && (
+              <div className="ml-auto flex items-center gap-1.5">
+                <span className="text-[10px] uppercase tracking-[0.08em] text-ink-faint">
+                  Sentences
+                </span>
+                <div className="flex rounded-md border border-border overflow-hidden">
+                  {(Object.keys(SIGNAL_LABEL) as SentenceSignal[]).map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => onSentenceSignalChange(s)}
+                      title={SIGNAL_TIP[s]}
+                      className={[
+                        'px-2 py-0.5 text-[11px] transition-colors',
+                        sentenceSignal === s
+                          ? 'bg-brand text-white'
+                          : 'bg-surface text-ink-muted hover:text-ink hover:bg-surface-muted',
+                      ].join(' ')}
+                    >
+                      {SIGNAL_LABEL[s]}
+                    </button>
+                  ))}
+                </div>
+                {sentenceSignalBusy && (
+                  <span className="text-[10px] text-ink-faint animate-pulse">ranking…</span>
+                )}
+              </div>
+            )}
+
             <Menu
-              className="ml-auto"
+              className={onSentenceSignalChange && sentenceSignal ? undefined : 'ml-auto'}
               align="right"
               title="View options"
               triggerClassName="flex items-center gap-1 text-[11px] text-ink-muted hover:text-ink border border-border rounded-md px-2 py-0.5 bg-surface hover:border-border-strong transition-colors"

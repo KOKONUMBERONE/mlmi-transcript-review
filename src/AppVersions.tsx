@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import ReviewWorkspace from './core/ReviewWorkspace'
 import {
-  ANOMALY_CONFIG,
-  FULL_CONFIG,
-  SENTENCE_CONFIG,
-  SENTENCE_UNCERTAINTY_CONFIG,
-  TIMELINE_CONFIG,
+  CLEAN_BOTH_CONFIG,
+  CLEAN_SENTENCE_CONFIG,
+  CLEAN_WORD_CONFIG,
+  COMPLETE_CONFIG,
+  TOOLKIT_CONFIG,
   type WorkspaceConfig,
 } from './core/config'
 import { useEventLog } from './state/useEventLog'
@@ -21,41 +21,45 @@ interface Version {
   config: WorkspaceConfig
 }
 
+// Restructured 2026-07-07 along two clean axes, so each adjacent pair differs
+// by ONE thing: in-text highlighting (word / sentence / both) × AI toolkit
+// (none / all). 1 vs 2 vs 3 = "which granularity should marks live at?";
+// 1 vs 4 = "does the toolkit help?"; 4 vs 5 = "is the sentence layer worth it?"
 const VERSIONS: Version[] = [
   {
     id: 'word',
     title: 'Word highlighting',
     blurb:
-      'Word-level risk marks: words that are likely wrong and matter are flagged in the text.',
-    config: FULL_CONFIG,
+      'Only word-level risk marks: words that are likely wrong and matter are flagged in the text. No side tools.',
+    config: CLEAN_WORD_CONFIG,
   },
   {
     id: 'sentence',
-    title: 'Word + sentence importance',
+    title: 'Sentence highlighting',
     blurb:
-      'Everything in the word version, plus an AI layer that highlights the whole sentences worth re-listening to first.',
-    config: SENTENCE_CONFIG,
+      'Only whole-sentence marks, tinted by how confident the speech-recognition was — sentences most likely to be mis-transcribed stand out. No word marks, no side tools.',
+    config: CLEAN_SENTENCE_CONFIG,
   },
   {
-    id: 'sentence-uncertainty',
-    title: 'Sentence confidence',
+    id: 'word-sentence',
+    title: 'Word + sentence highlighting',
     blurb:
-      'Whole sentences are highlighted by how confident the speech-recognition was — the ones most likely to be mis-transcribed stand out for a listen.',
-    config: SENTENCE_UNCERTAINTY_CONFIG,
+      'Both layers together: word-level risk marks inside the sentence-confidence tint. No side tools.',
+    config: CLEAN_BOTH_CONFIG,
   },
   {
-    id: 'conflicts',
-    title: 'Contradiction alerts',
+    id: 'toolkit',
+    title: 'AI toolkit',
     blurb:
-      'Everything in the word version, plus AI cross-checks the statements and flags pairs that seem to conflict — times, places, people — for a re-listen.',
-    config: ANOMALY_CONFIG,
+      'Word highlighting plus every AI tool: keyword Find, chapter Outline, Ask-AI assistant, contradiction alerts and a clickable event timeline.',
+    config: TOOLKIT_CONFIG,
   },
   {
-    id: 'timeline',
-    title: 'Timeline',
+    id: 'complete',
+    title: 'Complete',
     blurb:
-      'Everything in the word version, plus AI lays out the events described in the recording as a clickable timeline — jump straight to the moment each one is said.',
-    config: TIMELINE_CONFIG,
+      'Everything at once: word + sentence highlighting and the full AI toolkit.',
+    config: COMPLETE_CONFIG,
   },
 ]
 
@@ -72,8 +76,8 @@ export default function AppVersions() {
             Transcript review
           </h1>
           <p className="text-[12px] text-ink-muted mb-5 leading-relaxed">
-            Choose an interface version. Both review the same demo interview —
-            you can switch versions at any time.
+            Choose an interface version. All five review the same demo
+            interview — you can switch versions at any time.
           </p>
           <div className="space-y-3">
             {VERSIONS.map((v) => (

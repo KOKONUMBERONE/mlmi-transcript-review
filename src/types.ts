@@ -164,6 +164,12 @@ export interface TriageResult {
   segments: TriageSegment[]
 }
 
+// Sentence-layer signal (launcher sentence versions): which AI signal drives
+// the whole-sentence tint — ASR confidence (`paraRisk`), LLM importance
+// (/triage), or the gated combination of the two ("likely mis-transcribed AND
+// matters" — the word-level deployment principle applied at sentence level).
+export type SentenceSignal = 'confidence' | 'importance' | 'both'
+
 // Cross-sentence contradiction check (anomaly build): the local LLM flags
 // PAIRS of segments that appear to conflict. Pointing overlay only — each pair
 // carries the two segment ids, a coarse type, and a short note; the reviewer
@@ -353,12 +359,13 @@ export interface LogEvent {
   occurrences?: number         // batch correct-all: how many identical tokens one decision fixed
   chosen_model?: string        // which ASR model produced the chosen candidate
   reason?: string
-  // filter_change payload. Three value namespaces share this field — match on
+  // filter_change payload. Four value namespaces share this field — match on
   // the full string, NOT a prefix ('high' is the Show filter; 'highlights:high'
   // is the word-highlight toggle):
   //   Show segment filter (both builds): 'all' | 'high+med' | 'high'
   //   Highlights toggle  (full only):    'highlights:all' | 'highlights:high'
   //   Marks toggle       (both builds):  'marks:hover' | 'marks:always'
+  //   Sentence signal (sentence versions): 'sentence_signal:confidence|importance|both'
   filter?: string
   sort?: string // legacy — populated only by pre-2026-07-02 sort_change events
   from_dimension?: RiskDimension
