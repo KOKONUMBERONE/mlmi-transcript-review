@@ -55,3 +55,5 @@ server/.anomaly_cache/
 server/.timeline_cache/
 # Runtime service logs
 server/*.log
+# Downloaded ASR eval datasets (audio) — fetched by scripts/, not tracked.
+test_data/
