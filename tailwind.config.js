@@ -50,6 +50,11 @@ export default {
           from: { transform: 'scaleY(0)' },
           to: { transform: 'scaleY(1)' },
         },
+        // Violet "ready to click" ring on the Transcribe button once audio loads.
+        'pulse-focus': {
+          '0%, 100%': { boxShadow: '0 0 0 0 rgb(var(--focus) / 0.35)' },
+          '60%': { boxShadow: '0 0 0 6px rgb(var(--focus) / 0)' },
+        },
       },
       animation: {
         'card-in': 'card-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both',
@@ -59,6 +64,7 @@ export default {
         'pulse-brand': 'pulse-brand 2.4s ease-out infinite',
         'strip-up': 'strip-up 0.4s cubic-bezier(0.22, 1, 0.36, 1) both',
         'stem-up': 'stem-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both',
+        'pulse-focus': 'pulse-focus 2s ease-out infinite',
       },
       colors: {
         // Cool, calm surfaces (was warm "forensic" gray).

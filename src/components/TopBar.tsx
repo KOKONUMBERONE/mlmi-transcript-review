@@ -117,6 +117,11 @@ function formatElapsed(ms: number): string {
 const TOOL_BTN =
   'flex items-center gap-1 text-[11px] text-ink-muted hover:text-ink px-2 py-1 rounded-md border border-border hover:border-border-strong transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-ink-muted disabled:hover:border-border'
 
+// Transcribe once audio is loaded: violet "you can run this now" emphasis with a
+// gentle pulsing ring. Falls back to the plain tool style while disabled.
+const TRANSCRIBE_READY =
+  'flex items-center gap-1 text-[11px] px-2 py-1 rounded-md border transition-colors text-focus border-focus/50 bg-focus-bg hover:border-focus motion-safe:animate-pulse-focus'
+
 export default function TopBar({
   model,
   availableModels,
@@ -228,7 +233,7 @@ export default function TopBar({
               onClick={onTranscribe}
               disabled={!canTranscribe || transcribing}
               title={canTranscribe ? 'Run the ASR models on the loaded audio' : 'Load an audio file first'}
-              className={TOOL_BTN}
+              className={canTranscribe && !transcribing ? TRANSCRIBE_READY : TOOL_BTN}
             >
               <TranscribeIcon />
               {transcribing ? 'Transcribing…' : 'Transcribe'}
