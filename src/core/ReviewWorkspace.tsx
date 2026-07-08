@@ -30,6 +30,7 @@ import { runTriage } from '../lib/triageApi'
 import { runAnomalies } from '../lib/anomalyApi'
 import { runTimeline } from '../lib/timelineApi'
 import TimelinePanel, { type TimelineItem } from '../components/TimelinePanel'
+import TimelineStrip from '../components/TimelineStrip'
 import ConflictPanel, { type ConflictItem } from '../components/ConflictPanel'
 import { adaptAsrPipelineOutput, isAsrPipelineOutput } from '../lib/asrAdapter'
 import defaultTriageJson from '../data/defaultTriage.json'
@@ -380,6 +381,12 @@ export default function ReviewWorkspace({
   // ---- Event timeline (timeline build) — local-LLM event list --------------
   const [timelineResult, setTimelineResult] = useState<TimelineResult | null>(null)
   const [timelineRunning, setTimelineRunning] = useState<boolean>(false)
+  // Which timeline event is hovered (strip marker OR left-list row) — keyed by
+  // the items array index, since event ids are segment ids and can repeat.
+  const [hoveredEventIndex, setHoveredEventIndex] = useState<number | null>(null)
+  // TimelineStrip open/closed (the strip "pops up" out of the player bar).
+  // Collapsed by default — the reviewer opens it from the handle when wanted.
+  const [timelineStripOpen, setTimelineStripOpen] = useState<boolean>(false)
   const [timelineError, setTimelineError] = useState<string | null>(null)
   const [timelineNonce, setTimelineNonce] = useState(0)
   useEffect(() => {
@@ -1582,6 +1589,21 @@ export default function ReviewWorkspace({
     }))
   }, [config.timelineView, timelineResult, transcript])
 
+  // The strip's risk band consumes the SAME signal the transcript shows:
+  // sentence versions → the sentence tint map verbatim; word-mark versions
+  // (toolkit) → the per-segment display risk (segRisk), which also drives the
+  // transcript head dots — strip and transcript can never disagree.
+  const stripTintMap = useMemo(() => {
+    if (!config.timelineView) return new Map<number, Risk>()
+    if (sentenceLayerActive) return sentenceTintMap
+    const m = new Map<number, Risk>()
+    for (const s of transcript.segments) {
+      const r = segRisk(s)
+      if (r === 'high' || r === 'med') m.set(s.id, r)
+    }
+    return m
+  }, [config.timelineView, sentenceLayerActive, sentenceTintMap, transcript, segRisk])
+
   const conflictItems = useMemo<ConflictItem[]>(() => {
     if (!config.anomalyDetection || !anomalyResult) return []
     const byId = new Map(transcript.segments.map((s) => [s.id, s]))
@@ -1599,12 +1621,12 @@ export default function ReviewWorkspace({
   }, [config.anomalyDetection, anomalyResult, transcript, model])
 
   const handleTimelineEventClick = useCallback(
-    (item: TimelineItem) => {
+    (item: TimelineItem, trigger: SeekTrigger = 'marker') => {
       events.log('timeline_event_click', {
         segment_id: item.id,
         segment_start: item.segment_start,
       })
-      seekWithLog(item.segment_start, 'marker')
+      seekWithLog(item.segment_start, trigger)
     },
     [events, seekWithLog],
   )
@@ -2105,6 +2127,9 @@ export default function ReviewWorkspace({
               onEventClick={handleTimelineEventClick}
               onRetry={() => setTimelineNonce((n) => n + 1)}
               onToggleCollapse={() => setFocusCollapsed(true)}
+              hoveredIndex={hoveredEventIndex}
+              onEventHover={setHoveredEventIndex}
+              activeSegmentId={activeId}
               tabStrip={
                 <LeftTabStrip
                   active="timeline"
@@ -2238,6 +2263,27 @@ export default function ReviewWorkspace({
         />
       </div>
 
+      {/* Full-width time-proportional timeline strip (timeline build only):
+          event markers + risk heat band + verified progress + playhead. */}
+      {config.timelineView && (
+        <TimelineStrip
+          segments={transcript.segments}
+          duration={audio.duration > 0 ? audio.duration : transcript.audioDuration}
+          currentTime={audio.currentTime}
+          items={timelineItems}
+          running={timelineRunning}
+          tintMap={stripTintMap}
+          verified={verified}
+          activeSegmentId={activeId}
+          hoveredEventIndex={hoveredEventIndex}
+          onEventHover={setHoveredEventIndex}
+          onEventClick={(item) => handleTimelineEventClick(item, 'timeline')}
+          onTrackSeek={(s) => seekWithLog(s, 'timeline')}
+          open={timelineStripOpen}
+          onToggle={() => setTimelineStripOpen((v) => !v)}
+        />
+      )}
+
       {/* Page-bottom playback bar (reviewer + transport + speed). */}
       <PlayerBar
         audio={audio}
@@ -2251,6 +2297,7 @@ export default function ReviewWorkspace({
       />
 
       <ShortcutLegend
+        raised={config.timelineView && timelineStripOpen}
         getEvents={events.getEvents}
         onExport={(kind, count) =>
           events.log('export', { export_kind: kind, segment_count: count })

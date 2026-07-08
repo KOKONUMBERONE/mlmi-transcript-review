@@ -19,6 +19,8 @@ interface Props {
   condition: string
   onParticipantChange: (id: string) => void
   onConditionChange: (condition: string) => void
+  /** Clear the TimelineStrip too (timeline build), not just the PlayerBar. */
+  raised?: boolean
 }
 
 export default function ShortcutLegend({
@@ -28,6 +30,7 @@ export default function ShortcutLegend({
   condition,
   onParticipantChange,
   onConditionChange,
+  raised = false,
 }: Props) {
   const [open, setOpen] = useState(false)
 
@@ -39,7 +42,7 @@ export default function ShortcutLegend({
   }
 
   return (
-    <div className="fixed bottom-[4.25rem] right-3 z-40">
+    <div className={`fixed ${raised ? 'bottom-[10.5rem]' : 'bottom-[4.25rem]'} right-3 z-40`}>
       {open && (
         <div className="mb-2 w-64 bg-surface border border-border rounded-md shadow-lg p-3">
           <p className="text-[10px] text-ink-faint uppercase tracking-[0.1em] mb-2">

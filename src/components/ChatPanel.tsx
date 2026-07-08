@@ -64,13 +64,13 @@ export default function ChatPanel({
     <aside className="w-80 shrink-0 border-r border-border bg-surface flex flex-col overflow-hidden">
       {/* Header — tab strip + collapse, mirroring FocusPanel's header row. */}
       <div className="px-4 py-3 border-b border-border shrink-0 bg-surface">
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between gap-2">
           {tabStrip}
           {onToggleCollapse && (
             <button
               onClick={onToggleCollapse}
               title="Collapse panel"
-              className="text-ink-faint hover:text-ink p-0.5 rounded hover:bg-surface-muted"
+              className="shrink-0 text-ink-faint hover:text-ink p-0.5 rounded hover:bg-surface-muted"
             >
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M7.5 2.5 4 6l3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />

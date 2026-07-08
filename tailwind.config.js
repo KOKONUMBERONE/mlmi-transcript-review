@@ -40,6 +40,16 @@ export default {
           '0%, 100%': { boxShadow: '0 0 0 0 rgb(var(--brand) / 0.25)' },
           '60%': { boxShadow: '0 0 0 8px rgb(var(--brand) / 0)' },
         },
+        // TimelineStrip: the panel "pulls up" out of the player bar.
+        'strip-up': {
+          from: { opacity: '0', transform: 'translateY(18px) scaleY(0.9)' },
+          to: { opacity: '1', transform: 'none' },
+        },
+        // The playhead connector "draws" upward from the bar into the panel.
+        'stem-up': {
+          from: { transform: 'scaleY(0)' },
+          to: { transform: 'scaleY(1)' },
+        },
       },
       animation: {
         'card-in': 'card-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both',
@@ -47,6 +57,8 @@ export default {
         draw: 'draw 0.5s ease-out both',
         'slide-in-r': 'slide-in-r 0.25s cubic-bezier(0.22, 1, 0.36, 1) both',
         'pulse-brand': 'pulse-brand 2.4s ease-out infinite',
+        'strip-up': 'strip-up 0.4s cubic-bezier(0.22, 1, 0.36, 1) both',
+        'stem-up': 'stem-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both',
       },
       colors: {
         // Cool, calm surfaces (was warm "forensic" gray).

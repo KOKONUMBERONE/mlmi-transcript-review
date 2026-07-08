@@ -311,7 +311,9 @@ export type EventType =
   | 'chat_citation_click'
   | 'chat_clear'
 
-export type SeekTrigger = 'waveform' | 'segment' | 'marker' | 'keyboard' | 'programmatic' | 'word'
+// 'marker' = left-panel jump lists (timeline list, outline, conflicts);
+// 'timeline' = the full-width TimelineStrip (marker or track click).
+export type SeekTrigger = 'waveform' | 'segment' | 'marker' | 'keyboard' | 'programmatic' | 'word' | 'timeline'
 
 export interface LogEvent {
   // Always present:

@@ -31,7 +31,7 @@ export function LeftTabStrip({
         : 'text-ink-faint border-transparent hover:text-ink',
     ].join(' ')
   return (
-    <div className="flex items-baseline gap-3" role="tablist" aria-label="Left panel">
+    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 min-w-0" role="tablist" aria-label="Left panel">
       <button role="tab" aria-selected={active === 'find'} className={cls('find')} onClick={() => onSelect('find')}>
         Find
       </button>

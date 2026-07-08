@@ -112,13 +112,13 @@ export default function FocusPanel({
   return (
     <aside className="w-80 shrink-0 border-r border-border bg-surface overflow-y-auto flex flex-col">
       <div className="px-4 py-3 border-b border-border sticky top-0 bg-surface z-10">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-start justify-between gap-2 mb-2">
           {tabStrip ?? (
             <p className="text-[10px] text-brand uppercase tracking-[0.1em] font-semibold">
               Find
             </p>
           )}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {active && (
               <p className="text-[10px] font-mono text-ink-faint tabular-nums">
                 {hits} {hits === 1 ? 'hit' : 'hits'}
@@ -131,7 +131,7 @@ export default function FocusPanel({
                 className="text-ink-faint hover:text-ink p-0.5 rounded hover:bg-surface-muted"
               >
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M7.5 2.5 4 6l-3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M7.5 2.5 4 6l3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </button>
             )}

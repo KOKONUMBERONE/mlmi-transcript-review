@@ -16,6 +16,13 @@ interface Props {
   onToggleCollapse?: () => void
   /** Tab strip (Find | Assistant | Timeline) rendered as the panel title. */
   tabStrip?: React.ReactNode
+  // List↔strip hover sync (TimelineStrip), keyed by the items array index —
+  // event ids are segment ids and can repeat. All optional: the panel is
+  // unchanged when no strip is mounted.
+  hoveredIndex?: number | null
+  onEventHover?: (index: number | null) => void
+  /** Segment currently under the playhead — gets a brand accent. */
+  activeSegmentId?: number | null
 }
 
 function formatTime(seconds: number): string {
@@ -35,11 +42,14 @@ export default function TimelinePanel({
   onRetry,
   onToggleCollapse,
   tabStrip,
+  hoveredIndex,
+  onEventHover,
+  activeSegmentId,
 }: Props) {
   return (
     <aside className="w-80 shrink-0 border-r border-border bg-surface overflow-y-auto flex flex-col">
       <div className="px-4 py-3 border-b border-border sticky top-0 bg-surface z-10">
-        <div className="flex items-center justify-between mb-1">
+        <div className="flex items-start justify-between gap-2 mb-1">
           {tabStrip ?? (
             <p className="text-[10px] text-brand uppercase tracking-[0.1em] font-semibold">
               Timeline
@@ -49,7 +59,7 @@ export default function TimelinePanel({
             <button
               onClick={onToggleCollapse}
               title="Collapse panel"
-              className="text-ink-faint hover:text-ink p-1 rounded hover:bg-surface-muted"
+              className="shrink-0 text-ink-faint hover:text-ink p-1 rounded hover:bg-surface-muted"
             >
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M7.5 2.5 4 6l3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -88,8 +98,14 @@ export default function TimelinePanel({
               <li key={`${item.id}-${i}`}>
                 <button
                   onClick={() => onEventClick(item)}
+                  onMouseEnter={() => onEventHover?.(i)}
+                  onMouseLeave={() => onEventHover?.(null)}
                   title="Jump to this moment"
-                  className="w-full text-left px-2 py-1.5 rounded hover:bg-surface-muted transition-colors group"
+                  className={[
+                    'w-full text-left px-2 py-1.5 rounded hover:bg-surface-muted transition-colors group',
+                    hoveredIndex === i ? 'bg-brand-bg' : '',
+                    item.id === activeSegmentId ? 'border-l-2 border-brand pl-1.5' : '',
+                  ].join(' ')}
                 >
                   <span className="flex items-baseline gap-2">
                     <span className="font-mono text-[10px] text-brand tabular-nums shrink-0 group-hover:underline">
