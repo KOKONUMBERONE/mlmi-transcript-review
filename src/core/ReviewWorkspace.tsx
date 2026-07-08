@@ -210,6 +210,15 @@ export default function ReviewWorkspace({
   const availableModels = useMemo(() => modelsOf(transcript), [transcript])
   const [model, setModel] = useState<ModelName>(availableModels[0])
   const [reviewer, setReviewer] = useState<string>('')
+  // Reviewer-name reminder: bumping this nonce flashes the name field red (see
+  // TopBar). Fired from the audit-recording paths when no name is set. A ref
+  // mirrors `reviewer` so the trigger stays a stable, dependency-free callback.
+  const reviewerRef = useRef(reviewer)
+  reviewerRef.current = reviewer
+  const [nameFlashNonce, setNameFlashNonce] = useState(0)
+  const flashNameIfMissing = useCallback(() => {
+    if (reviewerRef.current.trim() === '') setNameFlashNonce((n) => n + 1)
+  }, [])
   const [participantId, setParticipantId] = useState<string>('')
   const [condition, setCondition] = useState<string>('')
 
@@ -885,7 +894,8 @@ export default function ReviewWorkspace({
   const currentReviewer = (): string =>
     reviewer.trim() === '' ? UNKNOWN_REVIEWER : reviewer.trim()
 
-  const logEntry = (entry: Omit<HistoryEntry, 'id' | 'timestamp' | 'reviewer'>) =>
+  const logEntry = (entry: Omit<HistoryEntry, 'id' | 'timestamp' | 'reviewer'>) => {
+    flashNameIfMissing()
     setHistory((prev) => [
       {
         id: nextEntryId(),
@@ -895,6 +905,7 @@ export default function ReviewWorkspace({
       },
       ...prev,
     ])
+  }
 
   // ---- Popup ----
   // useCallback so the per-word onWordClick reference is stable — lets
@@ -1108,6 +1119,7 @@ export default function ReviewWorkspace({
     (segIds: number[], value: boolean) => {
       const changed = segIds.filter((id) => !!verified[id] !== value)
       if (changed.length === 0) return
+      flashNameIfMissing()
       setVerified((prev) => {
         const next = { ...prev }
         for (const id of changed) next[id] = value
@@ -1147,6 +1159,7 @@ export default function ReviewWorkspace({
       }
       verifyAnchorRef.current = segId
       const next = !verified[segId]
+      flashNameIfMissing()
       setVerified((prev) => ({ ...prev, [segId]: next }))
       setHistory((h) => [
         {
@@ -1990,6 +2003,9 @@ export default function ReviewWorkspace({
         recordingDownloadName={
           recordingDownloadUrl && audioFilename ? audioFilename : null
         }
+        reviewer={reviewer}
+        onReviewerChange={setReviewer}
+        nameFlash={nameFlashNonce}
         dimension={dimension}
         onDimensionChange={handleDimensionChange}
         showRiskSelect={config.allowFreeDimension}
@@ -2002,6 +2018,10 @@ export default function ReviewWorkspace({
         canTranscribe={!!audioBlob}
         transcribing={transcribing}
         onTranscribe={handleTranscribe}
+        // Rough time model for the progress bar (no real signal from the ASR
+        // service): local 4-model ensemble runs ≈6× realtime + ~25s overhead
+        // (measured: ~50s audio → ~4.5min; ~2min → ~12–18min).
+        transcribeEstimateSec={25 + 6 * (audio.duration > 0 ? audio.duration : 60)}
         numSpeakers={numSpeakers}
         onNumSpeakersChange={setNumSpeakers}
         allowChangeToggle={config.allowChangeToggle}
@@ -2287,8 +2307,6 @@ export default function ReviewWorkspace({
       {/* Page-bottom playback bar (reviewer + transport + speed). */}
       <PlayerBar
         audio={audio}
-        reviewer={reviewer}
-        onReviewerChange={setReviewer}
         onSpeedChange={handleSpeedChange}
         onTogglePlay={togglePlayWithRewind}
         onSkip={(delta) =>

@@ -2,8 +2,6 @@ import type { AudioController } from '../state/useAudio'
 
 interface Props {
   audio: AudioController
-  reviewer: string
-  onReviewerChange: (name: string) => void
   onSpeedChange?: (speed: number) => void
   // Play/pause with the auto-rewind-on-resume convention; falls back to the raw
   // audio toggle when not provided.
@@ -19,19 +17,15 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-// Page-bottom playback bar (à la Otter): reviewer identity on the left, the
-// transport + scrubbable waveform stretched across the middle, speed on the
-// right. Pinned to the bottom of the workspace column.
+// Page-bottom playback bar (à la Otter): the transport + scrubbable waveform
+// stretched across the middle, speed on the right. Pinned to the bottom of the
+// workspace column. (Reviewer identity moved up to the top bar.)
 export default function PlayerBar({
   audio,
-  reviewer,
-  onReviewerChange,
   onSpeedChange,
   onTogglePlay,
   onSkip,
 }: Props) {
-  const reviewerMissing = reviewer.trim() === ''
-
   const skip = (delta: number) => {
     if (onSkip) onSkip(delta)
     else audio.seek(Math.max(0, Math.min(audio.duration, audio.currentTime + delta)))
@@ -39,24 +33,9 @@ export default function PlayerBar({
 
   return (
     <div className="h-14 grid grid-cols-[1fr_auto_1fr] items-center px-5 bg-surface border-t border-border shrink-0">
-      {/* Reviewer identity (left cell) */}
-      <label className="flex items-center gap-1.5 justify-self-start" title="Recorded on every audit-trail entry">
-        <span className="text-[11px] text-ink-muted">
-          Reviewer
-        </span>
-        <input
-          type="text"
-          value={reviewer}
-          onChange={(e) => onReviewerChange(e.target.value)}
-          placeholder="Set your name…"
-          className={[
-            'text-xs border rounded px-2 py-1 bg-surface text-ink min-w-[9rem] focus:outline-none focus:ring-1 focus:ring-border-strong transition-colors',
-            reviewerMissing
-              ? 'border-risk-med/50 focus:ring-risk-med/40 placeholder:text-risk-med/70 placeholder:italic'
-              : 'border-border hover:border-border-strong',
-          ].join(' ')}
-        />
-      </label>
+      {/* Empty left cell keeps the transport centred by the 1fr/auto/1fr grid
+          (reviewer identity moved to the top bar). */}
+      <div aria-hidden />
 
       {/* Transport cluster — perfectly centred by the 1fr/auto/1fr grid */}
       <div className="flex items-center gap-2 justify-self-center">

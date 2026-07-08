@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ModelName, RiskDimension } from '../types'
 import type { RiskRegime } from '../core/config'
 import { Menu, MenuItem, MenuRow, MenuSection } from './Menu'
@@ -17,6 +17,13 @@ interface Props {
   onToggleRecord: () => void
   recordingDownloadUrl: string | null
   recordingDownloadName: string | null
+  // Reviewer identity — stamped on every audit-trail entry. Lives in the top
+  // bar next to the file actions (moved up from the player bar).
+  reviewer: string
+  onReviewerChange: (name: string) => void
+  // Bump to flash the reviewer field red for ~10s — fired when a review action
+  // is taken with no name set (reminder to identify yourself).
+  nameFlash?: number
   dimension: RiskDimension
   onDimensionChange: (d: RiskDimension) => void
   // Study build gates: hide the free risk toggle and the upload/record
@@ -34,6 +41,9 @@ interface Props {
   canTranscribe?: boolean
   transcribing?: boolean
   onTranscribe?: () => void
+  // Estimated total transcription time (seconds) for the current audio, used to
+  // animate the progress bar shown under the filename while transcribing.
+  transcribeEstimateSec?: number
   /** Diarisation hint for the ASR service: exactly N speakers (e.g. 2 for an
    *  interview). null/empty = automatic. Rendered as a small "Speakers" box
    *  next to Transcribe when the handler is provided. */
@@ -136,6 +146,9 @@ export default function TopBar({
   onToggleRecord,
   recordingDownloadUrl,
   recordingDownloadName,
+  reviewer,
+  onReviewerChange,
+  nameFlash = 0,
   dimension,
   onDimensionChange,
   showRiskSelect = true,
@@ -148,6 +161,7 @@ export default function TopBar({
   canTranscribe = false,
   transcribing = false,
   onTranscribe,
+  transcribeEstimateSec = 60,
   numSpeakers = null,
   onNumSpeakersChange,
   allowChangeToggle = false,
@@ -161,6 +175,55 @@ export default function TopBar({
   const audioInputRef = useRef<HTMLInputElement>(null)
   const transcriptInputRef = useRef<HTMLInputElement>(null)
 
+  // Flash the reviewer field red for 10s when `nameFlash` bumps (a review
+  // action was taken with no name set). Re-arming the timer on each bump keeps
+  // it flashing while the reviewer keeps acting without a name.
+  const [nameFlashing, setNameFlashing] = useState(false)
+  useEffect(() => {
+    if (!nameFlash) return
+    setNameFlashing(true)
+    const t = setTimeout(() => setNameFlashing(false), 10000)
+    return () => clearTimeout(t)
+  }, [nameFlash])
+  // A filled-in name clears the reminder immediately.
+  useEffect(() => {
+    if (reviewer.trim() !== '') setNameFlashing(false)
+  }, [reviewer])
+
+  // Transcription progress — the ASR service is one long blocking request with
+  // no real progress signal, so we ESTIMATE from the audio length: fill
+  // linearly to 90% over `transcribeEstimateSec`, then crawl 90→99% so an
+  // over-run never looks "done". It vanishes the moment `transcribing` clears.
+  const [transcribePct, setTranscribePct] = useState(0)
+  const [transcribeRemainSec, setTranscribeRemainSec] = useState(0)
+  useEffect(() => {
+    if (!transcribing) {
+      setTranscribePct(0)
+      return
+    }
+    const est = Math.max(10, transcribeEstimateSec)
+    const start = Date.now()
+    const tick = () => {
+      const elapsed = (Date.now() - start) / 1000
+      const p =
+        elapsed < est
+          ? 0.9 * (elapsed / est)
+          : 0.9 + 0.09 * (1 - Math.exp(-(elapsed - est) / est))
+      setTranscribePct(Math.min(0.99, p))
+      setTranscribeRemainSec(Math.max(0, est - elapsed))
+    }
+    tick()
+    const id = setInterval(tick, 250)
+    return () => clearInterval(id)
+  }, [transcribing, transcribeEstimateSec])
+
+  const remainLabel =
+    transcribeRemainSec <= 1
+      ? 'finishing…'
+      : transcribeRemainSec >= 90
+        ? `~${Math.ceil(transcribeRemainSec / 60)} min left`
+        : `~${Math.ceil(transcribeRemainSec / 10) * 10}s left`
+
   return (
     <header className="h-14 flex items-center px-5 gap-4 bg-surface border-b border-border shrink-0">
       {/* Filename block */}
@@ -168,13 +231,26 @@ export default function TopBar({
         <span className="font-mono text-[11px] text-ink tracking-wide truncate" title={audioFilename ?? undefined}>
           {audioFilename ?? 'interview_2024-03-14_case447.wav'}
         </span>
-        <span className="text-[10px] text-ink-faint italic truncate">
-          {audioFilename
-            ? `uploaded audio${transcriptFilename ? ` · ${transcriptFilename}` : ''}`
-            : transcriptFilename
-            ? `placeholder audio · ${transcriptFilename}`
-            : 'placeholder audio · silent'}
-        </span>
+        {transcribing ? (
+          // Estimated transcription progress (replaces the subtitle while running).
+          <span className="flex items-center gap-1.5 mt-0.5" title="Estimated from the audio length — the ASR service reports no real progress">
+            <span className="relative h-1 flex-1 rounded-full bg-surface-muted overflow-hidden">
+              <span
+                className="absolute inset-y-0 left-0 rounded-full bg-brand transition-[width] duration-200 ease-linear"
+                style={{ width: `${(transcribePct * 100).toFixed(1)}%` }}
+              />
+            </span>
+            <span className="text-[10px] text-ink-faint tabular-nums shrink-0">{remainLabel}</span>
+          </span>
+        ) : (
+          <span className="text-[10px] text-ink-faint italic truncate">
+            {audioFilename
+              ? `uploaded audio${transcriptFilename ? ` · ${transcriptFilename}` : ''}`
+              : transcriptFilename
+              ? `placeholder audio · ${transcriptFilename}`
+              : ''}
+          </span>
+        )}
       </div>
 
       {/* Hidden file inputs — triggered from the visible Audio / Transcript buttons. */}
@@ -269,6 +345,27 @@ export default function TopBar({
           )}
         </div>
       )}
+
+      {/* Reviewer identity — sits right after the file actions (moved up from
+          the player bar). Always rendered so it survives builds that hide the
+          file buttons. */}
+      <label className="flex items-center gap-1.5 shrink-0" title="Recorded on every audit-trail entry">
+        <span className="text-[11px] text-ink-muted">Reviewer</span>
+        <input
+          type="text"
+          value={reviewer}
+          onChange={(e) => onReviewerChange(e.target.value)}
+          placeholder="Set your name…"
+          className={[
+            'text-xs border rounded px-2 py-1 bg-surface text-ink w-32 focus:outline-none focus:ring-1 focus:ring-border-strong transition-colors',
+            nameFlashing
+              ? 'animate-flash-red border-risk-high text-risk-high placeholder:text-risk-high'
+              : reviewer.trim() === ''
+                ? 'border-risk-med/50 focus:ring-risk-med/40 placeholder:text-risk-med/70 placeholder:italic'
+                : 'border-border hover:border-border-strong',
+          ].join(' ')}
+        />
+      </label>
 
       {/* Spacer: pushes the config group to the right (playback moved to the
           bottom bar). */}

@@ -55,6 +55,20 @@ export default {
           '0%, 100%': { boxShadow: '0 0 0 0 rgb(var(--focus) / 0.35)' },
           '60%': { boxShadow: '0 0 0 6px rgb(var(--focus) / 0)' },
         },
+        // Reviewer-name reminder: the name field flashes red when a review
+        // action is taken with no name set.
+        'flash-red': {
+          '0%, 100%': {
+            borderColor: 'rgb(var(--risk-high) / 1)',
+            backgroundColor: 'rgb(var(--risk-high) / 0.14)',
+            boxShadow: '0 0 0 3px rgb(var(--risk-high) / 0.25)',
+          },
+          '50%': {
+            borderColor: 'rgb(var(--risk-high) / 0.35)',
+            backgroundColor: 'rgb(var(--risk-high) / 0)',
+            boxShadow: '0 0 0 0 rgb(var(--risk-high) / 0)',
+          },
+        },
       },
       animation: {
         'card-in': 'card-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both',
@@ -65,6 +79,7 @@ export default {
         'strip-up': 'strip-up 0.4s cubic-bezier(0.22, 1, 0.36, 1) both',
         'stem-up': 'stem-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both',
         'pulse-focus': 'pulse-focus 2s ease-out infinite',
+        'flash-red': 'flash-red 0.7s ease-in-out infinite',
       },
       colors: {
         // Cool, calm surfaces (was warm "forensic" gray).
