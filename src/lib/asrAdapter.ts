@@ -45,7 +45,10 @@ const MODEL_KEY = 'ASR ensemble'
 
 // confidence → risk, INVERTED (low confidence = high risk = "check this").
 // Placeholder thresholds — calibrate with Busola once confidence is real.
-const CONF_LOW_RISK = 0.8 // >= → 'low' (models basically agree)
+// With her discrete confidence = score/5: 1.0 → 'low' (no tint), 0.8 & 0.6 →
+// 'med' (amber), 0.4 & 0.2 → 'high' (red). Only near-total agreement is left
+// unmarked so borderline sentences still surface.
+const CONF_LOW_RISK = 0.9 // >= → 'low' (only ~total agreement is left unmarked)
 const CONF_MED_RISK = 0.5 // >= → 'med'; below → 'high'
 
 export function confidenceToRisk(c: number | undefined | null): Risk {
