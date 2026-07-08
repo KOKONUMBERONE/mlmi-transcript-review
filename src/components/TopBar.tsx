@@ -234,27 +234,6 @@ export default function TopBar({
               {transcribing ? 'Transcribing…' : 'Transcribe'}
             </button>
           )}
-          {allowTranscribe && onNumSpeakersChange && (
-            <label
-              title="How many speakers are in the audio (diarisation hint — e.g. 2 for an interview). Leave empty for automatic detection."
-              className="flex items-center gap-1 text-[11px] text-ink-muted"
-            >
-              <span>Speakers</span>
-              <input
-                type="number"
-                min={1}
-                max={10}
-                value={numSpeakers ?? ''}
-                disabled={transcribing}
-                onChange={(e) => {
-                  const v = parseInt(e.target.value, 10)
-                  onNumSpeakersChange(Number.isFinite(v) && v > 0 ? v : null)
-                }}
-                placeholder="auto"
-                className="w-14 text-[11px] border border-border rounded-md px-1.5 py-1 bg-surface text-ink placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-border-strong disabled:opacity-50"
-              />
-            </label>
-          )}
           {allowRecord && (
             <button
               onClick={onToggleRecord}
@@ -347,6 +326,24 @@ export default function TopBar({
                       <option value="uncertainty">Uncertainty</option>
                       <option value="importance">Importance</option>
                     </select>
+                  </MenuRow>
+                )}
+                {allowTranscribe && onNumSpeakersChange && (
+                  <MenuRow label="Speakers">
+                    <input
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={numSpeakers ?? ''}
+                      disabled={transcribing}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value, 10)
+                        onNumSpeakersChange(Number.isFinite(v) && v > 0 ? v : null)
+                      }}
+                      placeholder="auto"
+                      title="How many speakers are in the audio (diarisation hint — e.g. 2 for an interview). Leave empty for automatic detection."
+                      className="w-16 text-[11px] border border-border rounded-md px-1.5 py-0.5 bg-surface text-ink placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-border-strong disabled:opacity-50"
+                    />
                   </MenuRow>
                 )}
               </MenuSection>
