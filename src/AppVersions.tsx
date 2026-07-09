@@ -76,10 +76,32 @@ export default function AppVersions() {
           <h1 className="text-sm font-semibold text-ink uppercase tracking-[0.15em] mb-1">
             Transcript review
           </h1>
-          <p className="text-[12px] text-ink-muted mb-5 leading-relaxed">
+          <p className="text-[12px] text-ink-muted mb-4 leading-relaxed">
             Choose an interface version. All five review the same demo
             interview — you can switch versions at any time.
           </p>
+          {/* Onboarding: police reviewers land here cold — point them at the
+              guide first. Static page in public/guide.html, served at /guide.html
+              on both dev and the Vercel deploy; new tab keeps this menu intact. */}
+          <a
+            href="/guide.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 mb-5 rounded-lg border border-brand/30 bg-brand-bg px-4 py-3 hover:border-brand/60 hover:shadow transition-all group"
+          >
+            <span className="text-lg leading-none">📖</span>
+            <span className="min-w-0">
+              <span className="block text-[13px] font-semibold text-brand">
+                New here? Read the guide first
+              </span>
+              <span className="block text-[11.5px] text-ink-muted leading-snug">
+                A quick tour of the highlights, tools and exports — opens in a new tab.
+              </span>
+            </span>
+            <span className="ml-auto text-ink-faint group-hover:text-brand transition-colors">
+              ↗
+            </span>
+          </a>
           <div className="space-y-3">
             {VERSIONS.map((v) => (
               <button
