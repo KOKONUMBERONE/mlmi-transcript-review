@@ -1,9 +1,10 @@
 import type { AnomalyResult, Transcript } from '../types'
+import { API_BASE } from './apiBase'
 import { PredictError } from './predictApi'
 
 // Same local FastAPI service as /predict and /triage. 127.0.0.1 (not
 // "localhost") so an IPv6 ::1 squatter can't intercept it (see predictApi).
-const ANOMALY_URL = 'http://127.0.0.1:8000/anomalies'
+const ANOMALY_URL = `${API_BASE}/anomalies`
 
 /**
  * Cross-sentence contradiction check (the anomaly build's paradigm): a LOCAL
@@ -30,7 +31,7 @@ export async function runAnomalies(
     })
   } catch (e) {
     throw new PredictError(
-      'Could not reach the conflict-check service at http://127.0.0.1:8000. ' +
+      `Could not reach the conflict-check service at ${API_BASE}. ` +
         'Start it with:  uvicorn serve_model:app --port 8000  (run from server/)',
       e,
     )

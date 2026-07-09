@@ -1,9 +1,10 @@
 import type { OutlineResult, Transcript } from '../types'
+import { API_BASE } from './apiBase'
 import { PredictError } from './predictApi'
 
 // Same local FastAPI service as /predict and /focus. 127.0.0.1 (not "localhost")
 // so an IPv6 ::1 squatter can't intercept it (see predictApi).
-const OUTLINE_URL = 'http://127.0.0.1:8000/outline'
+const OUTLINE_URL = `${API_BASE}/outline`
 
 /**
  * Build a navigable chapter outline of a (possibly very long) transcript. A
@@ -32,7 +33,7 @@ export async function runOutline(
     })
   } catch (e) {
     throw new PredictError(
-      'Could not reach the outline service at http://127.0.0.1:8000. ' +
+      `Could not reach the outline service at ${API_BASE}. ` +
         'Start it with:  uvicorn serve_model:app --port 8000  (run from server/)',
       e,
     )

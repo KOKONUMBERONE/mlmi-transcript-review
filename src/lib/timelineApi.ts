@@ -1,9 +1,10 @@
 import type { TimelineResult, Transcript } from '../types'
+import { API_BASE } from './apiBase'
 import { PredictError } from './predictApi'
 
 // Same local FastAPI service as /predict and /triage. 127.0.0.1 (not
 // "localhost") so an IPv6 ::1 squatter can't intercept it (see predictApi).
-const TIMELINE_URL = 'http://127.0.0.1:8000/timeline'
+const TIMELINE_URL = `${API_BASE}/timeline`
 
 /**
  * Event-timeline extraction (the timeline build's paradigm): a LOCAL LLM lists
@@ -30,7 +31,7 @@ export async function runTimeline(
     })
   } catch (e) {
     throw new PredictError(
-      'Could not reach the timeline service at http://127.0.0.1:8000. ' +
+      `Could not reach the timeline service at ${API_BASE}. ` +
         'Start it with:  uvicorn serve_model:app --port 8000  (run from server/)',
       e,
     )

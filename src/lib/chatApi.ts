@@ -1,11 +1,12 @@
 import type { Transcript } from '../types'
+import { API_BASE } from './apiBase'
 import { PredictError } from './predictApi'
 
 // AI assistant chat over the loaded transcript (full/police build only).
 // Same local FastAPI service as /focus_llm — a LOCAL Ollama model answers,
 // grounded in segment citations that the server validates against the
 // transcript. Nothing leaves the machine; nothing is cached or stored.
-const CHAT_URL = 'http://127.0.0.1:8000/chat'
+const CHAT_URL = `${API_BASE}/chat`
 
 export interface ChatMessage {
   role: 'user' | 'assistant'

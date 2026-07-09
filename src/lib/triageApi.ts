@@ -1,9 +1,10 @@
 import type { Transcript, TriageResult } from '../types'
+import { API_BASE } from './apiBase'
 import { PredictError } from './predictApi'
 
 // Same local FastAPI service as /predict and /outline. 127.0.0.1 (not
 // "localhost") so an IPv6 ::1 squatter can't intercept it (see predictApi).
-const TRIAGE_URL = 'http://127.0.0.1:8000/triage'
+const TRIAGE_URL = `${API_BASE}/triage`
 
 /**
  * Sentence-importance triage (the sentence build's paradigm): a LOCAL LLM
@@ -30,7 +31,7 @@ export async function runTriage(
     })
   } catch (e) {
     throw new PredictError(
-      'Could not reach the triage service at http://127.0.0.1:8000. ' +
+      `Could not reach the triage service at ${API_BASE}. ` +
         'Start it with:  uvicorn serve_model:app --port 8000  (run from server/)',
       e,
     )

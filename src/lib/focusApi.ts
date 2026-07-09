@@ -5,12 +5,13 @@ import type {
   FocusTermResult,
   Transcript,
 } from '../types'
+import { API_BASE } from './apiBase'
 import { PredictError } from './predictApi'
 
 // Same local FastAPI service as /predict — 2b reuses 2a's encoder. 127.0.0.1
 // (not "localhost") so an IPv6 ::1 squatter can't intercept it (see predictApi).
-const FOCUS_URL = 'http://127.0.0.1:8000/focus'
-const FOCUS_LLM_URL = 'http://127.0.0.1:8000/focus_llm'
+const FOCUS_URL = `${API_BASE}/focus`
+const FOCUS_LLM_URL = `${API_BASE}/focus_llm`
 
 /**
  * POST the transcript + focus items to the case-focus retrieval service and
@@ -41,7 +42,7 @@ export async function runFocus(
     })
   } catch (e) {
     throw new PredictError(
-      'Could not reach the focus service at http://127.0.0.1:8000. ' +
+      `Could not reach the focus service at ${API_BASE}. ` +
         'Start it with:  uvicorn serve_model:app --port 8000  (run from server/)',
       e,
     )
@@ -79,7 +80,7 @@ export async function runFocusAi(
     })
   } catch (e) {
     throw new PredictError(
-      'Could not reach the focus service at http://127.0.0.1:8000. ' +
+      `Could not reach the focus service at ${API_BASE}. ` +
         'Start it with:  uvicorn serve_model:app --port 8000  (run from server/)',
       e,
     )

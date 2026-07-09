@@ -9,6 +9,7 @@ import {
   type WorkspaceConfig,
 } from './core/config'
 import { useEventLog } from './state/useEventLog'
+import { ASR_ENABLED } from './lib/apiBase'
 
 // The version launcher (default build): ONE deployment, a landing menu, and
 // every interface variant one click away — so feedback sessions (Police
@@ -117,7 +118,14 @@ export default function AppVersions() {
             (same mechanism the study uses for participant ids). */}
         <ReviewWorkspace
           key={active.id}
-          config={active.config}
+          // Hosted demo (VITE_ASR_ENABLED=false) has no ASR backend, so hide
+          // audio→transcript + recording; the frozen demo case and transcript-
+          // JSON upload still work. Local dev keeps everything.
+          config={
+            ASR_ENABLED
+              ? active.config
+              : { ...active.config, allowAutoTranscribe: false, allowRecord: false }
+          }
           events={events}
           participantOverride={`ver:${active.id}`}
         />
