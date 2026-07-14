@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { AudioController } from '../state/useAudio'
 
 interface Props {
@@ -9,6 +10,8 @@ interface Props {
   // Relative seek for the ±10s buttons (logged as a 'keyboard' seek, like the
   // arrow-key shortcuts); falls back to a raw clamped audio.seek when absent.
   onSkip?: (deltaSeconds: number) => void
+  /** Rendered at the far right of the bar, after the Speed control. */
+  trailing?: ReactNode
 }
 
 function formatTime(seconds: number): string {
@@ -25,6 +28,7 @@ export default function PlayerBar({
   onSpeedChange,
   onTogglePlay,
   onSkip,
+  trailing,
 }: Props) {
   const skip = (delta: number) => {
     if (onSkip) onSkip(delta)
@@ -109,25 +113,28 @@ export default function PlayerBar({
       </span>
       </div>
 
-      {/* Speed (right cell) */}
-      <label className="flex items-center gap-1.5 justify-self-end">
-        <span className="text-[11px] text-ink-muted">Speed</span>
-        <select
-          defaultValue="1"
-          onChange={(e) => {
-            const v = parseFloat(e.target.value)
-            if (onSpeedChange) onSpeedChange(v)
-            else audio.setRate(v)
-          }}
-          className="text-xs border border-border rounded px-2 py-1 bg-surface text-ink hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
-        >
-          <option value="0.5">0.5×</option>
-          <option value="0.75">0.75×</option>
-          <option value="1">1×</option>
-          <option value="1.5">1.5×</option>
-          <option value="2">2×</option>
-        </select>
-      </label>
+      {/* Speed + trailing slot (right cell) */}
+      <div className="flex items-center gap-3 justify-self-end">
+        <label className="flex items-center gap-1.5">
+          <span className="text-[11px] text-ink-muted">Speed</span>
+          <select
+            defaultValue="1"
+            onChange={(e) => {
+              const v = parseFloat(e.target.value)
+              if (onSpeedChange) onSpeedChange(v)
+              else audio.setRate(v)
+            }}
+            className="text-xs border border-border rounded px-2 py-1 bg-surface text-ink hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
+          >
+            <option value="0.5">0.5×</option>
+            <option value="0.75">0.75×</option>
+            <option value="1">1×</option>
+            <option value="1.5">1.5×</option>
+            <option value="2">2×</option>
+          </select>
+        </label>
+        {trailing}
+      </div>
     </div>
   )
 }

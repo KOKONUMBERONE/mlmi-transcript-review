@@ -2334,7 +2334,8 @@ export default function ReviewWorkspace({
         />
       )}
 
-      {/* Page-bottom playback bar (reviewer + transport + speed). */}
+      {/* Page-bottom playback bar (reviewer + transport + speed). The keyboard-
+          shortcuts / researcher panel sits at the far right, after Speed. */}
       <PlayerBar
         audio={audio}
         onSpeedChange={handleSpeedChange}
@@ -2342,18 +2343,18 @@ export default function ReviewWorkspace({
         onSkip={(delta) =>
           seekWithLog(Math.max(0, Math.min(audio.duration, audio.currentTime + delta)), 'keyboard')
         }
-      />
-
-      <ShortcutLegend
-        raised={config.timelineView && timelineStripOpen}
-        getEvents={events.getEvents}
-        onExport={(kind, count) =>
-          events.log('export', { export_kind: kind, segment_count: count })
+        trailing={
+          <ShortcutLegend
+            getEvents={events.getEvents}
+            onExport={(kind, count) =>
+              events.log('export', { export_kind: kind, segment_count: count })
+            }
+            participantId={participantId}
+            condition={condition}
+            onParticipantChange={setParticipantId}
+            onConditionChange={setCondition}
+          />
         }
-        participantId={participantId}
-        condition={condition}
-        onParticipantChange={setParticipantId}
-        onConditionChange={setCondition}
       />
 
       {popup && popupSegment && (
