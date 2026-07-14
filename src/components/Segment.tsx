@@ -238,15 +238,17 @@ export default function Segment({
     startEdit()
   }
 
-  // Whole-sentence highlighter (sentence builds): the entire sentence text gets
-  // a soft tint at the given level — the sentence-level layer sits ON TOP of any
-  // word-level marks. Reviewer edits keep their own (green) treatment; the tint
-  // yields to it (see the rewrite branch below).
+  // Whole-sentence highlighter (sentence builds): a coloured left rail + a soft
+  // tint that fades out to the right, rather than a full-width solid block (the
+  // old look read as a heavy bar). The tint fades to the same hue at 0 alpha
+  // (not `transparent`) so there's no grey fringe mid-fade. The sentence-level
+  // layer sits ON TOP of any word-level marks; reviewer edits keep their own
+  // (green) treatment and the tint yields to it (see the rewrite branch below).
   const sentenceCls =
     sentenceTint === 'high'
-      ? 'text-[15px] leading-[1.6] text-ink bg-risk-high-bg/70 rounded-sm px-1.5 py-0.5 -mx-1.5 ring-1 ring-risk-high/20'
+      ? 'text-[15px] leading-[1.6] text-ink border-l-[3px] border-risk-high/70 bg-gradient-to-r from-risk-high-bg/80 to-risk-high-bg/0 rounded-r-sm pl-2.5 pr-2 py-0.5 -ml-2.5'
       : sentenceTint === 'med'
-        ? 'text-[15px] leading-[1.6] text-ink bg-risk-med-bg/70 rounded-sm px-1.5 py-0.5 -mx-1.5 ring-1 ring-risk-med/20'
+        ? 'text-[15px] leading-[1.6] text-ink border-l-[3px] border-risk-med/70 bg-gradient-to-r from-risk-med-bg/80 to-risk-med-bg/0 rounded-r-sm pl-2.5 pr-2 py-0.5 -ml-2.5'
         : 'text-[15px] leading-[1.6] text-ink'
 
   return (
