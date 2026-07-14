@@ -2232,7 +2232,6 @@ export default function ReviewWorkspace({
         <TranscriptView
           transcript={transcript}
           model={model}
-          heading={transcriptFilename ?? undefined}
           currentTime={audio.currentTime}
           edits={edits}
           verified={verified}

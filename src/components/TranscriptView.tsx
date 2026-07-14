@@ -8,9 +8,6 @@ import { Menu, MenuRow } from './Menu'
 interface Props {
   transcript: Transcript
   model: ModelName
-  // Label after "Transcript · " (the loaded file / study stimulus id). Falls
-  // back to "Case 447" for the bundled default.
-  heading?: string
   currentTime: number
   edits: Record<string, EditState>
   verified: Record<number, boolean>
@@ -144,7 +141,6 @@ function applyFilter(
 export default function TranscriptView({
   transcript,
   model,
-  heading,
   currentTime,
   edits,
   verified,
@@ -317,12 +313,6 @@ export default function TranscriptView({
     <main ref={scrollRootRef} className="flex-1 overflow-y-auto">
       <div className="max-w-5xl mx-auto px-8 py-5">
         <div className="mb-6 pb-4 border-b border-border">
-          <div className="flex items-baseline justify-between mb-3">
-            <h1 className="text-sm font-semibold text-ink">
-              {heading ?? 'Case 447'}
-            </h1>
-          </div>
-
           {/* Risk chips + a "View" menu (hidden in C1 — plain text). */}
           {showViewControls && (
           <div className="flex flex-wrap items-center gap-2 text-[11px]">
