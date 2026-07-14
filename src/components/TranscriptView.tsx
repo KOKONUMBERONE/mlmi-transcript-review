@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { EditMode, EditState, FocusWordHit, HighlightLayer, ModelName, Risk, Segment as SegmentType, SentenceSignal, Transcript } from '../types'
+import type { EditMode, EditState, FocusWordHit, HighlightLayer, ModelName, Risk, RiskDimension, Segment as SegmentType, SentenceSignal, Transcript } from '../types'
 import { segmentRiskWithFocus } from '../lib/segmentRisk'
 import { combinedSegmentRisk } from '../lib/displayRisk'
 import Segment from './Segment'
@@ -46,6 +46,11 @@ interface Props {
   sentenceSignal?: SentenceSignal
   onSentenceSignalChange?: (signal: SentenceSignal) => void
   sentenceSignalBusy?: boolean
+  /** Word-dimension selector (word launcher versions): current dimension +
+   *  change handler render a visible "Words: Uncertainty | Importance |
+   *  Combined" segmented control in the header. Absent handler → no control. */
+  wordDimensionValue?: RiskDimension
+  onWordDimensionChange?: (d: RiskDimension) => void
   /** Override the dimension used for WORD marks only (segment risk / chips
    *  still follow `dimension`). The sentence-uncertainty version passes 'none'
    *  to suppress word marks while chips reflect paraRisk. */
@@ -103,6 +108,20 @@ const SIGNAL_TIP: Record<SentenceSignal, string> = {
   both: 'Red = likely mis-transcribed AND important; one signal alone shows amber',
 }
 
+// Word-dimension segmented control (word launcher versions) — the visible
+// equivalent of the Sentences selector, so the uncertainty/importance/combined
+// switch isn't buried in a menu (police feedback).
+const WORD_DIM_LABEL: Record<RiskDimension, string> = {
+  uncertainty: 'Uncertainty',
+  importance: 'Importance',
+  combined: 'Combined',
+}
+const WORD_DIM_TIP: Record<RiskDimension, string> = {
+  uncertainty: 'Mark words the speech-recognition was unsure about (likely mis-heard)',
+  importance: 'Mark words that would matter most if wrong (names, dates, weapons, negations)',
+  combined: 'Mark words that are both likely wrong AND important',
+}
+
 type RiskFilter = 'all' | 'high+med' | 'high'
 // Word-highlight level: 'all' = full red + amber treatment; 'high' = hide the
 // amber MED word highlights (quieter read; data/events untouched).
@@ -145,6 +164,8 @@ export default function TranscriptView({
   sentenceSignal,
   onSentenceSignalChange,
   sentenceSignalBusy = false,
+  wordDimensionValue,
+  onWordDimensionChange,
   wordDimension,
   onSeek,
   onWordClick,
@@ -312,10 +333,38 @@ export default function TranscriptView({
               {counts.med} med
             </span>
 
+            {/* Word-dimension selector (word launcher versions): switches which
+                signal drives the word marks; the visible equivalent of the old
+                buried Risk dropdown. First selector on the row carries ml-auto. */}
+            {onWordDimensionChange && wordDimensionValue && (
+              <div className="ml-auto flex items-center gap-1.5">
+                <span className="text-[10px] uppercase tracking-[0.08em] text-ink-faint">
+                  Words
+                </span>
+                <div className="flex rounded-md border border-border overflow-hidden">
+                  {(Object.keys(WORD_DIM_LABEL) as RiskDimension[]).map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => onWordDimensionChange(d)}
+                      title={WORD_DIM_TIP[d]}
+                      className={[
+                        'px-2 py-0.5 text-[11px] transition-colors',
+                        wordDimensionValue === d
+                          ? 'bg-brand text-white'
+                          : 'bg-surface text-ink-muted hover:text-ink hover:bg-surface-muted',
+                      ].join(' ')}
+                    >
+                      {WORD_DIM_LABEL[d]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Sentence-signal selector (sentence launcher versions): switches
                 what the whole-sentence tint encodes; switches are logged. */}
             {onSentenceSignalChange && sentenceSignal && (
-              <div className="ml-auto flex items-center gap-1.5">
+              <div className={`${onWordDimensionChange && wordDimensionValue ? '' : 'ml-auto '}flex items-center gap-1.5`}>
                 <span className="text-[10px] uppercase tracking-[0.08em] text-ink-faint">
                   Sentences
                 </span>
@@ -343,7 +392,12 @@ export default function TranscriptView({
             )}
 
             <Menu
-              className={onSentenceSignalChange && sentenceSignal ? undefined : 'ml-auto'}
+              className={
+                (onWordDimensionChange && wordDimensionValue) ||
+                (onSentenceSignalChange && sentenceSignal)
+                  ? undefined
+                  : 'ml-auto'
+              }
               align="right"
               title="View options"
               triggerClassName="flex items-center gap-1 text-[11px] text-ink-muted hover:text-ink border border-border rounded-md px-2 py-0.5 bg-surface hover:border-border-strong transition-colors"

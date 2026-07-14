@@ -2032,9 +2032,6 @@ export default function ReviewWorkspace({
         reviewer={reviewer}
         onReviewerChange={setReviewer}
         nameFlash={nameFlashNonce}
-        dimension={dimension}
-        onDimensionChange={handleDimensionChange}
-        showRiskSelect={config.allowFreeDimension}
         allowRiskRegime={config.allowRiskRegimeToggle}
         riskRegime={riskRegime}
         onRiskRegimeChange={setRiskRegime}
@@ -2262,6 +2259,12 @@ export default function ReviewWorkspace({
             config.sentenceUncertainty && config.allowSentenceSignalToggle
               ? handleSentenceSignalChange
               : undefined
+          }
+          wordDimensionValue={
+            config.allowFreeDimension && config.wordMarks ? dimension : undefined
+          }
+          onWordDimensionChange={
+            config.allowFreeDimension && config.wordMarks ? handleDimensionChange : undefined
           }
           sentenceSignalBusy={triageRunning}
           onSeek={(t) => seekWithLog(t, 'segment')}

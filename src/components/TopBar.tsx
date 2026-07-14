@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ModelName, RiskDimension } from '../types'
+import type { ModelName } from '../types'
 import type { RiskRegime } from '../core/config'
 import { Menu, MenuItem, MenuRow, MenuSection } from './Menu'
 
@@ -24,11 +24,8 @@ interface Props {
   // Bump to flash the reviewer field red for ~10s — fired when a review action
   // is taken with no name set (reminder to identify yourself).
   nameFlash?: number
-  dimension: RiskDimension
-  onDimensionChange: (d: RiskDimension) => void
-  // Study build gates: hide the free risk toggle and the upload/record
-  // controls when the condition is locked by the experiment.
-  showRiskSelect?: boolean
+  // Study build gates: hide the upload/record controls when the condition is
+  // locked by the experiment. (The word-dimension switch moved to the header.)
   // Runtime flagging-regime toggle (full build): preview deployment ⇄ study.
   allowRiskRegime?: boolean
   riskRegime?: RiskRegime
@@ -149,9 +146,6 @@ export default function TopBar({
   reviewer,
   onReviewerChange,
   nameFlash = 0,
-  dimension,
-  onDimensionChange,
-  showRiskSelect = true,
   allowRiskRegime = false,
   riskRegime = 'deployment',
   onRiskRegimeChange,
@@ -416,20 +410,6 @@ export default function TopBar({
                     ))}
                   </select>
                 </MenuRow>
-                {showRiskSelect && (
-                  <MenuRow label="Risk">
-                    <select
-                      value={dimension}
-                      onChange={(e) => onDimensionChange(e.target.value as RiskDimension)}
-                      title="Which risk signal drives the word highlights"
-                      className="text-[11px] border border-border rounded-md px-1.5 py-0.5 bg-surface text-ink hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
-                    >
-                      <option value="combined">Combined (2×2)</option>
-                      <option value="uncertainty">Uncertainty</option>
-                      <option value="importance">Importance</option>
-                    </select>
-                  </MenuRow>
-                )}
                 {allowTranscribe && onNumSpeakersChange && (
                   <MenuRow label="Speakers">
                     <input
