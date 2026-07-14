@@ -1994,9 +1994,23 @@ export default function ReviewWorkspace({
             Condition {effectiveCondition}
           </span>
         )}
-        <span className="ml-auto text-[11px] text-brand-active/90 hidden sm:inline">
-          AI-assisted · human-verified
-        </span>
+        {/* Persistent Help — jumps to the reviewer guide. Replaces the old
+            "AI-assisted · human-verified" tagline so a single main page still
+            has an always-visible way into the manual. */}
+        <a
+          href="/guide.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Help — open the reviewer guide"
+          aria-label="Help — open the reviewer guide"
+          className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium text-white/85 hover:text-white transition-colors"
+        >
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+            <circle cx="8" cy="8" r="6.5" />
+            <path d="M6.2 6.2a1.9 1.9 0 1 1 2.4 1.85c-.55.27-.72.56-.72 1.05M8 11.4v.01" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span className="hidden sm:inline">Help</span>
+        </a>
       </div>
 
       <TopBar

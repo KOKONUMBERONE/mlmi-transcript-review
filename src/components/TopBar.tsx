@@ -480,6 +480,17 @@ export default function TopBar({
                     )}
                 </MenuSection>
               )}
+
+              {/* Always-available help — a persistent entry point to the reviewer
+                  guide, in addition to the per-editor Help links. */}
+              <MenuSection label="Help">
+                <MenuItem
+                  title="Open the reviewer guide in a new tab"
+                  onClick={() => window.open('/guide.html', '_blank', 'noopener,noreferrer')}
+                >
+                  Reviewer guide ↗
+                </MenuItem>
+              </MenuSection>
             </>
           )}
         </Menu>
