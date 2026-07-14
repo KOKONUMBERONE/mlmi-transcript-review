@@ -199,7 +199,10 @@ export default function Segment({
   }
   const commitEdit = () => {
     const v = draft.trim()
-    if (v) onEditSentence?.(segment.id, v)
+    // Only record a real change. A no-op save — or a click-away (blur) with
+    // nothing actually edited — just closes the editor and must NOT mark the
+    // segment as edited.
+    if (v && v !== fullText) onEditSentence?.(segment.id, v)
     setEditing(false)
   }
   const commitSpeaker = () => {
@@ -434,7 +437,11 @@ export default function Segment({
                     }
                   : undefined
               }
-              onBlur={documentMode ? commitEdit : undefined}
+              // Click-away = auto-handle: commitEdit saves when the text
+              // actually changed, otherwise just closes (like Cancel). The
+              // Save/Cancel buttons preventDefault on mousedown so they don't
+              // trip this blur first (which would let Cancel wrongly save).
+              onBlur={commitEdit}
               onKeyDown={(e) => {
                 if (e.key === 'Escape') {
                   e.preventDefault()
@@ -459,6 +466,7 @@ export default function Segment({
               ) : (
                 <>
                   <button
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={commitEdit}
                     disabled={!draft.trim()}
                     className="text-xs px-2.5 py-1 rounded bg-brand text-white hover:bg-brand-dark disabled:opacity-40"
@@ -466,6 +474,7 @@ export default function Segment({
                     Save
                   </button>
                   <button
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={() => setEditing(false)}
                     className="text-xs px-2.5 py-1 rounded border border-border text-ink-muted hover:text-ink"
                   >
