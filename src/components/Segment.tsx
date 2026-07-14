@@ -79,6 +79,11 @@ const SPEAKER_COLOR: Record<string, string> = {
 }
 const SPEAKER_COLOR_DEFAULT = 'text-ink'
 
+// Segment-head high-risk dot: disabled 2026-07-08 (user preference — the word
+// highlights already show where the risk is, so the dot felt redundant). Flip
+// to true to bring it back.
+const SHOW_SEGMENT_RISK_DOT = false
+
 export default function Segment({
   segment,
   model,
@@ -273,7 +278,7 @@ export default function Segment({
             {/* Only HIGH risk gets a head dot; medium shows nothing (just the
                 chevron). Keeps the overview quiet — red means "look here".
                 Hidden in the sentence build (the sentence tint says it). */}
-            {!hideRiskDot && segmentRisk === 'high' && (
+            {SHOW_SEGMENT_RISK_DOT && !hideRiskDot && segmentRisk === 'high' && (
               <span
                 aria-hidden="true"
                 title="High risk"
