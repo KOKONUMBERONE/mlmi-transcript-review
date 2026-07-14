@@ -229,9 +229,24 @@ export default function CandidatePopup({
         </button>
       )}
 
-      <p className="mt-2 text-[10px] text-ink-faint italic">
-        Active model: {activeModel.replace(/\s*\(.*\)/, '')}
-      </p>
+      <div className="mt-2 flex items-center justify-between">
+        <p className="text-[10px] text-ink-faint italic">
+          Active model: {activeModel.replace(/\s*\(.*\)/, '')}
+        </p>
+        <a
+          href="/guide.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 inline-flex items-center gap-0.5 text-[10px] text-brand hover:underline"
+          title="Open the reviewer guide"
+        >
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3">
+            <circle cx="6" cy="6" r="5" />
+            <path d="M4.7 4.6a1.4 1.4 0 1 1 1.8 1.3c-.4.2-.5.4-.5.8M6 8.7v.01" strokeLinecap="round" />
+          </svg>
+          Help
+        </a>
+      </div>
     </div>
   )
 }

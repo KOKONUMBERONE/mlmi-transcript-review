@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { EditState, FocusWordHit, HighlightLayer, ModelName, Risk, Segment as SegmentType, SentenceSignal, Transcript } from '../types'
+import type { EditMode, EditState, FocusWordHit, HighlightLayer, ModelName, Risk, Segment as SegmentType, SentenceSignal, Transcript } from '../types'
 import { segmentRiskWithFocus } from '../lib/segmentRisk'
 import { combinedSegmentRisk } from '../lib/displayRisk'
 import Segment from './Segment'
@@ -59,6 +59,10 @@ interface Props {
   onEditSentence?: (segId: number, text: string) => void
   onMergeNext?: (segId: number) => void
   onChangeSpeaker?: (segId: number, speaker: string) => void
+  /** Editing interaction mode + its toggle. When onEditModeChange is provided,
+   *  an "Editing: Assisted | Document" control shows in the View menu. */
+  editMode?: EditMode
+  onEditModeChange?: (mode: EditMode) => void
   onFilterChange?: (filter: string) => void
   // Header "Highlights" toggle (full build only): hide MED word highlights.
   showHighlightLevel?: boolean
@@ -150,6 +154,8 @@ export default function TranscriptView({
   onEditSentence,
   onMergeNext,
   onChangeSpeaker,
+  editMode = 'assisted',
+  onEditModeChange,
   onFilterChange,
   showHighlightLevel = false,
   onHighlightLevelChange,
@@ -404,6 +410,31 @@ export default function TranscriptView({
                       </button>
                     </MenuRow>
                   )}
+                  {onEditModeChange && (
+                    <MenuRow label="Editing">
+                      <div className="flex rounded-md border border-border overflow-hidden">
+                        {(['assisted', 'document'] as const).map((m) => (
+                          <button
+                            key={m}
+                            onClick={() => onEditModeChange(m)}
+                            title={
+                              m === 'assisted'
+                                ? 'Click a word for candidates & options; edit sentences in a panel'
+                                : 'Edit like a document: click the text and just type'
+                            }
+                            className={[
+                              'px-2 py-0.5 text-[11px] transition-colors',
+                              editMode === m
+                                ? 'bg-brand text-white'
+                                : 'bg-surface text-ink-muted hover:text-ink hover:bg-surface-muted',
+                            ].join(' ')}
+                          >
+                            {m === 'assisted' ? 'Assisted' : 'Like Word'}
+                          </button>
+                        ))}
+                      </div>
+                    </MenuRow>
+                  )}
                 </>
               )}
             </Menu>
@@ -499,6 +530,7 @@ export default function TranscriptView({
                     transcript.segments[transcript.segments.length - 1]?.id !== segment.id
                   }
                   onChangeSpeaker={onChangeSpeaker}
+                  editMode={editMode}
                   showChanges={showChanges}
                   editLabel={
                     editInfo?.[segment.id]

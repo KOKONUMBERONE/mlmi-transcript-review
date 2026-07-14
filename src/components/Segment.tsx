@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { AlignedToken, EditState, FocusWordHit, HighlightLayer, ModelName, Risk, Segment as SegmentType } from '../types'
+import type { AlignedToken, EditMode, EditState, FocusWordHit, HighlightLayer, ModelName, Risk, Segment as SegmentType } from '../types'
 import Word from './Word'
 import { alignRewrite } from '../lib/retainRisk'
 
@@ -55,6 +55,9 @@ interface Props {
   // one rewritten block (per-word highlighting is dropped).
   textOverride?: string
   onEditSentence?: (segId: number, text: string) => void
+  /** 'document' = "edit like Word": click the sentence and type inline, blur/
+   *  Enter saves, no word popup. 'assisted' (default) = the current flow. */
+  editMode?: EditMode
   // #2 structural edits.
   onMergeNext?: (segId: number) => void
   canMergeNext?: boolean
@@ -110,6 +113,7 @@ export default function Segment({
   onToggleVerify,
   textOverride,
   onEditSentence,
+  editMode = 'assisted',
   onMergeNext,
   canMergeNext = false,
   onChangeSpeaker,
@@ -203,6 +207,13 @@ export default function Segment({
     if (v && v !== segment.speaker) onChangeSpeaker?.(segment.id, v)
     setEditingSpeaker(false)
   }
+
+  // "Edit like Word" mode: clicking a word (or anywhere in the sentence) opens
+  // the inline whole-sentence editor instead of the per-word candidate popup.
+  const documentMode = editMode === 'document'
+  const handleWordClick: Props['onWordClick'] = documentMode
+    ? () => startEdit()
+    : onWordClick
 
   // Click anywhere on the segment card to play it; double-click to edit the
   // whole sentence. Single-click is deferred so a double-click can cancel it.
@@ -412,26 +423,72 @@ export default function Segment({
               autoFocus
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              rows={3}
-              className="w-full text-[14px] leading-snug border border-border rounded px-2 py-1.5 resize-y focus:outline-none focus:ring-1 focus:ring-border-strong"
+              onFocus={
+                documentMode
+                  ? (e) => {
+                      // Caret to end (Word-like): click into the text and type.
+                      const v = e.currentTarget.value
+                      e.currentTarget.setSelectionRange(v.length, v.length)
+                    }
+                  : undefined
+              }
+              onBlur={documentMode ? commitEdit : undefined}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  e.preventDefault()
+                  setEditing(false)
+                } else if (documentMode && e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  commitEdit()
+                }
+              }}
+              rows={documentMode ? Math.min(8, Math.max(2, Math.ceil((draft.length + 1) / 70))) : 3}
+              className={
+                documentMode
+                  ? 'w-full text-[15px] leading-[1.6] text-ink bg-brand-active/20 rounded px-1.5 py-0.5 -mx-1.5 border border-brand/30 resize-none focus:outline-none focus:ring-1 focus:ring-brand/40'
+                  : 'w-full text-[14px] leading-snug border border-border rounded px-2 py-1.5 resize-y focus:outline-none focus:ring-1 focus:ring-border-strong'
+              }
             />
             <div className="mt-1.5 flex items-center gap-2">
-              <button
-                onClick={commitEdit}
-                disabled={!draft.trim()}
-                className="text-xs px-2.5 py-1 rounded bg-brand text-white hover:bg-brand-dark disabled:opacity-40"
+              {documentMode ? (
+                <span className="text-[10px] text-ink-faint italic">
+                  Type to edit · Enter to save · Esc to cancel
+                </span>
+              ) : (
+                <>
+                  <button
+                    onClick={commitEdit}
+                    disabled={!draft.trim()}
+                    className="text-xs px-2.5 py-1 rounded bg-brand text-white hover:bg-brand-dark disabled:opacity-40"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={() => setEditing(false)}
+                    className="text-xs px-2.5 py-1 rounded border border-border text-ink-muted hover:text-ink"
+                  >
+                    Cancel
+                  </button>
+                  <span className="text-[10px] text-ink-faint italic">
+                    Rewriting the sentence drops per-word risk highlighting for this segment.
+                  </span>
+                </>
+              )}
+              {/* Help link from the editing view (police feedback). */}
+              <a
+                href="/guide.html"
+                target="_blank"
+                rel="noopener noreferrer"
+                onMouseDown={(e) => e.preventDefault()}
+                className="ml-auto shrink-0 inline-flex items-center gap-0.5 text-[10px] text-brand hover:underline"
+                title="Open the reviewer guide"
               >
-                Save
-              </button>
-              <button
-                onClick={() => setEditing(false)}
-                className="text-xs px-2.5 py-1 rounded border border-border text-ink-muted hover:text-ink"
-              >
-                Cancel
-              </button>
-              <span className="text-[10px] text-ink-faint italic">
-                Rewriting the sentence drops per-word risk highlighting for this segment.
-              </span>
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3">
+                  <circle cx="6" cy="6" r="5" />
+                  <path d="M4.7 4.6a1.4 1.4 0 1 1 1.8 1.3c-.4.2-.5.4-.5.8M6 8.7v.01" strokeLinecap="round" />
+                </svg>
+                Help
+              </a>
             </div>
           </div>
         ) : (
@@ -443,12 +500,24 @@ export default function Segment({
             role="button"
             aria-expanded={expanded}
             tabIndex={0}
+            // Document mode: a single click anywhere in the sentence opens the
+            // inline editor (and doesn't bubble to the card's play handler).
+            onClick={
+              documentMode
+                ? (e) => {
+                    e.stopPropagation()
+                    startEdit()
+                  }
+                : undefined
+            }
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault()
-                onPlaySegment?.(segment.id)
+                if (documentMode) startEdit()
+                else onPlaySegment?.(segment.id)
               }
             }}
+            className={documentMode ? 'cursor-text' : undefined}
           >
             {textOverride != null && groups ? (
               // Rewritten sentence: word-level diff against the original words.
@@ -484,7 +553,7 @@ export default function Segment({
                         showChanges={false}
                         segId={segment.id}
                         wordIdx={g.tok.originalIndex ?? 0}
-                        onWordClick={onWordClick}
+                        onWordClick={handleWordClick}
                       />
                     ) : (
                       <span
@@ -534,7 +603,7 @@ export default function Segment({
                         showChanges={showChanges}
                         segId={segment.id}
                         wordIdx={i}
-                        onWordClick={onWordClick}
+                        onWordClick={handleWordClick}
                       />
                       {i < words.length - 1 ? ' ' : ''}
                     </span>

@@ -40,6 +40,7 @@ import { segmentRiskWithFocus } from '../lib/segmentRisk'
 import { buildDisplayRiskMap, combinedSegmentRisk } from '../lib/displayRisk'
 import type {
   Condition,
+  EditMode,
   EditState,
   FocusResult,
   FocusSnippet,
@@ -294,6 +295,17 @@ export default function ReviewWorkspace({
     (s: SentenceSignal) => {
       setSentenceSignal(s)
       events.log('filter_change', { filter: `sentence_signal:${s}` })
+    },
+    [events],
+  )
+
+  // Editing interaction mode (police feedback): 'assisted' (word-popup) vs
+  // 'document' (click text and type). Runtime-switchable in the View menu.
+  const [editMode, setEditMode] = useState<EditMode>(config.defaultEditMode)
+  const handleEditModeChange = useCallback(
+    (m: EditMode) => {
+      setEditMode(m)
+      events.log('filter_change', { filter: `edit_mode:${m}` })
     },
     [events],
   )
@@ -2246,6 +2258,8 @@ export default function ReviewWorkspace({
           onEditSentence={editSentence}
           onMergeNext={mergeWithNext}
           onChangeSpeaker={changeSpeaker}
+          editMode={editMode}
+          onEditModeChange={config.allowEditModeToggle ? handleEditModeChange : undefined}
           onFilterChange={(filter) => events.log('filter_change', { filter })}
           showHighlightLevel={config.allowHighlightLevelToggle}
           onHighlightLevelChange={(level) =>

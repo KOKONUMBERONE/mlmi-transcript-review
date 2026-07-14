@@ -170,6 +170,14 @@ export interface TriageResult {
 // matters" — the word-level deployment principle applied at sentence level).
 export type SentenceSignal = 'confidence' | 'importance' | 'both'
 
+// Editing interaction mode (police feedback 2026-07-08). 'assisted' = the
+// research-grade flow (click a word → candidate popup; edit-sentence → editor
+// with candidates/reasons). 'document' = "edit like Word": click the sentence
+// text and just type; blur/Enter saves. Both commit through the same
+// whole-sentence rewrite path (`segmentTextEdits` → alignRewrite), so risk
+// retention, track-changes, audit and export are identical.
+export type EditMode = 'assisted' | 'document'
+
 // Cross-sentence contradiction check (anomaly build): the local LLM flags
 // PAIRS of segments that appear to conflict. Pointing overlay only — each pair
 // carries the two segment ids, a coarse type, and a short note; the reviewer
