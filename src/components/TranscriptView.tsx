@@ -3,7 +3,7 @@ import type { EditMode, EditState, FocusWordHit, HighlightLayer, ModelName, Risk
 import { segmentRiskWithFocus } from '../lib/segmentRisk'
 import { combinedSegmentRisk } from '../lib/displayRisk'
 import Segment from './Segment'
-import { Menu, MenuRow } from './Menu'
+import { Menu, MenuItem, MenuRow, MenuSection } from './Menu'
 
 interface Props {
   transcript: Transcript
@@ -479,6 +479,22 @@ export default function TranscriptView({
                       </div>
                     </MenuRow>
                   )}
+                  {onBulkVerify && (
+                    <MenuSection label="Verify">
+                      <MenuItem
+                        onClick={() => onBulkVerify(displaySegments.map((s) => s.id), true)}
+                        title="Verify every currently-shown segment"
+                      >
+                        ✓ Verify all shown{filter !== 'all' ? ` (${displaySegments.length})` : ''}
+                      </MenuItem>
+                      <MenuItem
+                        onClick={() => onBulkVerify(displaySegments.map((s) => s.id), false)}
+                        title="Un-verify every currently-shown segment"
+                      >
+                        Un-verify all shown
+                      </MenuItem>
+                    </MenuSection>
+                  )}
                 </>
               )}
             </Menu>
@@ -508,25 +524,6 @@ export default function TranscriptView({
             </div>
           )}
 
-          {onBulkVerify && (
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
-              <span className="text-[11px] text-ink-faint">Verify</span>
-              <button
-                onClick={() => onBulkVerify(displaySegments.map((s) => s.id), true)}
-                className="px-2 py-0.5 rounded border border-verified/50 text-verified bg-surface hover:bg-verified-bg transition-colors"
-                title="Verify every currently-shown segment"
-              >
-                ✓ All shown{filter !== 'all' ? ` (${displaySegments.length})` : ''}
-              </button>
-              <button
-                onClick={() => onBulkVerify(displaySegments.map((s) => s.id), false)}
-                className="px-2 py-0.5 rounded border border-border text-ink-muted bg-surface hover:border-ink-muted hover:text-ink transition-colors"
-                title="Un-verify every currently-shown segment"
-              >
-                Un-verify all shown
-              </button>
-            </div>
-          )}
         </div>
 
         <div className="space-y-2">
