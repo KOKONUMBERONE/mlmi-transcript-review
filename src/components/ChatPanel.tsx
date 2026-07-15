@@ -132,8 +132,8 @@ export default function ChatPanel({
               {error}
             </p>
             <p className="mt-1.5 text-[11px] text-ink-faint leading-snug">
-              The assistant runs locally on port 8000 — make sure the service
-              (and Ollama) are running, then ask again.
+              The assistant runs on a local service at port 8000 — make sure
+              it's running, then ask again.
             </p>
           </div>
         )}

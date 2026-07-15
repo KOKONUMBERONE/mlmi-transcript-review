@@ -139,7 +139,7 @@ export default function OutlineModal({
             </p>
             <p className="mt-1 text-[11px] text-ink-muted leading-snug break-words">{error}</p>
             <p className="mt-1.5 text-[11px] text-ink-faint leading-snug">
-              The model runs locally on port 8000 — make sure it (and Ollama) are
+              Outline runs on a local service at port 8000 — make sure it's
               running, then Regenerate.
             </p>
           </div>

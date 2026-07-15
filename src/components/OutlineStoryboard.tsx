@@ -262,7 +262,7 @@ export default function OutlineStoryboard({
               <p className="text-[13px] font-semibold text-risk-med">Outline needs the local model</p>
               <p className="mt-1.5 text-[12px] text-ink-muted leading-snug break-words">{error}</p>
               <p className="mt-2 text-[11px] text-ink-faint leading-snug">
-                The model runs locally on port 8000 — make sure it (and Ollama) are running, then
+                Outline runs on a local service at port 8000 — make sure it's running, then
                 Regenerate.
               </p>
               <button
