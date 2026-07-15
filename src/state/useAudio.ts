@@ -48,8 +48,13 @@ export function useAudio(
     const ws = WaveSurfer.create({
       container: containerRef.current,
       height: 24,
-      waveColor: '#a09e99',
-      progressColor: '#1a1917',
+      // Waveform hidden: the amplitude bars added visual noise without value
+      // (and looked different per audio file — flat for the silent placeholder,
+      // tall for a real upload). This stays as the still-interactive
+      // (click / drag-to-seek) surface, but renders nothing — PlayerBar draws a
+      // plain progress rail + knob over it instead.
+      waveColor: 'transparent',
+      progressColor: 'transparent',
       // No built-in cursor line — the draggable knob overlay (PlayerBar) is the
       // playhead now.
       cursorWidth: 0,

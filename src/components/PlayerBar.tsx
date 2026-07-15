@@ -94,7 +94,21 @@ export default function PlayerBar({
           The knob is a pure-visual app-DOM overlay (wavesurfer renders in a
           shadow DOM); pointer-events-none so wavesurfer's own drag-to-seek
           underneath still gets every click/drag. */}
-      <div className="relative w-[34rem] max-w-[45vw] min-w-[12rem]">
+      <div className="relative w-[34rem] max-w-[45vw] min-w-[12rem] h-6 flex items-center">
+        {/* Plain progress rail (replaces the audio waveform). The wavesurfer
+            surface below still owns click/drag-to-seek but renders transparent,
+            so only this rail + the played fill + the knob show. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 h-[3px] rounded-full bg-border"
+        />
+        {audio.duration > 0 && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute left-0 top-1/2 -translate-y-1/2 h-[3px] rounded-full bg-brand/60"
+            style={{ width: `${(audio.currentTime / audio.duration) * 100}%` }}
+          />
+        )}
         <div
           ref={audio.containerRef}
           className="w-full"
