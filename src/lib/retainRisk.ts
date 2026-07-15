@@ -1,5 +1,12 @@
 import type { AlignedToken, Word } from '../types'
 
+// The ONE tokenizer for a sentence-rewrite override string. alignRewrite and the
+// word-candidate splice path (keptTokenPosition) must split identically, or the
+// splice lands on the wrong word. Whitespace-split, drop empties.
+export function tokenize(text: string): string[] {
+  return text.split(/\s+/).filter(Boolean)
+}
+
 // Normalise for matching: lowercase, drop punctuation but keep apostrophes so
 // "don't" still matches "don't" and "Gun." matches "gun". Pure-punctuation
 // tokens clean to '' and (by the guard in the LCS) never match anything.
@@ -131,7 +138,7 @@ export function alignRewrite(
   segStart: number,
   segEnd: number,
 ): AlignedToken[] {
-  const newToks = overrideText.split(/\s+/).filter(Boolean)
+  const newToks = tokenize(overrideText)
   if (newToks.length === 0) return []
   const newKeys = newToks.map(clean)
   const origKeys = originalWords.map((w) => clean(w.text))
@@ -157,4 +164,31 @@ export function alignRewrite(
 
   assignInsertTimes(toks, segStart, segEnd)
   return toks
+}
+
+/**
+ * For a rewritten segment (a segmentTextEdits override string), find the token
+ * in the override that currently renders original word `originalIndex` as a KEEP
+ * token — i.e. the still-unchanged word the reviewer clicked to inspect ASR
+ * candidates. `pos` indexes BOTH tokenize(override) and alignRewrite(...)'s
+ * output: they are 1:1 because every new token becomes exactly one keep/insert
+ * token in order (deletes emit nothing), so toks[k] ↔ tokenize(override)[k].
+ *
+ * Returns null when that original word is no longer a kept token (it was
+ * rewritten away, so no per-model candidate applies) — callers degrade to a
+ * no-op. Used to (a) read the currently-displayed word text and (b) splice a
+ * chosen candidate / deletion back into the override at the right position.
+ */
+export function keptTokenPosition(
+  override: string,
+  originalWords: Word[],
+  segStart: number,
+  segEnd: number,
+  originalIndex: number,
+): { pos: number; parts: string[]; token: string } | null {
+  const parts = tokenize(override)
+  const toks = alignRewrite(override, originalWords, segStart, segEnd)
+  const pos = toks.findIndex((t) => t.op === 'keep' && t.originalIndex === originalIndex)
+  if (pos < 0 || pos >= parts.length) return null
+  return { pos, parts, token: parts[pos] }
 }

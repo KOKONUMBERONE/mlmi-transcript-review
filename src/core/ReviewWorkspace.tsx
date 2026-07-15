@@ -37,6 +37,7 @@ import defaultTriageJson from '../data/defaultTriage.json'
 import { runChat, type ChatCitation } from '../lib/chatApi'
 import { transcribeAudio } from '../lib/transcribeApi'
 import { segmentRiskWithFocus } from '../lib/segmentRisk'
+import { keptTokenPosition } from '../lib/retainRisk'
 import { buildDisplayRiskMap, combinedSegmentRisk } from '../lib/displayRisk'
 import type {
   Condition,
@@ -959,71 +960,84 @@ export default function ReviewWorkspace({
 
   const applyEdit = (newText: string, reason?: string) => {
     if (!popup) return
-    const key = `${popup.segId}-${popup.wordIdx}`
-    const original = originalTextAt(popup.segId, popup.wordIdx)
-    const previous = edits[key]
-    const wasDeleted = previous?.deleted === true
-    const fromDisplay = wasDeleted ? '(deleted)' : previous?.text ?? original
+    const { segId, wordIdx } = popup
+    const segment = transcript.segments.find((s) => s.id === segId)
+    const origWord = segment?.words[model]?.[wordIdx]
 
-    if (!wasDeleted && newText === fromDisplay) {
-      closePopup()
-      return
-    }
-
-    // Heuristic: if newText matches a candidate at this word index in any
-    // model, attribute via='candidate', else 'manual'.
-    const segment = transcript.segments.find((s) => s.id === popup.segId)
+    // Attribution: if newText matches this word index in any model, it's a
+    // 'candidate' pick, else a 'manual' correction. chosenModel = which model(s)
+    // produced it (token-level "this model was right" label); undefined for manual.
     const candidates = new Set<string>()
     if (segment) {
       for (const m of availableModels) {
-        const w = segment.words[m]?.[popup.wordIdx]
+        const w = segment.words[m]?.[wordIdx]
         if (w?.text) candidates.add(w.text)
       }
     }
     const via: 'candidate' | 'manual' = candidates.has(newText) ? 'candidate' : 'manual'
-    // Which ASR model(s) produced the chosen candidate — a token-level "this
-    // model was right" label for the consensus/combine analysis. undefined for
-    // manual corrections.
     const chosenModel =
       via === 'candidate'
         ? availableModels
-            .filter((m) => segment?.words[m]?.[popup.wordIdx]?.text === newText)
+            .filter((m) => segment?.words[m]?.[wordIdx]?.text === newText)
             .join('|') || undefined
         : undefined
-    const origWord = segment?.words[model]?.[popup.wordIdx]
 
-    setEdits((prev) => ({
-      ...prev,
-      [key]: { text: newText, deleted: false, reason },
-    }))
-    logEntry({
-      kind: 'edit',
-      segmentId: popup.segId,
-      wordIndex: popup.wordIdx,
-      from: fromDisplay,
-      to: newText,
-      reason,
-    })
+    // Shared audit trail + event, then close. `restore` only differs for the
+    // per-word branch (a rewrite has no deleted-word state to restore).
+    const logApply = (fromDisplay: string, restore: boolean) => {
+      logEntry({ kind: 'edit', segmentId: segId, wordIndex: wordIdx, from: fromDisplay, to: newText, reason })
+      events.log(restore ? 'word_restore' : 'edit_apply', {
+        segment_id: segId,
+        word_index: wordIdx,
+        from_text: fromDisplay,
+        to_text: newText,
+        via,
+        chosen_model: chosenModel,
+        word_risk: origWord?.risk,
+        word_importance: origWord?.predicted_importance,
+        word_combined_risk: origWord?.combined_risk,
+        word_proba_high: origWord?.predicted_proba?.high,
+        reason,
+      })
+      events.log('popup_close', { segment_id: segId, word_index: wordIdx })
+      setPopup(null)
+    }
 
-    events.log(wasDeleted ? 'word_restore' : 'edit_apply', {
-      segment_id: popup.segId,
-      word_index: popup.wordIdx,
-      from_text: fromDisplay,
-      to_text: newText,
-      via,
-      chosen_model: chosenModel,
-      word_risk: origWord?.risk,
-      word_importance: origWord?.predicted_importance,
-      word_combined_risk: origWord?.combined_risk,
-      word_proba_high: origWord?.predicted_proba?.high,
-      reason,
-    })
+    // Rewritten segment: the per-word `edits` map is dead here — editSentence
+    // cleared it and the textOverride render reads only the aligned override, so
+    // writing edits[key] would silently vanish. Splice the correction into the
+    // override string at the clicked (kept) token instead. Candidates are still
+    // read from segment.words (never mutated), so per-model alternatives stay right.
+    const override = segment ? segmentTextEdits[segId]?.text : undefined
+    if (override != null && segment) {
+      const words = segment.words[model] ?? []
+      const cur = keptTokenPosition(override, words, segment.start, segment.end, wordIdx)
+      // fromDisplay must be the CURRENTLY-DISPLAYED override token (e.g. "gun,"),
+      // not the raw original — else the no-op guard / audit "from" are wrong.
+      const fromDisplay = cur?.token ?? origWord?.text ?? ''
+      if (!cur || newText === fromDisplay) {
+        closePopup()
+        return
+      }
+      const parts = cur.parts.slice()
+      parts[cur.pos] = newText
+      setSegmentTextEdits((prev) => ({ ...prev, [segId]: { text: parts.join(' ') } }))
+      logApply(fromDisplay, false)
+      return
+    }
 
-    events.log('popup_close', {
-      segment_id: popup.segId,
-      word_index: popup.wordIdx,
-    })
-    setPopup(null)
+    // Normal (non-rewritten) segment: per-word edits map.
+    const key = `${segId}-${wordIdx}`
+    const original = originalTextAt(segId, wordIdx)
+    const previous = edits[key]
+    const wasDeleted = previous?.deleted === true
+    const fromDisplay = wasDeleted ? '(deleted)' : previous?.text ?? original
+    if (!wasDeleted && newText === fromDisplay) {
+      closePopup()
+      return
+    }
+    setEdits((prev) => ({ ...prev, [key]: { text: newText, deleted: false, reason } }))
+    logApply(fromDisplay, wasDeleted)
   }
 
   // Batch correct-all: fix every token (active model) whose CURRENT displayed
@@ -1080,6 +1094,39 @@ export default function ReviewWorkspace({
 
   const deleteWord = (reason?: string) => {
     if (!popup) return
+    const segment = transcript.segments.find((s) => s.id === popup.segId)
+
+    // Rewritten segment: no per-word edits map — splice the word OUT of the
+    // override string. (A rewrite has no struck-through track-change / restore
+    // path; the word is simply removed from the sentence.)
+    const override = segment ? segmentTextEdits[popup.segId]?.text : undefined
+    if (override != null && segment) {
+      const words = segment.words[model] ?? []
+      const cur = keptTokenPosition(override, words, segment.start, segment.end, popup.wordIdx)
+      if (!cur) {
+        closePopup()
+        return
+      }
+      const parts = cur.parts.slice()
+      parts.splice(cur.pos, 1)
+      setSegmentTextEdits((prev) => ({ ...prev, [popup.segId]: { text: parts.join(' ') } }))
+      const delWord = words[popup.wordIdx]
+      logEntry({ kind: 'delete', segmentId: popup.segId, wordIndex: popup.wordIdx, from: cur.token, reason })
+      events.log('word_delete', {
+        segment_id: popup.segId,
+        word_index: popup.wordIdx,
+        word_text: cur.token,
+        word_risk: delWord?.risk,
+        word_importance: delWord?.predicted_importance,
+        word_combined_risk: delWord?.combined_risk,
+        word_proba_high: delWord?.predicted_proba?.high,
+        reason,
+      })
+      events.log('popup_close', { segment_id: popup.segId, word_index: popup.wordIdx })
+      setPopup(null)
+      return
+    }
+
     const key = `${popup.segId}-${popup.wordIdx}`
     const original = originalTextAt(popup.segId, popup.wordIdx)
     const previous = edits[key]
@@ -1931,8 +1978,20 @@ export default function ReviewWorkspace({
     : null
 
   const popupEdit = popup ? edits[`${popup.segId}-${popup.wordIdx}`] : undefined
+  // For a rewritten segment the popup word is displayed from the override string
+  // (edits is empty), so read the current text from that override token — else
+  // the no-op guard and the "current" highlight in the popup are wrong.
+  const popupOverride = popup ? segmentTextEdits[popup.segId]?.text : undefined
   const popupCurrentText = popup
-    ? popupEdit?.text ?? popupSegment?.words[model]?.[popup.wordIdx]?.text ?? ''
+    ? popupOverride != null && popupSegment
+      ? keptTokenPosition(
+          popupOverride,
+          popupSegment.words[model] ?? [],
+          popupSegment.start,
+          popupSegment.end,
+          popup.wordIdx,
+        )?.token ?? popupSegment.words[model]?.[popup.wordIdx]?.text ?? ''
+      : popupEdit?.text ?? popupSegment?.words[model]?.[popup.wordIdx]?.text ?? ''
     : ''
   const popupIsDeleted = popupEdit?.deleted === true
 
@@ -2365,12 +2424,15 @@ export default function ReviewWorkspace({
           activeModel={model}
           currentText={popupCurrentText}
           isDeleted={popupIsDeleted}
-          sameTokenCount={sameTokenCount}
+          // Apply-to-all and Split both operate on the edits map / transcript
+          // segments and would desync a textOverride, so they're disabled for a
+          // rewritten segment's words (candidate / manual / delete still work).
+          sameTokenCount={popupOverride != null ? 0 : sameTokenCount}
           onApply={applyEdit}
           onApplyAll={applyEditAll}
           onDelete={deleteWord}
           onClose={closePopup}
-          onSplit={() => splitSegment(popup.segId, popup.wordIdx)}
+          onSplit={popupOverride != null ? undefined : () => splitSegment(popup.segId, popup.wordIdx)}
           onPlayFromWord={(s, w) => {
             playFromWord(s, w)
             closePopup()
