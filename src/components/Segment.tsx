@@ -264,10 +264,10 @@ export default function Segment({
         editSegment()
       }}
       title="Click to play this segment · double-click to edit"
-      className={`group flex gap-3 rounded-md transition-colors px-3 py-2 -mx-3 cursor-pointer ${containerCls}`}
+      className={`group flex gap-3 rounded-md transition-colors px-3 py-1 -mx-3 cursor-pointer ${containerCls}`}
     >
       <div className="flex-1 min-w-0">
-        <header className="flex items-center gap-3 mb-1">
+        <header className="flex items-center gap-3 mb-0.5">
           {/* Expand affordance + sentence-head risk dot (the sentence-level
               signal that replaces always-on word colour). */}
           <span className="flex items-center gap-1.5 shrink-0">

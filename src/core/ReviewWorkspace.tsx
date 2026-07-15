@@ -2306,6 +2306,9 @@ export default function ReviewWorkspace({
           focusHitFor={focusHitFor}
           sentenceTintMap={sentenceLayerActive ? sentenceTintMap : undefined}
           sentenceTintTitleFor={sentenceLayerActive ? sentenceTintTitleFor : undefined}
+          // Pure sentence version (sentence tint is the only in-text signal):
+          // the "Show" control re-tints instead of hiding segments.
+          sentenceHighlightControl={config.sentenceUncertainty && !config.wordMarks}
           keepRiskDot={config.anomalyDetection}
           wordDimension={config.wordMarks ? undefined : 'none'}
           sentenceSignal={

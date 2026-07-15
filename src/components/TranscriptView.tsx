@@ -32,6 +32,12 @@ interface Props {
   sentenceTintMap?: Map<number, Risk>
   /** Sentence builds: tooltip for a tinted sentence. */
   sentenceTintTitleFor?: (segId: number) => string | undefined
+  /** Pure sentence-highlight version (sentence tint is the only in-text signal).
+   *  Turns the "Show" control into a highlight-LEVEL control instead of a
+   *  visibility filter: every sentence stays shown (order unchanged); the choice
+   *  only decides whether MEDIUM sentences are tinted. "High + medium" tints
+   *  both; "High risk only" tints high and leaves medium untinted. */
+  sentenceHighlightControl?: boolean
   /** Keep the segment head risk dot even when a tint map is present. The
    *  anomaly build sets this: it is "FULL plus conflict tints", so the word
    *  version's dot must survive (the sentence builds drop it). */
@@ -156,6 +162,7 @@ export default function TranscriptView({
   focusHitFor,
   sentenceTintMap,
   sentenceTintTitleFor,
+  sentenceHighlightControl = false,
   keepRiskDot = false,
   sentenceSignal,
   onSentenceSignalChange,
@@ -245,8 +252,13 @@ export default function TranscriptView({
   )
 
   const displaySegments = useMemo(
-    () => applyFilter(transcript.segments, filter, riskOf),
-    [transcript, filter, riskOf],
+    // Pure sentence version: the "Show" control never hides — it only re-tints
+    // (handled per-segment below), so every segment stays visible, in order.
+    () =>
+      sentenceHighlightControl
+        ? transcript.segments
+        : applyFilter(transcript.segments, filter, riskOf),
+    [transcript, filter, riskOf, sentenceHighlightControl],
   )
 
   // Debounced segment_hover: log only when the pointer DWELLS on a segment
@@ -307,7 +319,9 @@ export default function TranscriptView({
 
   // The amber view-state pill only reflects the segment FILTER (where "N of M"
   // is meaningful). Highlight level / marks are self-evident on screen.
-  const isDefaultView = filter === 'all'
+  // The pure sentence version never hides segments, so the "N of M" filter pill
+  // is meaningless there — treat it as the default view regardless of level.
+  const isDefaultView = filter === 'all' || sentenceHighlightControl
 
   return (
     <main ref={scrollRootRef} className="flex-1 overflow-y-auto">
@@ -410,15 +424,26 @@ export default function TranscriptView({
             >
               {() => (
                 <>
-                  <MenuRow label="Show">
+                  <MenuRow label={sentenceHighlightControl ? 'Highlight' : 'Show'}>
                     <select
                       value={filter}
                       onChange={(e) => setFilterAndLog(e.target.value as RiskFilter)}
                       className="text-[11px] border border-border rounded-md px-1.5 py-0.5 bg-surface hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
                     >
-                      <option value="all">All segments</option>
-                      <option value="high+med">High + medium</option>
-                      <option value="high">High risk only</option>
+                      {sentenceHighlightControl ? (
+                        // Highlight-LEVEL, not a filter: every sentence stays shown.
+                        // 'all' tints high + medium; 'high' tints high only.
+                        <>
+                          <option value="all">High + medium</option>
+                          <option value="high">High risk only</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="all">All segments</option>
+                          <option value="high+med">High + medium</option>
+                          <option value="high">High risk only</option>
+                        </>
+                      )}
                     </select>
                   </MenuRow>
                   {showHighlightLevel && (
@@ -485,7 +510,7 @@ export default function TranscriptView({
                         onClick={() => onBulkVerify(displaySegments.map((s) => s.id), true)}
                         title="Verify every currently-shown segment"
                       >
-                        ✓ Verify all shown{filter !== 'all' ? ` (${displaySegments.length})` : ''}
+                        ✓ Verify all shown{!sentenceHighlightControl && filter !== 'all' ? ` (${displaySegments.length})` : ''}
                       </MenuItem>
                       <MenuItem
                         onClick={() => onBulkVerify(displaySegments.map((s) => s.id), false)}
@@ -526,13 +551,22 @@ export default function TranscriptView({
 
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-0.5">
           {displaySegments.length === 0 ? (
             <p className="py-12 text-center text-xs text-ink-faint italic">
               No segments match the current filter.
             </p>
           ) : (
-            displaySegments.map((segment) => (
+            displaySegments.map((segment) => {
+              // "High risk only" (filter==='high') in the pure sentence version
+              // drops the MEDIUM (amber) tint so only high-risk sentences stand
+              // out — everything still shown. "High + medium" tints both.
+              const rawTint = sentenceTintMap?.get(segment.id)
+              const shownTint =
+                sentenceHighlightControl && filter === 'high' && rawTint === 'med'
+                  ? undefined
+                  : rawTint
+              return (
               <div
                 key={segment.id}
                 ref={segment.id === activeId ? activeRef : null}
@@ -548,8 +582,8 @@ export default function TranscriptView({
                   edits={edits}
                   dimension={wordDimension ?? dimension}
                   hideRiskDot={!!sentenceTintMap && !keepRiskDot}
-                  sentenceTint={sentenceTintMap?.get(segment.id)}
-                  sentenceTintTitle={sentenceTintTitleFor?.(segment.id)}
+                  sentenceTint={shownTint}
+                  sentenceTintTitle={shownTint ? sentenceTintTitleFor?.(segment.id) : undefined}
                   expanded={revealAll || segment.id === expandedSegmentId || segment.id === hoveredId}
                   onToggleExpand={onToggleExpand}
                   onPlaySegment={onPlaySegment}
@@ -580,7 +614,8 @@ export default function TranscriptView({
                   }
                 />
               </div>
-            ))
+              )
+            })
           )}
         </div>
 
