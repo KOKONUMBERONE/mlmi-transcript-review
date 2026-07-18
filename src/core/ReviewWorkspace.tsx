@@ -113,7 +113,7 @@ export interface TrialContext {
   block: number
   trialIndex: number
   condition: Condition
-  task?: 'general' | 'targeted' // 2×2 task factor — stamped into the log as task_type
+  task?: 't1' | 't2' | 't3' // study session (proofread / long recording / voice notes) — stamped into the log as task_type
   difficulty: string
   stimulusId: string
   timeBudgetMs: number
