@@ -312,7 +312,10 @@ export function buildTranscriptReportHtml(args: ReportArgs): string {
   const { transcript, model, edits, segmentTextEdits, verified, reviewer, history } = args
   const totalSegments = transcript.segments.length
   const verifiedN = verifiedCount(verified)
-  const editCount = Object.keys(edits).length
+  // Whole-sentence rewrites clear their segment's per-word edits (editSentence),
+  // so they're absent from `edits` — count them separately or the summary reads
+  // "0 changes" while the body + change log show the rewrites.
+  const editCount = Object.keys(edits).length + Object.keys(segmentTextEdits ?? {}).length
   const deletionCount = Object.values(edits).filter((e) => e.deleted).length
 
   // Look-up tables so the change log can show where each change happened.

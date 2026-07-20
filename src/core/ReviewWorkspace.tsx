@@ -696,6 +696,11 @@ export default function ReviewWorkspace({
     trialKeyRef.current = trial.key
     trialEndedRef.current = false
     setEdits({})
+    // Whole-sentence rewrites live in a separate map keyed by numeric segment id.
+    // Segment ids repeat across stimuli (every transcript numbers 0,1,2,…), so a
+    // rewrite left here would re-render on the NEXT trial's same-id segment and
+    // pollute its exported/uploaded data. Reset it like applyTranscript does.
+    setSegmentTextEdits({})
     setVerified({})
     setHistory([])
     setPopup(null)
@@ -1059,6 +1064,11 @@ export default function ReviewWorkspace({
     }
     const hits: { segId: number; wordIdx: number }[] = []
     for (const s of transcript.segments) {
+      // A rewritten segment renders from its override, NOT the edits map, so an
+      // edit written here would be invisible now yet resurface if the segment is
+      // later merged (which drops the override). Skip it — apply-all only touches
+      // segments that actually display from words[model]/edits.
+      if (segmentTextEdits[s.id] != null) continue
       const ws = s.words[model] ?? []
       ws.forEach((w, i) => {
         const e = edits[`${s.id}-${i}`]
