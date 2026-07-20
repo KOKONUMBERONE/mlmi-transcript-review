@@ -734,12 +734,17 @@ export default function ReviewWorkspace({
           if (cancelled) return
           const tr = json as Transcript
           setTranscript(tr)
+          // Follow the stimulus' own model key (e.g. 'ASR ensemble') — without
+          // this, `model` stays pinned to the default transcript's key and every
+          // segment renders empty (words[model] === undefined).
+          setModel(modelsOf(tr)[0])
           originalTranscriptRef.current = tr
           setTranscriptFilename(trial.stimulusId)
         })
         .catch((e) => console.warn('Stimulus transcript not loaded:', (e as Error).message))
     } else {
       setTranscript(defaultTranscript)
+      setModel(modelsOf(defaultTranscript)[0])
       originalTranscriptRef.current = defaultTranscript
       setTranscriptFilename(null)
     }
