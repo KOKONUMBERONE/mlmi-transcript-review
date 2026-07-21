@@ -357,6 +357,37 @@ def _content_indices(
     return out
 
 
+def _salient_indices(
+    words: List[Dict[str, Any]],
+    sim_map: Dict[str, float],
+    clean_for_model: Callable[[str], str],
+    top_k: int = 3,
+    floor: float = 0.30,
+) -> List[int]:
+    """For a SEMANTIC match, highlight only the few content words closest in
+    meaning to the query — not the whole sentence. Reuses the per-word query
+    similarities already computed for auto-expansion (`sim_map`: normalised word
+    -> cosine to the label), so there's no extra embedding cost. Keeps the
+    top-`top_k` words above `floor`; if none clear the floor the single best
+    word still anchors the hit so a semantic match is never left un-marked."""
+    scored: List[tuple] = []
+    for i, w in enumerate(words):
+        norm = _norm(w.get("text", ""), clean_for_model)
+        if not norm or norm in _STOPWORDS:
+            continue
+        s = sim_map.get(norm)
+        if s is None:
+            s = sim_map.get(_stem(norm), -1.0)
+        scored.append((s, i))
+    if not scored:
+        return []
+    scored.sort(key=lambda t: t[0], reverse=True)
+    keep = [i for s, i in scored if s >= floor][:top_k]
+    if not keep:
+        keep = [scored[0][1]]
+    return sorted(keep)
+
+
 def original_combined_risk(seg: Dict[str, Any], words: List[Dict[str, Any]]) -> str:
     """What 2a's default scoring showed for this segment: per-word max of
     `combined_risk`, falling back to the segment's upstream `paraRisk`. Recorded
@@ -495,6 +526,9 @@ def run_focus(
     # encoder=None -> degraded mode (no semantic leg): exact/alias/@pattern
     # matching still runs in full. Used on memory-tight hosts (Render 512MB
     # kills the process while loading SentenceTransformer -> 502 on /focus).
+    # Per-item {normalised word -> cosine to the label}: powers BOTH the auto-
+    # expansion below AND the salient-word highlighting of semantic matches.
+    word_sims: List[Dict[str, float]] = [{} for _ in items]
     vocab = _build_vocab(seg_tokens) if (auto_expand and items and encoder is not None) else []
     if vocab:
         vocab_emb = encoder.encode(vocab, batch_size=64, convert_to_numpy=True)
@@ -511,6 +545,7 @@ def run_focus(
                         excl.add(c)
                         excl.add(_stem(c))
             sims_w = vocab_emb @ label_emb[i]
+            word_sims[i] = {vocab[j]: float(sims_w[j]) for j in range(len(vocab))}
             autos: List[str] = []
             for j in np.argsort(-sims_w):
                 if sims_w[j] < expand_threshold:
@@ -585,8 +620,11 @@ def run_focus(
             elif alias_idx:
                 match_type, hi_idx, detail = "alias", alias_idx, alias_detail
             else:
-                match_type, hi_idx, detail = "semantic", _content_indices(
-                    seg_words[s_idx], clean_for_model
+                # Highlight only the few words closest to the query, not the
+                # whole sentence — semantic matches used to paint every content
+                # word purple, which read as noise.
+                match_type, hi_idx, detail = "semantic", _salient_indices(
+                    seg_words[s_idx], word_sims[qi], clean_for_model
                 ), None
 
             words = seg_words[s_idx]
