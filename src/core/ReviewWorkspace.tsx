@@ -190,6 +190,23 @@ export default function ReviewWorkspace({
   const [leftTab, setLeftTab] = useState<LeftTab>(
     config.timelineView ? 'timeline' : config.anomalyDetection ? 'conflicts' : 'find',
   )
+  // Panel navigation IS analysis data — which tools a reviewer opened (or shut
+  // away) says as much as what they did inside them. All tab/collapse moves go
+  // through these logging wrappers (tab_switch events).
+  const switchLeftTab = useCallback(
+    (t: LeftTab) => {
+      setLeftTab(t)
+      events.log('tab_switch', { tab: `left:${t}` })
+    },
+    [events],
+  )
+  const switchRightTab = useCallback(
+    (t: RightTab) => {
+      setRightTab(t)
+      events.log('tab_switch', { tab: `right:${t}` })
+    },
+    [events],
+  )
   // Assistant chat — ephemeral by design: in-memory only, cleared on transcript
   // change, never written to the audit trail or any export.
   const [chatMessages, setChatMessages] = useState<ChatUiTurn[]>([])
@@ -2350,7 +2367,7 @@ export default function ReviewWorkspace({
                   : null
               }
               onExpand={(tab) => {
-                setLeftTab(tab)
+                switchLeftTab(tab)
                 setFocusCollapsed(false)
               }}
               onOpenOutline={config.allowOutline ? handleOpenOutline : undefined}
@@ -2369,13 +2386,13 @@ export default function ReviewWorkspace({
               tabStrip={
                 <LeftTabStrip
                   active="chat"
-                  onSelect={setLeftTab}
+                  onSelect={switchLeftTab}
                   onOpenOutline={config.allowOutline ? handleOpenOutline : undefined}
                   showTimeline={config.timelineView}
                   showConflicts={config.anomalyDetection}
                 />
               }
-              onToggleCollapse={() => setFocusCollapsed(true)}
+              onToggleCollapse={() => { setFocusCollapsed(true); events.log('tab_switch', { tab: 'left:collapsed' }) }}
             />
           ) : config.timelineView && leftTab === 'timeline' ? (
             <TimelinePanel
@@ -2384,14 +2401,14 @@ export default function ReviewWorkspace({
               error={timelineError}
               onEventClick={handleTimelineEventClick}
               onRetry={() => setTimelineNonce((n) => n + 1)}
-              onToggleCollapse={() => setFocusCollapsed(true)}
+              onToggleCollapse={() => { setFocusCollapsed(true); events.log('tab_switch', { tab: 'left:collapsed' }) }}
               hoveredIndex={hoveredEventIndex}
               onEventHover={setHoveredEventIndex}
               activeSegmentId={activeId}
               tabStrip={
                 <LeftTabStrip
                   active="timeline"
-                  onSelect={setLeftTab}
+                  onSelect={switchLeftTab}
                   onOpenOutline={config.allowOutline ? handleOpenOutline : undefined}
                   showTimeline={config.timelineView}
                   showConflicts={config.anomalyDetection}
@@ -2405,11 +2422,11 @@ export default function ReviewWorkspace({
               error={anomalyError}
               onJump={handleConflictJump}
               onRetry={() => setAnomalyNonce((n) => n + 1)}
-              onToggleCollapse={() => setFocusCollapsed(true)}
+              onToggleCollapse={() => { setFocusCollapsed(true); events.log('tab_switch', { tab: 'left:collapsed' }) }}
               tabStrip={
                 <LeftTabStrip
                   active="conflicts"
-                  onSelect={setLeftTab}
+                  onSelect={switchLeftTab}
                   onOpenOutline={config.allowOutline ? handleOpenOutline : undefined}
                   showTimeline={config.timelineView}
                   showConflicts={config.anomalyDetection}
@@ -2435,7 +2452,7 @@ export default function ReviewWorkspace({
                 config.allowChat ? (
                   <LeftTabStrip
                     active="find"
-                    onSelect={setLeftTab}
+                    onSelect={switchLeftTab}
                     onOpenOutline={config.allowOutline ? handleOpenOutline : undefined}
                     showTimeline={config.timelineView}
                     showConflicts={config.anomalyDetection}
@@ -2519,8 +2536,11 @@ export default function ReviewWorkspace({
             onChange={handleQuestionChange}
             onCommit={handleQuestionCommit}
             side="right"
-            tabStrip={<RightTabStrip active="questions" onSelect={setRightTab} />}
-            onToggleCollapse={() => setAuditCollapsed(true)}
+            tabStrip={<RightTabStrip active="questions" onSelect={switchRightTab} />}
+            onToggleCollapse={() => {
+              setAuditCollapsed(true)
+              events.log('tab_switch', { tab: 'right:collapsed' })
+            }}
           />
         ) : (
           <HistorySidebar
@@ -2540,16 +2560,19 @@ export default function ReviewWorkspace({
             transcriptFilename={transcriptFilename}
             onExport={wrappedAuditExport}
             collapsed={auditCollapsed}
-            onToggleCollapse={() => setAuditCollapsed((v) => !v)}
+            onToggleCollapse={() => {
+              events.log('tab_switch', { tab: auditCollapsed ? 'right:expanded' : 'right:collapsed' })
+              setAuditCollapsed(!auditCollapsed)
+            }}
             tabStrip={
               caseQuestions.length > 0 ? (
-                <RightTabStrip active="review" onSelect={setRightTab} />
+                <RightTabStrip active="review" onSelect={switchRightTab} />
               ) : undefined
             }
             onExpandQuestions={
               caseQuestions.length > 0
                 ? () => {
-                    setRightTab('questions')
+                    switchRightTab('questions')
                     setAuditCollapsed(false)
                   }
                 : undefined

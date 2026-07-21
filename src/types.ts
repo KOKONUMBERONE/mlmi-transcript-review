@@ -295,6 +295,7 @@ export type EventType =
   | 'trial_start'
   | 'trial_end'
   | 'question_answer'
+  | 'tab_switch'
   | 'dimension_change'
   | 'segment_view'
   | 'segment_expand'
@@ -375,6 +376,10 @@ export interface LogEvent {
   question_id?: string
   question_type?: string       // 'mc' | 'open' | 'scale' | 'task'
   question_value?: string
+  // tab_switch payload: which panel came into view (or was collapsed away).
+  //   left:find | left:chat | left:timeline | left:conflicts | left:collapsed
+  //   right:questions | right:review | right:collapsed | right:expanded
+  tab?: string
   // filter_change payload. Four value namespaces share this field — match on
   // the full string, NOT a prefix ('high' is the Show filter; 'highlights:high'
   // is the word-highlight toggle):
