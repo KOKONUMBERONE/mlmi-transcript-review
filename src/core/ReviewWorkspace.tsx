@@ -5,7 +5,7 @@ import TranscriptView from '../components/TranscriptView'
 import HistorySidebar from '../components/HistorySidebar'
 import FocusPanel from '../components/FocusPanel'
 import ChatPanel, { type ChatUiTurn } from '../components/ChatPanel'
-import { CollapsedLeftRail, LeftTabStrip, type LeftTab } from '../components/LeftPanelTabs'
+import { CollapsedLeftRail, LeftTabStrip, RightTabStrip, type LeftTab, type RightTab } from '../components/LeftPanelTabs'
 import OutlineModal from '../components/OutlineModal'
 import OutlineStoryboard from '../components/OutlineStoryboard'
 import CandidatePopup, { type PopupAnchor } from '../components/CandidatePopup'
@@ -183,6 +183,8 @@ export default function ReviewWorkspace({
     !(config.timelineView || config.anomalyDetection),
   )
   const [auditCollapsed, setAuditCollapsed] = useState(!!config.defaultReviewCollapsed)
+  // Right column tab: police case questions share the column with Review.
+  const [rightTab, setRightTab] = useState<RightTab>('questions')
   // Left column tab (full build with allowChat): Find | Assistant (+ the
   // per-version Timeline / Conflicts tabs).
   const [leftTab, setLeftTab] = useState<LeftTab>(
@@ -778,11 +780,12 @@ export default function ReviewWorkspace({
     setSegmentTextEdits({})
     setVerified({})
     setQuestionAnswers({})
-    // Police trials open on the case-questions tab, panel expanded — the task
-    // is the first thing an officer sees; other trials keep their default.
+    // Police trials open with the RIGHT column expanded on the case-questions
+    // tab — the task is the first thing an officer sees; Review sits behind
+    // the second tab. Other trials keep their defaults.
     if (POLICE_QUESTIONS[trial.stimulusId]?.length) {
-      setLeftTab('questions')
-      setFocusCollapsed(false)
+      setRightTab('questions')
+      setAuditCollapsed(false)
     }
     setHistory([])
     setPopup(null)
@@ -2353,29 +2356,7 @@ export default function ReviewWorkspace({
               onOpenOutline={config.allowOutline ? handleOpenOutline : undefined}
               showTimeline={config.timelineView}
               showConflicts={config.anomalyDetection}
-              showQuestions={caseQuestions.length > 0}
               conflictCount={anomalyResult ? anomalyResult.conflicts.length : null}
-            />
-          ) : caseQuestions.length > 0 && leftTab === 'questions' ? (
-            // Police foraging: the case questions live on their own tab (the
-            // framed chip in the strip), first in the strip — click any other
-            // tab and that panel takes the column.
-            <QuestionsPanel
-              questions={caseQuestions}
-              answers={questionAnswers}
-              onChange={handleQuestionChange}
-              onCommit={handleQuestionCommit}
-              tabStrip={
-                <LeftTabStrip
-                  active="questions"
-                  onSelect={setLeftTab}
-                  onOpenOutline={config.allowOutline ? handleOpenOutline : undefined}
-                  showTimeline={config.timelineView}
-                  showConflicts={config.anomalyDetection}
-                  showQuestions
-                />
-              }
-              onToggleCollapse={config.allowChat ? () => setFocusCollapsed(true) : undefined}
             />
           ) : config.allowChat && leftTab === 'chat' ? (
             <ChatPanel
@@ -2392,7 +2373,6 @@ export default function ReviewWorkspace({
                   onOpenOutline={config.allowOutline ? handleOpenOutline : undefined}
                   showTimeline={config.timelineView}
                   showConflicts={config.anomalyDetection}
-                  showQuestions={caseQuestions.length > 0}
                 />
               }
               onToggleCollapse={() => setFocusCollapsed(true)}
@@ -2415,7 +2395,6 @@ export default function ReviewWorkspace({
                   onOpenOutline={config.allowOutline ? handleOpenOutline : undefined}
                   showTimeline={config.timelineView}
                   showConflicts={config.anomalyDetection}
-                  showQuestions={caseQuestions.length > 0}
                 />
               }
             />
@@ -2434,7 +2413,6 @@ export default function ReviewWorkspace({
                   onOpenOutline={config.allowOutline ? handleOpenOutline : undefined}
                   showTimeline={config.timelineView}
                   showConflicts={config.anomalyDetection}
-                  showQuestions={caseQuestions.length > 0}
                 />
               }
             />
@@ -2461,7 +2439,6 @@ export default function ReviewWorkspace({
                     onOpenOutline={config.allowOutline ? handleOpenOutline : undefined}
                     showTimeline={config.timelineView}
                     showConflicts={config.anomalyDetection}
-                    showQuestions={caseQuestions.length > 0}
                   />
                 ) : undefined
               }
@@ -2533,25 +2510,52 @@ export default function ReviewWorkspace({
           showChanges={showChanges}
           editInfo={editInfo}
         />
-        <HistorySidebar
-          history={history}
-          verified={verified}
-          verifiedCount={verifiedCount}
-          totalSegments={totalSegments}
-          highRiskRemaining={highRiskRemaining}
-          transcript={transcript}
-          model={model}
-          edits={edits}
-          segmentTextEdits={segmentTextEdits}
-          sourceTranscript={originalTranscriptRef.current}
-          rawSource={rawSourceRef.current}
-          reviewer={reviewer}
-          audioFilename={audioFilename}
-          transcriptFilename={transcriptFilename}
-          onExport={wrappedAuditExport}
-          collapsed={auditCollapsed}
-          onToggleCollapse={() => setAuditCollapsed((v) => !v)}
-        />
+        {/* Right column: police trials share it between the case questions and
+            Review via RightTabStrip; other builds keep the plain Review panel. */}
+        {caseQuestions.length > 0 && rightTab === 'questions' && !auditCollapsed ? (
+          <QuestionsPanel
+            questions={caseQuestions}
+            answers={questionAnswers}
+            onChange={handleQuestionChange}
+            onCommit={handleQuestionCommit}
+            side="right"
+            tabStrip={<RightTabStrip active="questions" onSelect={setRightTab} />}
+            onToggleCollapse={() => setAuditCollapsed(true)}
+          />
+        ) : (
+          <HistorySidebar
+            history={history}
+            verified={verified}
+            verifiedCount={verifiedCount}
+            totalSegments={totalSegments}
+            highRiskRemaining={highRiskRemaining}
+            transcript={transcript}
+            model={model}
+            edits={edits}
+            segmentTextEdits={segmentTextEdits}
+            sourceTranscript={originalTranscriptRef.current}
+            rawSource={rawSourceRef.current}
+            reviewer={reviewer}
+            audioFilename={audioFilename}
+            transcriptFilename={transcriptFilename}
+            onExport={wrappedAuditExport}
+            collapsed={auditCollapsed}
+            onToggleCollapse={() => setAuditCollapsed((v) => !v)}
+            tabStrip={
+              caseQuestions.length > 0 ? (
+                <RightTabStrip active="review" onSelect={setRightTab} />
+              ) : undefined
+            }
+            onExpandQuestions={
+              caseQuestions.length > 0
+                ? () => {
+                    setRightTab('questions')
+                    setAuditCollapsed(false)
+                  }
+                : undefined
+            }
+          />
+        )}
       </div>
 
       {/* Full-width time-proportional timeline strip (timeline build only):

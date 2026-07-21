@@ -33,6 +33,12 @@ interface Props {
   onExport?: (kind: string, count: number) => void
   collapsed?: boolean
   onToggleCollapse?: () => void
+  /** Police trials: the right-column tab strip (Questions / Review) rendered in
+   *  place of the plain "Review" title. */
+  tabStrip?: React.ReactNode
+  /** Police trials: collapsed rail shows a framed "Questions" label; clicking
+   *  it expands the column straight onto the questions tab. */
+  onExpandQuestions?: () => void
 }
 
 function formatAction(entry: HistoryEntry): React.ReactNode {
@@ -133,6 +139,8 @@ export default function HistorySidebar({
   onExport,
   collapsed = false,
   onToggleCollapse,
+  tabStrip,
+  onExpandQuestions,
 }: Props) {
   const progress = totalSegments === 0 ? 0 : (verifiedCount / totalSegments) * 100
   const hasHistory = history.length > 0
@@ -152,9 +160,22 @@ export default function HistorySidebar({
             <path d="M7.5 2.5 4 6l3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
-        <span className="[writing-mode:vertical-rl] text-[10px] text-ink-faint uppercase tracking-[0.1em]">
+        {onExpandQuestions && (
+          <button
+            onClick={onExpandQuestions}
+            title="Expand Case questions"
+            className="[writing-mode:vertical-rl] text-[10px] uppercase tracking-[0.1em] font-semibold text-brand bg-brand-bg border border-brand/40 rounded px-px py-1.5 hover:border-brand"
+          >
+            Questions
+          </button>
+        )}
+        <button
+          onClick={onToggleCollapse}
+          title="Expand review panel"
+          className="[writing-mode:vertical-rl] text-[10px] text-ink-faint uppercase tracking-[0.1em] hover:text-ink"
+        >
           Review
-        </span>
+        </button>
         <span className="font-mono text-[10px] text-ink-faint tabular-nums">
           {verifiedCount}/{totalSegments}
         </span>
@@ -177,8 +198,8 @@ export default function HistorySidebar({
     <aside className="w-80 shrink-0 border-l border-border bg-surface overflow-hidden flex flex-col">
       {/* Review progress — the reviewer's "how much is left" panel. */}
       <div className="px-4 py-3 border-b border-border shrink-0">
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-[10px] text-ink-faint uppercase tracking-[0.1em]">Review</p>
+        <div className="flex items-center justify-between mb-2 gap-2">
+          {tabStrip ?? <p className="text-[10px] text-ink-faint uppercase tracking-[0.1em]">Review</p>}
           {onToggleCollapse && (
             <button
               onClick={onToggleCollapse}

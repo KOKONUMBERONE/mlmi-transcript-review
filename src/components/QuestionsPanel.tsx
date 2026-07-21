@@ -1,10 +1,11 @@
 import { useState, type ReactNode } from 'react'
 import type { PoliceQuestion } from '../study/trials'
 
-// "Case questions" panel — the first tab of the left column during a police
-// foraging task (its tab is a framed brand chip so it's spottable among the
-// text tabs). Drives the search + captures answers in-app; answers are logged
-// (question_answer events) and ride the Supabase snapshot with everything else.
+// "Case questions" panel — lives in the RIGHT column during a police foraging
+// task, sharing it with the Review panel via a two-tab strip (Questions is a
+// framed brand chip so it's spottable). Drives the search + captures answers
+// in-app; answers are logged (question_answer events) and ride the Supabase
+// snapshot with everything else.
 // Four question types — see PoliceQuestion in trials.ts:
 //   mc    single- or multi-select choice
 //   open  free-text answer in a box below the prompt (NOT an in-sentence blank)
@@ -20,9 +21,11 @@ interface Props {
   onChange: (id: string, value: AnswerValue) => void
   /** Commit point worth logging (select / blur). */
   onCommit: (id: string, value: AnswerValue, type: PoliceQuestion['type']) => void
-  /** The shared left-column tab strip (Questions / Find / Assistant / …). */
+  /** The column's tab strip (right column: Questions / Review). */
   tabStrip?: ReactNode
   onToggleCollapse?: () => void
+  /** Which side of the workspace the panel sits on (border + chevron flip). */
+  side?: 'left' | 'right'
 }
 
 export default function QuestionsPanel({
@@ -32,11 +35,12 @@ export default function QuestionsPanel({
   onCommit,
   tabStrip,
   onToggleCollapse,
+  side = 'left',
 }: Props) {
   if (questions.length === 0) return null
   return (
     <aside
-      className="w-80 shrink-0 border-r border-border bg-surface flex flex-col overflow-hidden"
+      className={`w-80 shrink-0 ${side === 'right' ? 'border-l' : 'border-r'} border-border bg-surface flex flex-col overflow-hidden`}
       aria-label="Case questions"
     >
       <div className="px-4 py-3 border-b border-border shrink-0 bg-surface">
@@ -49,7 +53,7 @@ export default function QuestionsPanel({
               className="shrink-0 text-ink-faint hover:text-ink p-0.5 rounded hover:bg-surface-muted"
             >
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M7.5 2.5 4 6l3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />
+                <path d={side === 'right' ? 'M4.5 2.5 8 6l-3.5 3.5' : 'M7.5 2.5 4 6l3.5 3.5'} strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
           )}

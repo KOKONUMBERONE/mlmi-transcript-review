@@ -3,8 +3,12 @@
 // per-version Timeline / Conflicts panels), switched by these tabs. The study
 // build never renders either of these — FocusPanel's own title + collapsed
 // branch keep running there untouched.
+//
+// RightTabStrip switches the RIGHT column between the police case-questions
+// panel and the Review/audit panel.
 
-export type LeftTab = 'questions' | 'find' | 'chat' | 'timeline' | 'conflicts'
+export type LeftTab = 'find' | 'chat' | 'timeline' | 'conflicts'
+export type RightTab = 'questions' | 'review'
 
 export function LeftTabStrip({
   active,
@@ -12,7 +16,6 @@ export function LeftTabStrip({
   onOpenOutline,
   showTimeline = false,
   showConflicts = false,
-  showQuestions = false,
 }: {
   active: LeftTab
   onSelect: (tab: LeftTab) => void
@@ -23,9 +26,6 @@ export function LeftTabStrip({
   showTimeline?: boolean
   /** Anomaly build only: show the "Conflicts" tab (contradiction pairs). */
   showConflicts?: boolean
-  /** Police foraging trials: show the "Questions" tab (case-questions panel).
-   *  Framed as a chip (unlike the text tabs) so it's spottable at a glance. */
-  showQuestions?: boolean
 }) {
   const cls = (tab: LeftTab) =>
     [
@@ -36,21 +36,6 @@ export function LeftTabStrip({
     ].join(' ')
   return (
     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 min-w-0" role="tablist" aria-label="Left panel">
-      {showQuestions && (
-        <button
-          role="tab"
-          aria-selected={active === 'questions'}
-          className={[
-            'text-[10px] uppercase tracking-[0.1em] font-semibold px-1.5 py-0.5 rounded border transition-colors',
-            active === 'questions'
-              ? 'text-white bg-brand border-brand'
-              : 'text-brand bg-brand-bg border-brand/40 hover:border-brand',
-          ].join(' ')}
-          onClick={() => onSelect('questions')}
-        >
-          Questions
-        </button>
-      )}
       <button role="tab" aria-selected={active === 'find'} className={cls('find')} onClick={() => onSelect('find')}>
         Find
       </button>
@@ -80,6 +65,48 @@ export function LeftTabStrip({
   )
 }
 
+/** Right-column tab strip: the police case questions (framed brand chip so the
+ *  task stays spottable) + the Review/audit panel. Rendered by whichever of the
+ *  two panels is active, same slot pattern as the left strips. */
+export function RightTabStrip({
+  active,
+  onSelect,
+}: {
+  active: RightTab
+  onSelect: (tab: RightTab) => void
+}) {
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 min-w-0" role="tablist" aria-label="Right panel">
+      <button
+        role="tab"
+        aria-selected={active === 'questions'}
+        className={[
+          'text-[10px] uppercase tracking-[0.1em] font-semibold px-1.5 py-0.5 rounded border transition-colors',
+          active === 'questions'
+            ? 'text-white bg-brand border-brand'
+            : 'text-brand bg-brand-bg border-brand/40 hover:border-brand',
+        ].join(' ')}
+        onClick={() => onSelect('questions')}
+      >
+        Questions
+      </button>
+      <button
+        role="tab"
+        aria-selected={active === 'review'}
+        className={[
+          'text-[10px] uppercase tracking-[0.1em] font-semibold pb-0.5 border-b-2 transition-colors',
+          active === 'review'
+            ? 'text-brand border-brand'
+            : 'text-ink-faint border-transparent hover:text-ink',
+        ].join(' ')}
+        onClick={() => onSelect('review')}
+      >
+        Review
+      </button>
+    </div>
+  )
+}
+
 /** Collapsed w-9 rail with both tab labels — clicking a label expands the
  *  column with that tab active. */
 export function CollapsedLeftRail({
@@ -88,7 +115,6 @@ export function CollapsedLeftRail({
   onOpenOutline,
   showTimeline = false,
   showConflicts = false,
-  showQuestions = false,
   conflictCount,
 }: {
   /** Find hit count shown under its label when a retrieval is active. */
@@ -99,15 +125,13 @@ export function CollapsedLeftRail({
   /** Same per-version tabs as the expanded strip. */
   showTimeline?: boolean
   showConflicts?: boolean
-  /** Same framed Questions tab as the expanded strip (police trials). */
-  showQuestions?: boolean
   /** Conflict count shown under the Conflicts label (anomaly build). */
   conflictCount?: number | null
 }) {
   return (
     <aside className="w-9 shrink-0 border-r border-border bg-surface flex flex-col items-center gap-3 py-3">
       <button
-        onClick={() => onExpand(showQuestions ? 'questions' : 'find')}
+        onClick={() => onExpand('find')}
         title="Expand panel"
         className="text-ink-muted hover:text-brand p-1 rounded hover:bg-surface-muted"
       >
@@ -115,15 +139,6 @@ export function CollapsedLeftRail({
           <path d="M4.5 2.5 8 6l-3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
-      {showQuestions && (
-        <button
-          onClick={() => onExpand('questions')}
-          title="Expand Case questions"
-          className="[writing-mode:vertical-rl] text-[10px] uppercase tracking-[0.1em] font-semibold text-brand bg-brand-bg border border-brand/40 rounded px-px py-1.5 hover:border-brand"
-        >
-          Questions
-        </button>
-      )}
       <button
         onClick={() => onExpand('find')}
         title="Expand Find"
