@@ -25,12 +25,14 @@ interface Props {
 export default function QuestionsPanel({ questions, answers, onChange, onCommit, className = '' }: Props) {
   if (questions.length === 0) return null
   return (
+    // Framed in brand colour so the task brief reads at a glance as "the card
+    // that drives everything below" (Find/Assistant sit underneath it).
     <aside
-      className={`bg-surface border-r border-b border-border overflow-y-auto flex flex-col ${className}`}
+      className={`bg-brand-bg/60 border-r border-border border-l-4 border-l-brand border-b-2 border-b-brand/30 overflow-y-auto flex flex-col ${className}`}
       aria-label="Case questions"
     >
-      <div className="px-4 py-2.5 border-b border-border shrink-0 sticky top-0 bg-surface z-10">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Case questions</h2>
+      <div className="px-4 py-2.5 border-b border-brand/20 shrink-0 sticky top-0 bg-brand-bg z-10">
+        <h2 className="text-[11px] font-bold uppercase tracking-wide text-brand">Case questions</h2>
         <p className="text-[10px] text-ink-faint mt-0.5">Answer as you work — your answers are saved automatically.</p>
       </div>
       <ol className="px-4 py-3 space-y-4">

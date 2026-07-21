@@ -129,6 +129,11 @@ export interface TrialContext {
   // present, running focus uses this instead of calling :8000 (which fails on
   // the deployed build). Resolved from STIMULI[id].focus.
   focusUrl?: string
+  // Pre-baked AI panel results (see STIMULI): seeded instantly on trial load so
+  // nobody waits 20–80s for the live backend; Retry/Regenerate still go live.
+  timelineUrl?: string
+  outlineUrl?: string
+  anomaliesUrl?: string
 }
 
 export default function ReviewWorkspace({
@@ -295,6 +300,15 @@ export default function ReviewWorkspace({
   // Study only: the frozen FocusResult for this trial's clip (from STIMULI.focus).
   // When set, running focus uses it directly — zero network to :8000.
   const frozenFocusRef = useRef<FocusResult | null>(null)
+  // Study only: pre-baked timeline/outline/anomalies for this trial's clip
+  // (STIMULI.timeline/outline/anomalies). Seeded instantly so the panels never
+  // block on the live backend; 'failed' marks a fetch error so the panel
+  // effects fall back to the live call instead of waiting forever.
+  const [frozenAI, setFrozenAI] = useState<{
+    timeline?: TimelineResult | 'failed'
+    outline?: OutlineResult | 'failed'
+    anomalies?: AnomalyResult | 'failed'
+  }>({})
   // Focus-only error (e.g. the AI pass when Ollama isn't running). Kept separate
   // from the global `errorMsg` banner so a missing local LLM degrades
   // gracefully: it surfaces *inside* the panel and never blocks lexical search
@@ -395,6 +409,19 @@ export default function ReviewWorkspace({
     if (!config.anomalyDetection) return
     setAnomalyResult(null)
     setAnomalyError(null)
+    // Frozen-first: a study trial with a pre-baked result seeds it instantly —
+    // no live call, no waiting. Retry (nonce > 0) always goes live; a failed
+    // frozen fetch falls through to live.
+    if (anomalyNonce === 0 && trial?.anomaliesUrl && frozenAI.anomalies !== 'failed') {
+      if (frozenAI.anomalies) {
+        setAnomalyResult(frozenAI.anomalies)
+        events.log('anomaly_run', {
+          segment_count: transcript.segments.length,
+          anomaly_count: frozenAI.anomalies.conflicts.length,
+        })
+      }
+      return // frozen still fetching — this effect re-runs when it lands
+    }
     let cancelled = false
     setAnomalyRunning(true)
     runAnomalies(transcript, model)
@@ -420,7 +447,7 @@ export default function ReviewWorkspace({
     return () => {
       cancelled = true
     }
-  }, [config.anomalyDetection, transcript, model, events, anomalyNonce])
+  }, [config.anomalyDetection, transcript, model, events, anomalyNonce, trial?.anomaliesUrl, frozenAI.anomalies])
 
   // ---- Event timeline (timeline build) — local-LLM event list --------------
   const [timelineResult, setTimelineResult] = useState<TimelineResult | null>(null)
@@ -437,6 +464,18 @@ export default function ReviewWorkspace({
     if (!config.timelineView) return
     setTimelineResult(null)
     setTimelineError(null)
+    // Frozen-first (same contract as anomalies): seed the pre-baked result,
+    // skip live; Retry (nonce > 0) or a failed frozen fetch goes live.
+    if (timelineNonce === 0 && trial?.timelineUrl && frozenAI.timeline !== 'failed') {
+      if (frozenAI.timeline) {
+        setTimelineResult(frozenAI.timeline)
+        events.log('timeline_run', {
+          segment_count: transcript.segments.length,
+          timeline_count: frozenAI.timeline.events.length,
+        })
+      }
+      return // frozen still fetching — effect re-runs when it lands
+    }
     let cancelled = false
     setTimelineRunning(true)
     runTimeline(transcript, model)
@@ -462,7 +501,7 @@ export default function ReviewWorkspace({
     return () => {
       cancelled = true
     }
-  }, [config.timelineView, transcript, model, events, timelineNonce])
+  }, [config.timelineView, transcript, model, events, timelineNonce, trial?.timelineUrl, frozenAI.timeline])
 
   // Whole-sentence highlighter overlay. The tint SOURCE is a signal:
   //   confidence → upstream paraRisk (high/med), tooltip = ASR confidence
@@ -801,6 +840,48 @@ export default function ReviewWorkspace({
         })
     } else {
       frozenFocusRef.current = null
+    }
+    // Pre-baked AI panel results: timeline/anomalies land in frozenAI (their
+    // effects seed from it); outline additionally seeds outlineResult directly
+    // so opening the storyboard is instant. A fetch failure marks 'failed' so
+    // the panel effects fall back to the live backend.
+    setFrozenAI({})
+    if (trial.timelineUrl) {
+      fetch(trial.timelineUrl)
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`timeline HTTP ${r.status}`))))
+        .then((json) => {
+          if (!cancelled) setFrozenAI((prev) => ({ ...prev, timeline: json as TimelineResult }))
+        })
+        .catch((e) => {
+          if (!cancelled) setFrozenAI((prev) => ({ ...prev, timeline: 'failed' }))
+          console.warn('Frozen timeline not loaded:', (e as Error).message)
+        })
+    }
+    if (trial.anomaliesUrl) {
+      fetch(trial.anomaliesUrl)
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`anomalies HTTP ${r.status}`))))
+        .then((json) => {
+          if (!cancelled) setFrozenAI((prev) => ({ ...prev, anomalies: json as AnomalyResult }))
+        })
+        .catch((e) => {
+          if (!cancelled) setFrozenAI((prev) => ({ ...prev, anomalies: 'failed' }))
+          console.warn('Frozen anomalies not loaded:', (e as Error).message)
+        })
+    }
+    if (trial.outlineUrl) {
+      fetch(trial.outlineUrl)
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`outline HTTP ${r.status}`))))
+        .then((json) => {
+          if (cancelled) return
+          setFrozenAI((prev) => ({ ...prev, outline: json as OutlineResult }))
+          // Seed directly: the trial-reset effect already cleared outlineResult,
+          // and Regenerate overwrites via the live call.
+          setOutlineResult(json as OutlineResult)
+        })
+        .catch((e) => {
+          if (!cancelled) setFrozenAI((prev) => ({ ...prev, outline: 'failed' }))
+          console.warn('Frozen outline not loaded:', (e as Error).message)
+        })
     }
     return () => {
       cancelled = true
