@@ -764,6 +764,12 @@ export default function ReviewWorkspace({
     setSegmentTextEdits({})
     setVerified({})
     setQuestionAnswers({})
+    // Police trials open on the case-questions tab, panel expanded — the task
+    // is the first thing an officer sees; other trials keep their default.
+    if (POLICE_QUESTIONS[trial.stimulusId]?.length) {
+      setLeftTab('questions')
+      setFocusCollapsed(false)
+    }
     setHistory([])
     setPopup(null)
     setExpandedSegmentId(null)
@@ -2304,21 +2310,8 @@ export default function ReviewWorkspace({
         {/* Left column: Find (both builds) + Assistant tab (full build only).
             One shared collapse flag; the collapsed rail carries both labels
             when the assistant exists, else FocusPanel's own rail runs. */}
-        {focusEnabled && (
-          <div className="flex flex-col shrink-0 overflow-hidden max-h-full">
-            {/* Police foraging: case questions pinned above Find/Assistant, always
-                visible so they drive the search without hiding the tools. */}
-            {caseQuestions.length > 0 && (
-              <QuestionsPanel
-                questions={caseQuestions}
-                answers={questionAnswers}
-                onChange={handleQuestionChange}
-                onCommit={handleQuestionCommit}
-                className="w-80 shrink-0 max-h-[45%]"
-              />
-            )}
-            <div className="flex-1 min-h-0 flex overflow-hidden">
-              {config.allowChat && focusCollapsed ? (
+        {focusEnabled &&
+          (config.allowChat && focusCollapsed ? (
             <CollapsedLeftRail
               findHits={
                 focusActive && focusResult
@@ -2332,7 +2325,29 @@ export default function ReviewWorkspace({
               onOpenOutline={config.allowOutline ? handleOpenOutline : undefined}
               showTimeline={config.timelineView}
               showConflicts={config.anomalyDetection}
+              showQuestions={caseQuestions.length > 0}
               conflictCount={anomalyResult ? anomalyResult.conflicts.length : null}
+            />
+          ) : caseQuestions.length > 0 && leftTab === 'questions' ? (
+            // Police foraging: the case questions live on their own tab (the
+            // framed chip in the strip), first in the strip — click any other
+            // tab and that panel takes the column.
+            <QuestionsPanel
+              questions={caseQuestions}
+              answers={questionAnswers}
+              onChange={handleQuestionChange}
+              onCommit={handleQuestionCommit}
+              tabStrip={
+                <LeftTabStrip
+                  active="questions"
+                  onSelect={setLeftTab}
+                  onOpenOutline={config.allowOutline ? handleOpenOutline : undefined}
+                  showTimeline={config.timelineView}
+                  showConflicts={config.anomalyDetection}
+                  showQuestions
+                />
+              }
+              onToggleCollapse={config.allowChat ? () => setFocusCollapsed(true) : undefined}
             />
           ) : config.allowChat && leftTab === 'chat' ? (
             <ChatPanel
@@ -2349,6 +2364,7 @@ export default function ReviewWorkspace({
                   onOpenOutline={config.allowOutline ? handleOpenOutline : undefined}
                   showTimeline={config.timelineView}
                   showConflicts={config.anomalyDetection}
+                  showQuestions={caseQuestions.length > 0}
                 />
               }
               onToggleCollapse={() => setFocusCollapsed(true)}
@@ -2371,6 +2387,7 @@ export default function ReviewWorkspace({
                   onOpenOutline={config.allowOutline ? handleOpenOutline : undefined}
                   showTimeline={config.timelineView}
                   showConflicts={config.anomalyDetection}
+                  showQuestions={caseQuestions.length > 0}
                 />
               }
             />
@@ -2389,6 +2406,7 @@ export default function ReviewWorkspace({
                   onOpenOutline={config.allowOutline ? handleOpenOutline : undefined}
                   showTimeline={config.timelineView}
                   showConflicts={config.anomalyDetection}
+                  showQuestions={caseQuestions.length > 0}
                 />
               }
             />
@@ -2415,14 +2433,12 @@ export default function ReviewWorkspace({
                     onOpenOutline={config.allowOutline ? handleOpenOutline : undefined}
                     showTimeline={config.timelineView}
                     showConflicts={config.anomalyDetection}
+                    showQuestions={caseQuestions.length > 0}
                   />
                 ) : undefined
               }
             />
-              )}
-            </div>
-          </div>
-        )}
+          ))}
         <TranscriptView
           transcript={transcript}
           model={model}

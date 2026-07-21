@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { PoliceQuestion } from '../study/trials'
 
-// Persistent "Case questions" card pinned at the top of the left column during a
-// police foraging task. Drives the search + captures answers in-app; answers are
-// logged (question_answer events) and ride the Supabase snapshot with everything
-// else. Four question types — see PoliceQuestion in trials.ts:
+// "Case questions" panel — the first tab of the left column during a police
+// foraging task (its tab is a framed brand chip so it's spottable among the
+// text tabs). Drives the search + captures answers in-app; answers are logged
+// (question_answer events) and ride the Supabase snapshot with everything else.
+// Four question types — see PoliceQuestion in trials.ts:
 //   mc    single- or multi-select choice
 //   open  free-text answer in a box below the prompt (NOT an in-sentence blank)
 //   scale Likert rating (min..max)
@@ -19,23 +20,48 @@ interface Props {
   onChange: (id: string, value: AnswerValue) => void
   /** Commit point worth logging (select / blur). */
   onCommit: (id: string, value: AnswerValue, type: PoliceQuestion['type']) => void
-  className?: string
+  /** The shared left-column tab strip (Questions / Find / Assistant / …). */
+  tabStrip?: ReactNode
+  onToggleCollapse?: () => void
 }
 
-export default function QuestionsPanel({ questions, answers, onChange, onCommit, className = '' }: Props) {
+export default function QuestionsPanel({
+  questions,
+  answers,
+  onChange,
+  onCommit,
+  tabStrip,
+  onToggleCollapse,
+}: Props) {
   if (questions.length === 0) return null
   return (
-    // Framed in brand colour so the task brief reads at a glance as "the card
-    // that drives everything below" (Find/Assistant sit underneath it).
     <aside
-      className={`bg-brand-bg/60 border-r border-border border-l-4 border-l-brand border-b-2 border-b-brand/30 overflow-y-auto flex flex-col ${className}`}
+      className="w-80 shrink-0 border-r border-border bg-surface flex flex-col overflow-hidden"
       aria-label="Case questions"
     >
-      <div className="px-4 py-2.5 border-b border-brand/20 shrink-0 sticky top-0 bg-brand-bg z-10">
-        <h2 className="text-[11px] font-bold uppercase tracking-wide text-brand">Case questions</h2>
-        <p className="text-[10px] text-ink-faint mt-0.5">Answer as you work — your answers are saved automatically.</p>
+      <div className="px-4 py-3 border-b border-border shrink-0 bg-surface">
+        <div className="flex items-center justify-between gap-2">
+          {tabStrip}
+          {onToggleCollapse && (
+            <button
+              onClick={onToggleCollapse}
+              title="Collapse panel"
+              className="shrink-0 text-ink-faint hover:text-ink p-0.5 rounded hover:bg-surface-muted"
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M7.5 2.5 4 6l3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
-      <ol className="px-4 py-3 space-y-4">
+      {/* Brand-tinted banner keeps the "this is the task" signal inside the tab. */}
+      <div className="px-4 py-2 border-b border-brand/20 bg-brand-bg shrink-0">
+        <p className="text-[10px] text-ink-muted">
+          Answer as you work — your answers are saved automatically.
+        </p>
+      </div>
+      <ol className="px-4 py-3 space-y-4 overflow-y-auto flex-1">
         {questions.map((q, i) => (
           <li key={q.id} className="text-[12px]">
             <div className="flex gap-1.5">
