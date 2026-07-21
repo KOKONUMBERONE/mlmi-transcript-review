@@ -646,6 +646,14 @@ export default function ReviewWorkspace({
     if (focusResult) {
       for (const term of focusResult.terms) {
         for (const s of term.snippets) {
+          // Fuzzy, meaning-based matches (lexical `semantic` AND the AI/LLM
+          // pass) are LIST-ONLY: they still show in the Find panel (which reads
+          // focusResult directly) but leave NO mark in the transcript — no
+          // segment rail, no word highlight — because they matched by whole-
+          // sentence meaning and used to paint every content word purple, which
+          // read as noise. Only literal matches (exact / alias / @pattern) mark
+          // the transcript, since those pinpoint the actual words.
+          if (s.match_type === 'semantic' || s.match_type === 'llm') continue
           segs.add(s.segment_id)
           for (const idx of s.highlight_word_indices) {
             const key = `${s.segment_id}-${idx}`
