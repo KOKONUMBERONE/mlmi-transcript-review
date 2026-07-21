@@ -64,3 +64,7 @@ test_data/
 # service_role key at runtime).
 scripts/download_study_data.py
 study_data/
+
+# Python bytecode cache (from the local analysis script)
+__pycache__/
+*.pyc
