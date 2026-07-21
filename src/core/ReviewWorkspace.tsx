@@ -2166,7 +2166,9 @@ export default function ReviewWorkspace({
         interactionLocked ? ' pointer-events-none select-none opacity-60' : ''
       }`}
     >
-      {/* Echo-style brand banner (no police logo). */}
+      {/* Echo-style brand banner (no police logo). Study trials hide it — their
+          own trial banner already carries the context + Help. */}
+      {!config.hideBrandBanner && (
       <div className="flex items-center gap-3 px-5 h-9 bg-brand text-white shrink-0">
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
           <path d="M4 2.5h6l2.5 2.5v8.5H4z" strokeLinejoin="round" />
@@ -2196,6 +2198,7 @@ export default function ReviewWorkspace({
           <span className="hidden sm:inline">Help</span>
         </a>
       </div>
+      )}
 
       <TopBar
         model={model}
