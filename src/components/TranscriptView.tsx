@@ -580,7 +580,12 @@ export default function TranscriptView({
                   active={segment.id === activeId}
                   verified={!!verified[segment.id]}
                   edits={edits}
-                  dimension={wordDimension ?? dimension}
+                  // Word-mark dimension: an explicit override ('none' for the
+                  // pure-sentence build) wins; else the header WORDS switcher
+                  // (when free switching is on) — without this the switcher
+                  // only restyled itself and words stayed on the sentence
+                  // build's pinned dimension; else the version's fixed layer.
+                  dimension={wordDimension ?? wordDimensionValue ?? dimension}
                   hideRiskDot={!!sentenceTintMap && !keepRiskDot}
                   sentenceTint={shownTint}
                   sentenceTintTitle={shownTint ? sentenceTintTitleFor?.(segment.id) : undefined}
