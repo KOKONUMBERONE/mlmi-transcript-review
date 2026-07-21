@@ -134,6 +134,7 @@ export interface TrialContext {
   timelineUrl?: string
   outlineUrl?: string
   anomaliesUrl?: string
+  triageUrl?: string
 }
 
 export default function ReviewWorkspace({
@@ -308,6 +309,7 @@ export default function ReviewWorkspace({
     timeline?: TimelineResult | 'failed'
     outline?: OutlineResult | 'failed'
     anomalies?: AnomalyResult | 'failed'
+    triage?: TriageResult | 'failed'
   }>({})
   // Focus-only error (e.g. the AI pass when Ollama isn't running). Kept separate
   // from the global `errorMsg` banner so a missing local LLM degrades
@@ -370,6 +372,18 @@ export default function ReviewWorkspace({
       })
       return
     }
+    // Frozen-first (same contract as timeline/anomalies): a study trial with a
+    // pre-baked triage seeds it instantly; a failed frozen fetch goes live.
+    if (trial?.triageUrl && frozenAI.triage !== 'failed') {
+      if (frozenAI.triage) {
+        setTriageResult(frozenAI.triage)
+        events.log('triage_run', {
+          segment_count: transcript.segments.length,
+          triage_high: frozenAI.triage.segments.filter((s) => s.importance === 'high').length,
+        })
+      }
+      return // frozen still fetching — effect re-runs when it lands
+    }
     let cancelled = false
     setTriageRunning(true)
     runTriage(transcript, model)
@@ -395,7 +409,7 @@ export default function ReviewWorkspace({
     return () => {
       cancelled = true
     }
-  }, [triageWanted, transcript, model, events])
+  }, [triageWanted, transcript, model, events, trial?.triageUrl, frozenAI.triage])
 
   // ---- Contradiction check (anomaly build) — local-LLM conflict pairs ------
   // Auto-runs like triage (the paradigm is meaningless without it); errors stay
@@ -872,6 +886,17 @@ export default function ReviewWorkspace({
         .catch((e) => {
           if (!cancelled) setFrozenAI((prev) => ({ ...prev, anomalies: 'failed' }))
           console.warn('Frozen anomalies not loaded:', (e as Error).message)
+        })
+    }
+    if (trial.triageUrl) {
+      fetch(trial.triageUrl)
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`triage HTTP ${r.status}`))))
+        .then((json) => {
+          if (!cancelled) setFrozenAI((prev) => ({ ...prev, triage: json as TriageResult }))
+        })
+        .catch((e) => {
+          if (!cancelled) setFrozenAI((prev) => ({ ...prev, triage: 'failed' }))
+          console.warn('Frozen triage not loaded:', (e as Error).message)
         })
     }
     if (trial.outlineUrl) {
