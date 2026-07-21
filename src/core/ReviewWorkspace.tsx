@@ -182,7 +182,7 @@ export default function ReviewWorkspace({
   const [focusCollapsed, setFocusCollapsed] = useState(
     !(config.timelineView || config.anomalyDetection),
   )
-  const [auditCollapsed, setAuditCollapsed] = useState(false)
+  const [auditCollapsed, setAuditCollapsed] = useState(!!config.defaultReviewCollapsed)
   // Left column tab (full build with allowChat): Find | Assistant (+ the
   // per-version Timeline / Conflicts tabs).
   const [leftTab, setLeftTab] = useState<LeftTab>(
