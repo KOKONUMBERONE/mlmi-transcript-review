@@ -492,7 +492,10 @@ def run_focus(
     # literal-matched (precise spans). Because the expansion vocabulary IS the
     # transcript, this generalises to whatever wording a case happens to use —
     # search "weapon" and it discovers this case says "knife"/"gun".
-    vocab = _build_vocab(seg_tokens) if (auto_expand and items) else []
+    # encoder=None -> degraded mode (no semantic leg): exact/alias/@pattern
+    # matching still runs in full. Used on memory-tight hosts (Render 512MB
+    # kills the process while loading SentenceTransformer -> 502 on /focus).
+    vocab = _build_vocab(seg_tokens) if (auto_expand and items and encoder is not None) else []
     if vocab:
         vocab_emb = encoder.encode(vocab, batch_size=64, convert_to_numpy=True)
         vocab_emb = vocab_emb / (np.linalg.norm(vocab_emb, axis=1, keepdims=True) + 1e-9)
@@ -523,7 +526,7 @@ def run_focus(
                 it["query"] = _build_query(it["label"], it["aliases"] + autos)
 
     # ----- One batched encode for all segments + all (possibly expanded) queries
-    if segments and items:
+    if segments and items and encoder is not None:
         seg_emb = encoder.encode(seg_text, batch_size=64, convert_to_numpy=True)
         q_emb = encoder.encode([it["query"] for it in items], batch_size=64, convert_to_numpy=True)
         seg_emb = seg_emb / (np.linalg.norm(seg_emb, axis=1, keepdims=True) + 1e-9)
