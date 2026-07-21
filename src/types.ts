@@ -294,6 +294,7 @@ export type EventType =
   | 'focus_snippet_click'
   | 'trial_start'
   | 'trial_end'
+  | 'question_answer'
   | 'dimension_change'
   | 'segment_view'
   | 'segment_expand'
@@ -369,6 +370,11 @@ export interface LogEvent {
   occurrences?: number         // batch correct-all: how many identical tokens one decision fixed
   chosen_model?: string        // which ASR model produced the chosen candidate
   reason?: string
+  // Police in-task case questions (question_answer events; stimulus_id carries
+  // which task). Answer stored flat as a string — multi-select joined with ' | '.
+  question_id?: string
+  question_type?: string       // 'mc' | 'open' | 'scale' | 'task'
+  question_value?: string
   // filter_change payload. Four value namespaces share this field — match on
   // the full string, NOT a prefix ('high' is the Show filter; 'highlights:high'
   // is the word-highlight toggle):

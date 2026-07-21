@@ -39,6 +39,8 @@ import { transcribeAudio } from '../lib/transcribeApi'
 import { segmentRiskWithFocus } from '../lib/segmentRisk'
 import { keptTokenPosition } from '../lib/retainRisk'
 import { buildDisplayRiskMap, combinedSegmentRisk } from '../lib/displayRisk'
+import QuestionsPanel, { type AnswerValue } from '../components/QuestionsPanel'
+import { POLICE_QUESTIONS, type PoliceQuestion } from '../study/trials'
 import type {
   Condition,
   EditMode,
@@ -230,6 +232,26 @@ export default function ReviewWorkspace({
     Record<number, { text: string; reason?: string }>
   >({})
   const [verified, setVerified] = useState<Record<number, boolean>>({})
+  // Police in-task case-question answers, keyed by question id (see QuestionsPanel).
+  const [questionAnswers, setQuestionAnswers] = useState<Record<string, AnswerValue>>({})
+  // Case questions for the current stimulus (empty for regular study / full build).
+  const caseQuestions = useMemo<PoliceQuestion[]>(
+    () => (trial ? POLICE_QUESTIONS[trial.stimulusId] ?? [] : []),
+    [trial],
+  )
+  const handleQuestionChange = useCallback((id: string, value: AnswerValue) => {
+    setQuestionAnswers((prev) => ({ ...prev, [id]: value }))
+  }, [])
+  const handleQuestionCommit = useCallback(
+    (id: string, value: AnswerValue, qType: PoliceQuestion['type']) => {
+      events.log('question_answer', {
+        question_id: id,
+        question_type: qType,
+        question_value: Array.isArray(value) ? value.join(' | ') : String(value),
+      })
+    },
+    [events, trial],
+  )
   // Progressive disclosure: which sentence is expanded to word-level risk
   // (accordion — at most one open). null = all collapsed. The ref lets the
   // playing segment auto-expand on a genuine playhead transition without
@@ -702,6 +724,7 @@ export default function ReviewWorkspace({
     // pollute its exported/uploaded data. Reset it like applyTranscript does.
     setSegmentTextEdits({})
     setVerified({})
+    setQuestionAnswers({})
     setHistory([])
     setPopup(null)
     setExpandedSegmentId(null)
@@ -2200,8 +2223,21 @@ export default function ReviewWorkspace({
         {/* Left column: Find (both builds) + Assistant tab (full build only).
             One shared collapse flag; the collapsed rail carries both labels
             when the assistant exists, else FocusPanel's own rail runs. */}
-        {focusEnabled &&
-          (config.allowChat && focusCollapsed ? (
+        {focusEnabled && (
+          <div className="flex flex-col shrink-0 overflow-hidden max-h-full">
+            {/* Police foraging: case questions pinned above Find/Assistant, always
+                visible so they drive the search without hiding the tools. */}
+            {caseQuestions.length > 0 && (
+              <QuestionsPanel
+                questions={caseQuestions}
+                answers={questionAnswers}
+                onChange={handleQuestionChange}
+                onCommit={handleQuestionCommit}
+                className="w-80 shrink-0 max-h-[45%]"
+              />
+            )}
+            <div className="flex-1 min-h-0 flex overflow-hidden">
+              {config.allowChat && focusCollapsed ? (
             <CollapsedLeftRail
               findHits={
                 focusActive && focusResult
@@ -2302,7 +2338,10 @@ export default function ReviewWorkspace({
                 ) : undefined
               }
             />
-          ))}
+              )}
+            </div>
+          </div>
+        )}
         <TranscriptView
           transcript={transcript}
           model={model}
