@@ -58,3 +58,9 @@ server/.timeline_cache/
 server/*.log
 # Downloaded ASR eval datasets (audio) — fetched by scripts/, not tracked.
 test_data/
+
+# Study-data download tooling + its output — analysis-only, must NOT ship to
+# GitHub (the output can contain participant data; the script needs a secret
+# service_role key at runtime).
+scripts/download_study_data.py
+study_data/

@@ -1886,7 +1886,8 @@ export default function ReviewWorkspace({
   )
 
   // ----- Assistant chat (full build, config.allowChat) ---------------------
-  // Content is NEVER logged — only metadata (turn index, lengths, counts).
+  // The full question + answer text ARE logged (chat_text) so the analysis can
+  // read what officers asked the Assistant and what it replied.
   const handleChatSend = useCallback(
     async (text: string) => {
       const runId = ++chatRunIdRef.current
@@ -1895,7 +1896,7 @@ export default function ReviewWorkspace({
       setChatMessages((prev) => [...prev, { role: 'user', content: text }])
       setChatError(null)
       setChatThinking(true)
-      events.log('chat_send', { chat_turn: turn, chat_chars: text.length })
+      events.log('chat_send', { chat_turn: turn, chat_chars: text.length, chat_text: text })
       const t0 = performance.now()
       try {
         const res = await runChat(transcript, [...history, { role: 'user', content: text }])
@@ -1909,6 +1910,7 @@ export default function ReviewWorkspace({
           chat_chars: res.answer.length,
           chat_citations: res.citations.length,
           chat_latency_ms: Math.round(performance.now() - t0),
+          chat_text: res.answer,
         })
       } catch (err) {
         if (chatRunIdRef.current !== runId) return

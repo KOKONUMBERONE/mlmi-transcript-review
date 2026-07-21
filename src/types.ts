@@ -428,6 +428,7 @@ export interface LogEvent {
   chat_chars?: number       // length of the sent question / received answer
   chat_citations?: number   // citations attached to an answer
   chat_latency_ms?: number  // round-trip time of the /chat call
+  chat_text?: string        // full text: the sent question / the received answer
 }
 
 export interface HistoryEntry {
