@@ -59,9 +59,16 @@ _PROMPT_VERSION = "anomaly-v1"
 
 
 def _coerce_id(v: Any) -> Any:
+    # The LLM occasionally groups several lines into one conflict end
+    # ("a": [12, 14]) — take the first id so the pair stays usable instead of
+    # crashing the set-membership test below (unhashable list -> HTTP 500).
+    if isinstance(v, (list, tuple)):
+        v = v[0] if v else None
     if isinstance(v, str) and v.lstrip("-").isdigit():
         return int(v)
-    return v
+    # Anything still unhashable (dict/…) can never be a valid id — normalise to
+    # None so the `in valid_ids` check drops it safely.
+    return v if isinstance(v, (str, int, float, type(None))) else None
 
 
 def _parse_conflicts(content: str, valid_ids: set) -> List[Dict[str, Any]]:
