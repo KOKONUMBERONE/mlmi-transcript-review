@@ -70,6 +70,20 @@ export const DEMO_TOUR_STEPS: TourStep[] = [
       'This screen is where you review an AI-transcribed recording. The transcript is in the middle, AI tools sit on the left, the case questions and your review log are on the right, and the audio player runs along the bottom. Each step now lets you try the feature yourself — only the highlighted part is clickable.',
   },
   {
+    id: 'reviewer-name',
+    anchor: 'reviewer',
+    title: 'Put your name on the record',
+    body:
+      'Every edit and verification you make is recorded under this name — like signing your notebook. It stays set for both tasks.',
+    interactive: {
+      instruction: 'Click the Reviewer box and type your name.',
+      isDone: (_f, dom) => {
+        const inp = dom.querySelector<HTMLInputElement>('[data-tour="reviewer"] input')
+        return !!inp && inp.value.trim().length >= 2
+      },
+    },
+  },
+  {
     id: 'words',
     anchor: 'words-toggle',
     title: 'Word highlighting',

@@ -343,7 +343,11 @@ export default function TopBar({
       {/* Reviewer identity — sits right after the file actions (moved up from
           the player bar). Always rendered so it survives builds that hide the
           file buttons. */}
-      <label className="flex items-center gap-1.5 shrink-0" title="Recorded on every audit-trail entry">
+      <label
+        className="flex items-center gap-1.5 shrink-0"
+        title="Recorded on every audit-trail entry"
+        data-tour="reviewer"
+      >
         <span className="text-[11px] text-ink-muted">Reviewer</span>
         <input
           type="text"
