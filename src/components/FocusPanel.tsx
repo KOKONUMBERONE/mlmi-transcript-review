@@ -110,7 +110,7 @@ export default function FocusPanel({
   }
 
   return (
-    <aside className="w-80 shrink-0 border-r border-border bg-surface overflow-y-auto flex flex-col">
+    <aside className="w-80 shrink-0 border-r border-border bg-surface overflow-y-auto flex flex-col" data-tour="left-panel">
       <div className="px-4 py-3 border-b border-border sticky top-0 bg-surface z-10">
         <div className="flex items-start justify-between gap-2 mb-2">
           {tabStrip ?? (

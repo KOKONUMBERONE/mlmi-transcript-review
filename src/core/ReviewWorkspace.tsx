@@ -1607,6 +1607,7 @@ export default function ReviewWorkspace({
       },
       setFocusText,
       expandSegment: (id) => setExpandedSegmentId(id),
+      closeOutline: () => setOutlineOpen(false),
       highRiskSegmentId: tourHighRiskSegmentId,
     }),
     [tourHighRiskSegmentId],

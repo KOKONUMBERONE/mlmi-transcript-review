@@ -58,6 +58,7 @@ export function Menu({
       {open && (
         <div
           role="menu"
+          data-tour="popup"
           className={[
             'absolute z-50 mt-1 min-w-[13rem] rounded-md border border-border-strong bg-surface shadow-lg py-1',
             align === 'right' ? 'right-0' : 'left-0',

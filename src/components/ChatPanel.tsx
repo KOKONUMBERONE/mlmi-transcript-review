@@ -61,7 +61,7 @@ export default function ChatPanel({
   }
 
   return (
-    <aside className="w-80 shrink-0 border-r border-border bg-surface flex flex-col overflow-hidden">
+    <aside className="w-80 shrink-0 border-r border-border bg-surface flex flex-col overflow-hidden" data-tour="left-panel">
       {/* Header — tab strip + collapse, mirroring FocusPanel's header row. */}
       <div className="px-4 py-3 border-b border-border shrink-0 bg-surface">
         <div className="flex items-start justify-between gap-2">
