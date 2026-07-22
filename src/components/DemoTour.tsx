@@ -39,6 +39,9 @@ export default function DemoTour({
   const [rect, setRect] = useState<Rect | null>(null)
   const [holes, setHoles] = useState<Rect[]>([])
   const [done, setDone] = useState(false)
+  // A step target opened a full-screen overlay (the Outline storyboard):
+  // suspend the mask entirely so it can be explored; the card stays on top.
+  const [fullscreenPass, setFullscreenPass] = useState(false)
   const baselineRef = useRef(0)
 
   const step = DEMO_TOUR_STEPS[index]
@@ -58,6 +61,7 @@ export default function DemoTour({
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     step.prepare?.(api)
     setDone(false)
+    setFullscreenPass(false)
     baselineRef.current = events.getEvents().length
     events.log('demo_tour_step', { step_id: step.id, step_index: index })
     let tries = 0
@@ -93,12 +97,24 @@ export default function DemoTour({
         const r = el.getBoundingClientRect()
         hs.push({ top: r.top, left: r.left, width: r.width, height: r.height })
       }
+      let fsPass = false
       for (const sel of extra) {
         document.querySelectorAll(sel).forEach((n) => {
+          // Never hole-punch the tour's own layer. A target covering ~the
+          // whole viewport (the Outline storyboard) can't be a path hole (an
+          // evenodd full-screen hole inverts the mask) — instead it suspends
+          // the mask altogether while it is open.
+          if ((n as Element).closest('[aria-label="Guided demo"]')) return
           const r = (n as Element).getBoundingClientRect()
-          if (r.width > 0) hs.push({ top: r.top, left: r.left, width: r.width, height: r.height })
+          if (r.width <= 0) return
+          if (r.width > window.innerWidth * 0.95 && r.height > window.innerHeight * 0.95) {
+            fsPass = true
+            return
+          }
+          hs.push({ top: r.top, left: r.left, width: r.width, height: r.height })
         })
       }
+      setFullscreenPass((prev) => (prev === fsPass ? prev : fsPass))
       setHoles((prev) =>
         prev.length === hs.length && prev.every((p, i) => near(p, hs[i])) ? prev : hs,
       )
@@ -140,11 +156,38 @@ export default function DemoTour({
   if (!rect) {
     cardStyle = { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
   } else {
-    const below = rect.top + rect.height + PAD + 12
-    const est = step.media ? 330 : 230 // rough card height for the flip decision
-    const top = below + est <= vh ? below : Math.max(12, rect.top - PAD - 12 - est)
-    const left = Math.min(Math.max(12, rect.left + rect.width / 2 - CARD_W / 2), vw - CARD_W - 12)
-    cardStyle = { top, left }
+    // The card must NEVER cover the anchor (the officer has to use it). For
+    // anchors hugging a screen edge — the left tool panel, the right review
+    // panel, the export box — place the card BESIDE them, toward the centre.
+    // Mid-screen anchors (toolbars, segments) keep the below/above flow.
+    const est = step.media ? 420 : 240 // rough card height
+    const gap = 16
+    const cx = rect.left + rect.width / 2
+    const fitsRight = rect.left + rect.width + gap + CARD_W <= vw - 12
+    const fitsLeft = rect.left - gap - CARD_W >= 12
+    const fitsBelow = rect.top + rect.height + PAD + 12 + est <= vh
+    const fitsAbove = rect.top - PAD - 12 - est >= 12
+    const sideTop = Math.min(
+      Math.max(12, rect.top + rect.height / 2 - est / 2),
+      Math.max(12, vh - est - 12),
+    )
+    const midLeft = Math.min(Math.max(12, cx - CARD_W / 2), vw - CARD_W - 12)
+    const preferSide = cx < vw / 3 ? 'right' : cx > (2 * vw) / 3 ? 'left' : null
+    if (preferSide === 'right' && fitsRight) {
+      cardStyle = { top: sideTop, left: rect.left + rect.width + gap }
+    } else if (preferSide === 'left' && fitsLeft) {
+      cardStyle = { top: sideTop, left: rect.left - gap - CARD_W }
+    } else if (fitsBelow) {
+      cardStyle = { top: rect.top + rect.height + PAD + 12, left: midLeft }
+    } else if (fitsAbove) {
+      cardStyle = { top: rect.top - PAD - 12 - est, left: midLeft }
+    } else if (fitsRight) {
+      cardStyle = { top: sideTop, left: rect.left + rect.width + gap }
+    } else if (fitsLeft) {
+      cardStyle = { top: sideTop, left: rect.left - gap - CARD_W }
+    } else {
+      cardStyle = { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
+    }
   }
 
   return (
@@ -154,19 +197,24 @@ export default function DemoTour({
       aria-modal="true"
       aria-label="Guided demo"
     >
-      {/* Dimmer + click blocker. Holes are unpainted → clicks pass through. */}
-      <svg className="absolute inset-0 w-full h-full" style={{ pointerEvents: 'none' }}>
-        <path
-          d={pathD}
-          fill={DIM}
-          fillRule="evenodd"
-          style={{ pointerEvents: 'auto' }}
-          onMouseDown={(e) => e.preventDefault()}
-        />
-      </svg>
+      {/* Dimmer + click blocker. Holes are unpainted → clicks pass through.
+          Suspended entirely while the step's own full-screen overlay (the
+          Outline storyboard) is open, so it can be explored. */}
+      {!fullscreenPass && (
+        <svg className="absolute inset-0 w-full h-full" style={{ pointerEvents: 'none' }}>
+          <path
+            d={pathD}
+            fill={DIM}
+            fillRule="evenodd"
+            style={{ pointerEvents: 'auto' }}
+            onMouseDown={(e) => e.preventDefault()}
+          />
+        </svg>
+      )}
       {/* Tell-steps: the anchor stays bright but must not be clickable — cover
           the visual hole with a transparent shield. */}
       {!interactive &&
+        !fullscreenPass &&
         visualHoles.map((h, i) => (
           <div
             key={i}
@@ -184,7 +232,7 @@ export default function DemoTour({
 
       {/* Spotlight ring + pulse (separate layers — the pulse keyframes animate
           box-shadow and would override a shared element's styles). */}
-      {rect && (
+      {rect && !fullscreenPass && (
         <>
           <div
             className="absolute rounded-lg border-2 border-brand pointer-events-none"

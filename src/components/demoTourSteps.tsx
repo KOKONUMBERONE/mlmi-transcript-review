@@ -236,7 +236,9 @@ export const DEMO_TOUR_STEPS: TourStep[] = [
       'The storyboard view: a summary of the whole recording, laid out as parts and chapters you can jump into.',
     interactive: {
       instruction: 'Click "Outline" to open the storyboard, then look around.',
-      extraHoles: ['[role="dialog"]'],
+      // The storyboard dialog — NOT the tour's own dialog (that would punch a
+      // full-screen hole and invert the mask).
+      extraHoles: ['[role="dialog"][aria-modal="true"]:not([aria-label="Guided demo"])'],
       isDone: (f) => has(f, 'outline_open'),
     },
   },
