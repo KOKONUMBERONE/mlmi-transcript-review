@@ -12,6 +12,8 @@ interface MenuProps {
   /** Classes for the outer positioning wrapper (e.g. `ml-auto`). */
   className?: string
   title?: string
+  /** Optional data-tour anchor stamped on the wrapper (spotlight tour). */
+  dataTour?: string
 }
 
 /**
@@ -27,6 +29,7 @@ export function Menu({
   triggerClassName,
   className,
   title,
+  dataTour,
 }: MenuProps) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -48,7 +51,7 @@ export function Menu({
   }, [open])
 
   return (
-    <div ref={ref} className={['relative', className].filter(Boolean).join(' ')}>
+    <div ref={ref} className={['relative', className].filter(Boolean).join(' ')} data-tour={dataTour}>
       <button type="button" onClick={() => setOpen((o) => !o)} title={title} className={triggerClassName}>
         {trigger(open)}
       </button>

@@ -341,7 +341,7 @@ export default function TranscriptView({
                 signal drives the word marks; the visible equivalent of the old
                 buried Risk dropdown. First selector on the row carries ml-auto. */}
             {onWordDimensionChange && wordDimensionValue && (
-              <div className="ml-auto flex items-center gap-1.5">
+              <div className="ml-auto flex items-center gap-1.5" data-tour="words-toggle">
                 <span className="text-[10px] uppercase tracking-[0.08em] text-ink-faint">
                   Words
                 </span>
@@ -368,7 +368,10 @@ export default function TranscriptView({
             {/* Sentence-signal selector (sentence launcher versions): switches
                 what the whole-sentence tint encodes; switches are logged. */}
             {onSentenceSignalChange && sentenceSignal && (
-              <div className={`${onWordDimensionChange && wordDimensionValue ? '' : 'ml-auto '}flex items-center gap-1.5`}>
+              <div
+                className={`${onWordDimensionChange && wordDimensionValue ? '' : 'ml-auto '}flex items-center gap-1.5`}
+                data-tour="sentences-toggle"
+              >
                 <span className="text-[10px] uppercase tracking-[0.08em] text-ink-faint">
                   Sentences
                 </span>
@@ -404,6 +407,7 @@ export default function TranscriptView({
               }
               align="right"
               title="View options"
+              dataTour="view-menu"
               triggerClassName="flex items-center gap-1 text-[11px] text-ink-muted hover:text-ink border border-border rounded-md px-2 py-0.5 bg-surface hover:border-border-strong transition-colors"
               trigger={(open) => (
                 <>

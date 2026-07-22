@@ -40,6 +40,8 @@ import { segmentRiskWithFocus } from '../lib/segmentRisk'
 import { keptTokenPosition } from '../lib/retainRisk'
 import { buildDisplayRiskMap, combinedSegmentRisk } from '../lib/displayRisk'
 import QuestionsPanel, { type AnswerValue } from '../components/QuestionsPanel'
+import DemoTour from '../components/DemoTour'
+import type { TourApi } from '../components/demoTourSteps'
 import { POLICE_QUESTIONS, type PoliceQuestion } from '../study/trials'
 import type {
   Condition,
@@ -144,6 +146,7 @@ export default function ReviewWorkspace({
   trial,
   interactionLocked = false,
   participantOverride,
+  onDemoFinish,
 }: {
   config: WorkspaceConfig
   // Behavioural event log, created by the shell (AppFull/AppStudy) so it
@@ -158,6 +161,9 @@ export default function ReviewWorkspace({
   interactionLocked?: boolean
   // Study: participant code from the experimenter setup (stamped on every event).
   participantOverride?: string
+  // Police demo trial (difficulty 'demo'): called when the spotlight tour ends
+  // or is skipped — the shell advances the runner straight into task 1.
+  onDemoFinish?: () => void
 }) {
   const [transcript, setTranscript] = useState<Transcript>(defaultTranscript)
   // Pristine snapshot of the loaded transcript (raw pipeline output) so the
@@ -1575,6 +1581,37 @@ export default function ReviewWorkspace({
     setDimension(next)
   }
 
+  // ---- Police demo tour ----------------------------------------------------
+  // The spotlight walkthrough mounts on the demo trial (difficulty 'demo') and
+  // drives the real workspace state between steps through this bundle.
+  const tourActive = trial?.difficulty === 'demo' && !!onDemoFinish
+  const tourHighRiskSegmentId = useMemo(() => {
+    if (!tourActive) return null
+    for (const seg of transcript.segments) {
+      const words = seg.words[model] ?? []
+      if (words.some((w) => (w.combined_risk ?? w.risk) === 'high')) return seg.id
+    }
+    return transcript.segments[0]?.id ?? null
+  }, [tourActive, transcript, model])
+  const tourApi = useMemo<TourApi>(
+    () => ({
+      setDimension: (d) => setDimension(d),
+      setSentenceSignal: (s) => setSentenceSignal(s),
+      openLeft: (t) => {
+        setLeftTab(t)
+        setFocusCollapsed(false)
+      },
+      openRight: (t) => {
+        setRightTab(t)
+        setAuditCollapsed(false)
+      },
+      setFocusText,
+      expandSegment: (id) => setExpandedSegmentId(id),
+      highRiskSegmentId: tourHighRiskSegmentId,
+    }),
+    [tourHighRiskSegmentId],
+  )
+
   // Stable so TranscriptView's IntersectionObserver isn't rebuilt every render
   // (events.log is stable across renders; the events object identity is not).
   const handleSegmentView = useCallback(
@@ -2685,6 +2722,17 @@ export default function ReviewWorkspace({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Police demo: the guided spotlight walkthrough (Next-only) over the
+          live workspace. Finishing or skipping advances the runner to task 1. */}
+      {tourActive && !interactionLocked && (
+        <DemoTour
+          api={tourApi}
+          events={events}
+          onFinish={onDemoFinish!}
+          onSkip={onDemoFinish!}
+        />
       )}
     </div>
   )

@@ -42,6 +42,7 @@ export default function QuestionsPanel({
     <aside
       className={`w-80 shrink-0 ${side === 'right' ? 'border-l' : 'border-r'} border-border bg-surface flex flex-col overflow-hidden`}
       aria-label="Case questions"
+      data-tour="right-panel"
     >
       <div className="px-4 py-3 border-b border-border shrink-0 bg-surface">
         <div className="flex items-center justify-between gap-2">

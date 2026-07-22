@@ -320,6 +320,10 @@ export type EventType =
   | 'chat_answer'
   | 'chat_citation_click'
   | 'chat_clear'
+  // Police guided demo (spotlight tour on the demo trial).
+  | 'demo_tour_step'
+  | 'demo_tour_done'
+  | 'demo_tour_skip'
 
 // 'marker' = left-panel jump lists (timeline list, outline, conflicts);
 // 'timeline' = the full-width TimelineStrip (marker or track click).
@@ -429,6 +433,11 @@ export interface LogEvent {
   chat_citations?: number   // citations attached to an answer
   chat_latency_ms?: number  // round-trip time of the /chat call
   chat_text?: string        // full text: the sent question / the received answer
+  // Police guided demo (spotlight tour on the demo trial):
+  step_id?: string          // demo_tour_step: which step was shown
+  step_index?: number       // 0-based position in the tour
+  steps_seen?: number       // demo_tour_done: how many steps were viewed
+  at_step?: string          // demo_tour_skip: the step the skip happened on
 }
 
 export interface HistoryEntry {

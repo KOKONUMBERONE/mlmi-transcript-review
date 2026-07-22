@@ -195,7 +195,10 @@ export default function HistorySidebar({
   }
 
   return (
-    <aside className="w-80 shrink-0 border-l border-border bg-surface overflow-hidden flex flex-col">
+    <aside
+      className="w-80 shrink-0 border-l border-border bg-surface overflow-hidden flex flex-col"
+      data-tour="right-panel"
+    >
       {/* Review progress — the reviewer's "how much is left" panel. */}
       <div className="px-4 py-3 border-b border-border shrink-0">
         <div className="flex items-center justify-between mb-2 gap-2">
@@ -305,7 +308,7 @@ export default function HistorySidebar({
 
       {/* Export — secondary task, collapsed by default so the panel reads as a
           reviewer work panel, not an export console. */}
-      <div className="border-t border-border px-4 py-2 shrink-0">
+      <div className="border-t border-border px-4 py-2 shrink-0" data-tour="export">
         <button
           onClick={() => setExportOpen((v) => !v)}
           className="w-full flex items-center justify-between text-[10px] text-ink-faint uppercase tracking-[0.1em] hover:text-ink"

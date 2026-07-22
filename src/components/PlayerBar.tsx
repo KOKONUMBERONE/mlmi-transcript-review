@@ -36,7 +36,10 @@ export default function PlayerBar({
   }
 
   return (
-    <div className="h-14 grid grid-cols-[1fr_auto_1fr] items-center px-5 bg-surface border-t border-border shrink-0">
+    <div
+      className="h-14 grid grid-cols-[1fr_auto_1fr] items-center px-5 bg-surface border-t border-border shrink-0"
+      data-tour="player"
+    >
       {/* Empty left cell keeps the transport centred by the 1fr/auto/1fr grid
           (reviewer identity moved to the top bar). */}
       <div aria-hidden />

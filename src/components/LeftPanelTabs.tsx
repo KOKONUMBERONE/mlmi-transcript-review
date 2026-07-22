@@ -35,7 +35,12 @@ export function LeftTabStrip({
         : 'text-ink-faint border-transparent hover:text-ink',
     ].join(' ')
   return (
-    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 min-w-0" role="tablist" aria-label="Left panel">
+    <div
+      className="flex flex-wrap items-baseline gap-x-3 gap-y-1 min-w-0"
+      role="tablist"
+      aria-label="Left panel"
+      data-tour="left-rail"
+    >
       <button role="tab" aria-selected={active === 'find'} className={cls('find')} onClick={() => onSelect('find')}>
         Find
       </button>
@@ -129,7 +134,10 @@ export function CollapsedLeftRail({
   conflictCount?: number | null
 }) {
   return (
-    <aside className="w-9 shrink-0 border-r border-border bg-surface flex flex-col items-center gap-3 py-3">
+    <aside
+      className="w-9 shrink-0 border-r border-border bg-surface flex flex-col items-center gap-3 py-3"
+      data-tour="left-rail"
+    >
       <button
         onClick={() => onExpand('find')}
         title="Expand panel"
