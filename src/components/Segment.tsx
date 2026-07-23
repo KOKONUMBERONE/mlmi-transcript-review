@@ -446,7 +446,10 @@ export default function Segment({
                 if (e.key === 'Escape') {
                   e.preventDefault()
                   setEditing(false)
-                } else if (documentMode && e.key === 'Enter' && !e.shiftKey) {
+                } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey || !e.shiftKey)) {
+                  // Enter saves in both editor modes (transcript lines are
+                  // single sentences); Shift+Enter keeps the newline and
+                  // Cmd/Ctrl+Enter always saves.
                   e.preventDefault()
                   commitEdit()
                 }

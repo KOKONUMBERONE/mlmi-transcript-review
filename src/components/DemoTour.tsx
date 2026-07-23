@@ -145,6 +145,26 @@ export default function DemoTour({
     events.log('demo_tour_done', { steps_seen: index + 1 })
     onFinish()
   }
+
+  // Keyboard: Enter advances whenever Next would be enabled (tell-steps, or an
+  // interactive step already done) — e.g. type your name, press Enter. Ignored
+  // while typing in a textarea (chat / open answers) and on focused buttons or
+  // selects, where Enter already means "activate this control".
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' || e.isComposing || e.shiftKey || e.metaKey || e.ctrlKey) return
+      const t = e.target as HTMLElement | null
+      if (t instanceof HTMLTextAreaElement) return
+      if (t instanceof HTMLButtonElement || t instanceof HTMLSelectElement) return
+      if (interactive && !done) return
+      e.preventDefault()
+      if (last) finish()
+      else setIndex((i) => Math.min(i + 1, DEMO_TOUR_STEPS.length - 1))
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interactive, done, last, index])
   const skip = () => {
     if (firedRef.current) return
     firedRef.current = true
@@ -292,7 +312,9 @@ export default function DemoTour({
           Step {index + 1} of {DEMO_TOUR_STEPS.length}
         </p>
         <h2 className="text-sm font-semibold text-ink mb-1.5">{step.title}</h2>
-        <p className="text-[12.5px] leading-snug text-ink-muted">{step.body}</p>
+        <p className="text-[12.5px] leading-snug text-ink-muted">
+          {typeof step.body === 'function' ? step.body(api) : step.body}
+        </p>
 
         {step.media === 'report' && (
           <div className="mt-2.5 rounded border border-border overflow-hidden bg-white" style={{ height: 150 }}>

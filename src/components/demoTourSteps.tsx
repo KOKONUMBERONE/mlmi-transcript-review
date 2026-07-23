@@ -13,6 +13,8 @@ export interface TourApi {
   closeOutline: () => void
   /** First segment carrying a high-risk word — the worked example. */
   highRiskSegmentId: number | null
+  /** Current WORDS-switch position — lets step copy adapt live. */
+  dimension: RiskDimension
 }
 
 export interface TourStep {
@@ -21,7 +23,8 @@ export interface TourStep {
    *  Omit for a centred card (welcome / closing). */
   anchor?: string | ((api: TourApi) => string | null)
   title: string
-  body: string
+  /** Static copy, or a function of the api for copy that tracks live state. */
+  body: string | ((api: TourApi) => string)
   /** State changes to apply just before this step is shown. */
   prepare?: (api: TourApi) => void
   /** Hands-on step: ONLY the spotlit hole(s) are clickable; Next unlocks when
@@ -87,8 +90,14 @@ export const DEMO_TOUR_STEPS: TourStep[] = [
     id: 'words',
     anchor: 'words-toggle',
     title: 'Word highlighting',
-    body:
-      'The transcript marks single words the AI may have got wrong (red = likely wrong AND important to the case). This switch sets what those word marks track: Uncertainty (possibly misheard), Importance (matters to the case), or Combined (both). Whole-sentence tinting is a separate SENTENCES switch — you will try that shortly.',
+    // The copy tracks the switch live (supervisor request): what red/amber
+    // mean depends on the selected dimension.
+    body: (api) =>
+      api.dimension === 'uncertainty'
+        ? 'Now showing UNCERTAINTY: red = the AI was least sure it heard the word right, amber = medium uncertainty. The switch also offers Importance (words that matter to the case) and Combined (both at once). Whole-sentence tinting is a separate SENTENCES switch — you will try that shortly.'
+        : api.dimension === 'importance'
+          ? 'Now showing IMPORTANCE: red = words that matter most to the case, amber = medium importance. The switch also offers Uncertainty (possibly misheard) and Combined (both at once). Whole-sentence tinting is a separate SENTENCES switch — you will try that shortly.'
+          : 'Now showing COMBINED: red = likely wrong AND important to the case, amber = medium risk. The switch can also show Uncertainty (possibly misheard) or Importance (matters to the case) alone. Whole-sentence tinting is a separate SENTENCES switch — you will try that shortly.',
     prepare: (api) => api.setDimension('combined'),
     interactive: {
       instruction:

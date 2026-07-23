@@ -1609,8 +1609,11 @@ export default function ReviewWorkspace({
       expandSegment: (id) => setExpandedSegmentId(id),
       closeOutline: () => setOutlineOpen(false),
       highRiskSegmentId: tourHighRiskSegmentId,
+      // Live value so tour cards can adapt their copy to the current WORDS
+      // switch position (the api identity changes with it → the card re-renders).
+      dimension,
     }),
-    [tourHighRiskSegmentId],
+    [tourHighRiskSegmentId, dimension],
   )
 
   // Stable so TranscriptView's IntersectionObserver isn't rebuilt every render
@@ -1697,6 +1700,49 @@ export default function ReviewWorkspace({
     [transcript, model, seekWithLog, audio],
   )
 
+  // The transcript AS REVIEWED — per-word corrections and whole-line rewrites
+  // applied over the active model's words. The live AI tools (Find, Assistant)
+  // receive THIS, so their answers track the reviewer's edits instead of
+  // quoting the original ASR output (supervisor bug report 2026-07-24:
+  // corrected "beads" still answered as "beans"). Deleted words drop out; a
+  // whole-line rewrite replaces the segment's words with evenly-timed tokens.
+  // Other models' word arrays are untouched (edit indices are only valid
+  // against the active model); untouched segments keep object identity.
+  const effectiveTranscript = useMemo<Transcript>(() => {
+    const touched = new Set<number>()
+    for (const k of Object.keys(edits)) touched.add(Number(k.split('-')[0]))
+    for (const k of Object.keys(segmentTextEdits)) touched.add(Number(k))
+    if (touched.size === 0) return transcript
+    return {
+      ...transcript,
+      segments: transcript.segments.map((seg) => {
+        if (!touched.has(seg.id)) return seg
+        const override = segmentTextEdits[seg.id]?.text
+        const words = seg.words[model] ?? []
+        let newWords: Word[]
+        if (override != null) {
+          const toks = override.split(/\s+/).filter(Boolean)
+          const span = seg.end - seg.start
+          const n = Math.max(1, toks.length)
+          newWords = toks.map((t, i) => ({
+            text: t,
+            risk: 'low' as const,
+            start: seg.start + (i / n) * span,
+            end: seg.start + ((i + 1) / n) * span,
+          }))
+        } else {
+          newWords = []
+          for (let i = 0; i < words.length; i++) {
+            const e = edits[`${seg.id}-${i}`]
+            if (e?.deleted) continue
+            newWords.push(e ? { ...words[i], text: e.text } : words[i])
+          }
+        }
+        return { ...seg, words: { ...seg.words, [model]: newWords } }
+      }),
+    }
+  }, [transcript, edits, segmentTextEdits, model])
+
   // Unified "Find": lexical first (fast, deterministic) then, in the full
   // build, a local-LLM pass enriches/extends it in the background. The lexical
   // result paints immediately; the AI pass merges in when it returns (and only
@@ -1735,7 +1781,7 @@ export default function ReviewWorkspace({
     setFocusRunning(true)
     let lexical: FocusResult | null = null
     try {
-      lexical = await runFocus(transcript, items, model)
+      lexical = await runFocus(effectiveTranscript, items, model)
       if (focusRunIdRef.current !== runId) return
       setFocusResult(lexical)
       setFocusActive(true)
@@ -1760,7 +1806,7 @@ export default function ReviewWorkspace({
     // here (Ollama down) only sets the panel error; the lexical hits stay.
     setAiEnriching(true)
     try {
-      const ai = await runFocusAi(transcript, parseFocusQueries(focusText))
+      const ai = await runFocusAi(effectiveTranscript, parseFocusQueries(focusText))
       if (focusRunIdRef.current !== runId) return
       const merged = mergeFocusResults(lexical, ai)
       setFocusResult(merged)
@@ -1776,7 +1822,7 @@ export default function ReviewWorkspace({
     } finally {
       if (focusRunIdRef.current === runId) setAiEnriching(false)
     }
-  }, [focusText, transcript, model, events, config.allowFocusFreeInput])
+  }, [focusText, effectiveTranscript, model, events, config.allowFocusFreeInput])
 
   const handleClearFocus = useCallback(() => {
     focusRunIdRef.current++ // invalidate any in-flight AI merge
@@ -1945,7 +1991,7 @@ export default function ReviewWorkspace({
       events.log('chat_send', { chat_turn: turn, chat_chars: text.length, chat_text: text })
       const t0 = performance.now()
       try {
-        const res = await runChat(transcript, [...history, { role: 'user', content: text }])
+        const res = await runChat(effectiveTranscript, [...history, { role: 'user', content: text }])
         if (chatRunIdRef.current !== runId) return // cleared / superseded
         setChatMessages((prev) => [
           ...prev,
@@ -1967,7 +2013,7 @@ export default function ReviewWorkspace({
         if (chatRunIdRef.current === runId) setChatThinking(false)
       }
     },
-    [chatMessages, transcript, events],
+    [chatMessages, effectiveTranscript, events],
   )
 
   const handleChatCitationClick = useCallback(

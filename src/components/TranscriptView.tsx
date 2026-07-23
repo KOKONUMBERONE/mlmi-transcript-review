@@ -326,7 +326,11 @@ export default function TranscriptView({
   return (
     <main ref={scrollRootRef} className="flex-1 overflow-y-auto">
       <div className="max-w-5xl mx-auto px-8 py-5">
-        <div className="mb-6 pb-4 border-b border-border">
+        {/* Highlight controls stay reachable deep into the transcript: the row
+            sticks to the top of the scroll area (negative margins + padding
+            re-cover the column's own top/side padding so text slides under a
+            solid background, not past a floating strip). */}
+        <div className="sticky top-0 z-20 bg-surface -mx-8 px-8 -mt-5 pt-5 mb-6 pb-4 border-b border-border">
           {/* Risk chips + a "View" menu (hidden in C1 — plain text). */}
           {showViewControls && (
           <div className="flex flex-wrap items-center gap-2 text-[11px]">
