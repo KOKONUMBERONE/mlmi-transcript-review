@@ -139,9 +139,10 @@ function SurveyInput({
   onChange: (v: SurveyValue) => void
 }) {
   if (q.type === 'scale') {
+    const notSureOn = value === 'Not sure'
     return (
       <div>
-        <div className="flex gap-1.5">
+        <div className="flex items-center gap-1.5">
           {[1, 2, 3, 4, 5].map((n) => {
             const on = value === n
             return (
@@ -158,10 +159,24 @@ function SurveyInput({
               </button>
             )
           })}
+          {q.notSure && (
+            <button
+              type="button"
+              aria-pressed={notSureOn}
+              onClick={() => onChange('Not sure')}
+              className={`h-9 px-2.5 rounded border text-[11px] transition-colors ml-1 ${
+                notSureOn
+                  ? 'border-brand bg-brand text-white'
+                  : 'border-border text-ink-muted hover:border-brand/60 hover:text-ink'
+              }`}
+            >
+              Not sure
+            </button>
+          )}
         </div>
         <div className="flex justify-between text-[9px] text-ink-faint mt-0.5 pr-1" style={{ maxWidth: '13.5rem' }}>
-          <span>Strongly disagree</span>
-          <span>Strongly agree</span>
+          <span>{q.minLabel ?? 'Strongly disagree'}</span>
+          <span>{q.maxLabel ?? 'Strongly agree'}</span>
         </div>
       </div>
     )
