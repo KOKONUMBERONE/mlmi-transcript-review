@@ -77,7 +77,7 @@ export const DEMO_TOUR_STEPS: TourStep[] = [
     anchor: 'reviewer',
     title: 'Put your name on the record',
     body:
-      'Every edit and verification you make is recorded under this name — like signing your notebook. It stays set for both tasks.',
+      'Every edit and verification you make is recorded under this name — like signing your notebook.',
     interactive: {
       instruction: 'Click the Reviewer box and type your name.',
       isDone: (_f, dom) => {

@@ -63,7 +63,8 @@ export default function QuestionsPanel({
       {/* Brand-tinted banner keeps the "this is the task" signal inside the tab. */}
       <div className="px-4 py-2 border-b border-brand/20 bg-brand-bg shrink-0">
         <p className="text-[10px] text-ink-muted">
-          Answer as you work — your answers are saved automatically.
+          You don't have to finish all the questions — your answers save automatically as you
+          work, and you can move on to the feedback as soon as you feel ready.
         </p>
       </div>
       <ol className="px-4 py-3 space-y-4 overflow-y-auto flex-1">
