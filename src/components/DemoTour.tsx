@@ -156,35 +156,42 @@ export default function DemoTour({
   if (!rect) {
     cardStyle = { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
   } else {
-    // The card must NEVER cover the anchor (the officer has to use it). For
-    // anchors hugging a screen edge — the left tool panel, the right review
-    // panel, the export box — place the card BESIDE them, toward the centre.
-    // Mid-screen anchors (toolbars, segments) keep the below/above flow.
+    // The card must NEVER cover the anchor NOR anything it opened (menus,
+    // popups — the extra holes). Place relative to the UNION of all live
+    // holes: edge-hugging targets get the card beside them toward the centre;
+    // mid-screen targets keep the below/above flow.
+    const b = { top: rect.top, left: rect.left, right: rect.left + rect.width, bottom: rect.top + rect.height }
+    for (const h of holes) {
+      b.top = Math.min(b.top, h.top)
+      b.left = Math.min(b.left, h.left)
+      b.right = Math.max(b.right, h.left + h.width)
+      b.bottom = Math.max(b.bottom, h.top + h.height)
+    }
     const est = step.media ? 420 : 240 // rough card height
     const gap = 16
-    const cx = rect.left + rect.width / 2
-    const fitsRight = rect.left + rect.width + gap + CARD_W <= vw - 12
-    const fitsLeft = rect.left - gap - CARD_W >= 12
-    const fitsBelow = rect.top + rect.height + PAD + 12 + est <= vh
-    const fitsAbove = rect.top - PAD - 12 - est >= 12
+    const cx = (b.left + b.right) / 2
+    const fitsRight = b.right + gap + CARD_W <= vw - 12
+    const fitsLeft = b.left - gap - CARD_W >= 12
+    const fitsBelow = b.bottom + PAD + 12 + est <= vh
+    const fitsAbove = b.top - PAD - 12 - est >= 12
     const sideTop = Math.min(
-      Math.max(12, rect.top + rect.height / 2 - est / 2),
+      Math.max(12, (b.top + b.bottom) / 2 - est / 2),
       Math.max(12, vh - est - 12),
     )
     const midLeft = Math.min(Math.max(12, cx - CARD_W / 2), vw - CARD_W - 12)
     const preferSide = cx < vw / 3 ? 'right' : cx > (2 * vw) / 3 ? 'left' : null
     if (preferSide === 'right' && fitsRight) {
-      cardStyle = { top: sideTop, left: rect.left + rect.width + gap }
+      cardStyle = { top: sideTop, left: b.right + gap }
     } else if (preferSide === 'left' && fitsLeft) {
-      cardStyle = { top: sideTop, left: rect.left - gap - CARD_W }
+      cardStyle = { top: sideTop, left: b.left - gap - CARD_W }
     } else if (fitsBelow) {
-      cardStyle = { top: rect.top + rect.height + PAD + 12, left: midLeft }
+      cardStyle = { top: b.bottom + PAD + 12, left: midLeft }
     } else if (fitsAbove) {
-      cardStyle = { top: rect.top - PAD - 12 - est, left: midLeft }
+      cardStyle = { top: b.top - PAD - 12 - est, left: midLeft }
     } else if (fitsRight) {
-      cardStyle = { top: sideTop, left: rect.left + rect.width + gap }
+      cardStyle = { top: sideTop, left: b.right + gap }
     } else if (fitsLeft) {
-      cardStyle = { top: sideTop, left: rect.left - gap - CARD_W }
+      cardStyle = { top: sideTop, left: b.left - gap - CARD_W }
     } else {
       cardStyle = { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
     }
