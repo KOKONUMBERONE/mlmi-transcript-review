@@ -15,11 +15,17 @@ export default function EndQuestionnaire({
   onSubmit,
   submitting,
   onPeek,
+  items = POLICE_QUESTIONNAIRE,
+  requiredIds = REQUIRED_IDS,
 }: {
   onSubmit: (answers: SurveyAnswers) => void
   submitting: boolean
   /** Hide the questionnaire and reopen the review screen (answers are kept). */
   onPeek?: () => void
+  /** Question set to render (defaults to the police questionnaire). */
+  items?: SurveyItem[]
+  /** IDs required before submit (defaults to the police required set). */
+  requiredIds?: string[]
 }) {
   const [answers, setAnswers] = useState<SurveyAnswers>({})
   const [showErrors, setShowErrors] = useState(false)
@@ -27,20 +33,20 @@ export default function EndQuestionnaire({
 
   const missing = useMemo(() => {
     const set = new Set<string>()
-    for (const id of REQUIRED_IDS) {
+    for (const id of requiredIds) {
       const v = answers[id]
       const empty = v == null || (Array.isArray(v) && v.length === 0) || v === ''
       if (empty) set.add(id)
     }
     return set
-  }, [answers])
+  }, [answers, requiredIds])
 
   const set = (id: string, v: SurveyValue) => setAnswers((prev) => ({ ...prev, [id]: v }))
 
   const handleSubmit = () => {
     if (missing.size > 0) {
       setShowErrors(true)
-      const firstId = POLICE_QUESTIONNAIRE.find((q) => missing.has(q.id))?.id
+      const firstId = items.find((q) => missing.has(q.id))?.id
       if (firstId) rowRefs.current[firstId]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
@@ -67,7 +73,7 @@ export default function EndQuestionnaire({
         )}
 
         <div className="space-y-5">
-          {POLICE_QUESTIONNAIRE.map((q) => (
+          {items.map((q) => (
             <div key={q.id} ref={(el) => (rowRefs.current[q.id] = el)}>
               <SurveyRow
                 q={q}
