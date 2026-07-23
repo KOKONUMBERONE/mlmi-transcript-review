@@ -43,9 +43,12 @@ export default function DemoTour({
   // suspend the mask entirely so it can be explored; the card stays on top.
   const [fullscreenPass, setFullscreenPass] = useState(false)
   const baselineRef = useRef(0)
+  // finish/skip must fire exactly once — a double-click on "Start task 1"
+  // would otherwise advance the runner twice and silently skip task 1.
+  const firedRef = useRef(false)
 
-  const step = DEMO_TOUR_STEPS[index]
-  const last = index === DEMO_TOUR_STEPS.length - 1
+  const step = DEMO_TOUR_STEPS[index] ?? DEMO_TOUR_STEPS[DEMO_TOUR_STEPS.length - 1]
+  const last = index >= DEMO_TOUR_STEPS.length - 1
   const interactive = step.interactive
 
   const resolveAnchor = useCallback((): Element | null => {
@@ -62,6 +65,11 @@ export default function DemoTour({
     step.prepare?.(api)
     setDone(false)
     setFullscreenPass(false)
+    // Drop the previous step's geometry NOW — if rAF is throttled (occluded
+    // window) the tracker may not tick for a while, and a stale spotlight
+    // hole/card position from the old anchor must never survive a step change.
+    setRect(null)
+    setHoles([])
     baselineRef.current = events.getEvents().length
     events.log('demo_tour_step', { step_id: step.id, step_index: index })
     let tries = 0
@@ -132,10 +140,14 @@ export default function DemoTour({
   }, [index, resolveAnchor])
 
   const finish = () => {
+    if (firedRef.current) return
+    firedRef.current = true
     events.log('demo_tour_done', { steps_seen: index + 1 })
     onFinish()
   }
   const skip = () => {
+    if (firedRef.current) return
+    firedRef.current = true
     events.log('demo_tour_skip', { at_step: step.id, step_index: index })
     onSkip()
   }
@@ -152,9 +164,18 @@ export default function DemoTour({
     `M${h.left - PAD} ${h.top - PAD}h${h.width + PAD * 2}v${h.height + PAD * 2}h${-(h.width + PAD * 2)}z`
   const pathD = `M0 0H${vw}V${vh}H0Z` + visualHoles.map(holePath).join('')
 
+  // Centred fallback in PIXELS — never via transform: the card-in animation
+  // ends on `transform: none` with fill:both, which would permanently override
+  // an inline translate(-50%,-50%) and shove the card into the lower-right
+  // quadrant (its top-left corner at the viewport centre).
+  const est0 = step.media ? 420 : 240 // rough card height
+  const centred: React.CSSProperties = {
+    top: Math.max(12, (vh - est0) / 2),
+    left: Math.max(12, (vw - CARD_W) / 2),
+  }
   let cardStyle: React.CSSProperties
   if (!rect) {
-    cardStyle = { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
+    cardStyle = centred
   } else {
     // The card must NEVER cover the anchor NOR anything it opened (menus,
     // popups — the extra holes). Place relative to the UNION of all live
@@ -167,7 +188,7 @@ export default function DemoTour({
       b.right = Math.max(b.right, h.left + h.width)
       b.bottom = Math.max(b.bottom, h.top + h.height)
     }
-    const est = step.media ? 420 : 240 // rough card height
+    const est = est0
     const gap = 16
     const cx = (b.left + b.right) / 2
     const fitsRight = b.right + gap + CARD_W <= vw - 12
@@ -193,7 +214,7 @@ export default function DemoTour({
     } else if (fitsLeft) {
       cardStyle = { top: sideTop, left: b.left - gap - CARD_W }
     } else {
-      cardStyle = { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
+      cardStyle = centred
     }
   }
 
@@ -306,7 +327,9 @@ export default function DemoTour({
             Back
           </button>
           <button
-            onClick={() => (last ? finish() : setIndex((i) => i + 1))}
+            onClick={() =>
+              last ? finish() : setIndex((i) => Math.min(i + 1, DEMO_TOUR_STEPS.length - 1))
+            }
             disabled={!!interactive && !done}
             title={interactive && !done ? 'Try the highlighted control first' : undefined}
             className="text-[12px] font-medium px-3.5 py-1.5 rounded bg-brand text-white hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"

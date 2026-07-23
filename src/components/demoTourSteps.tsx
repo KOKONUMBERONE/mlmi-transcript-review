@@ -88,10 +88,11 @@ export const DEMO_TOUR_STEPS: TourStep[] = [
     anchor: 'words-toggle',
     title: 'Word highlighting',
     body:
-      'The transcript marks individual words the AI may have got wrong: red = likely wrong AND important, amber = medium risk. This switch changes what the marks mean.',
+      'The transcript marks single words the AI may have got wrong (red = likely wrong AND important to the case). This switch sets what those word marks track: Uncertainty (possibly misheard), Importance (matters to the case), or Combined (both). Whole-sentence tinting is a separate SENTENCES switch — you will try that shortly.',
     prepare: (api) => api.setDimension('combined'),
     interactive: {
-      instruction: 'Click "Importance" — watch the word marks change. Try "Combined" too.',
+      instruction:
+        'Click "Uncertainty", then back to "Combined" — watch which words are marked change.',
       isDone: (f) => has(f, 'dimension_change'),
     },
   },
