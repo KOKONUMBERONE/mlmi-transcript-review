@@ -60,11 +60,13 @@ export default function QuestionsPanel({
           )}
         </div>
       </div>
-      {/* Brand-tinted banner keeps the "this is the task" signal inside the tab. */}
+      {/* Brand-tinted banner keeps the "this is the task" signal inside the tab.
+          Copy: questions are optional; officers may move to the feedback whenever
+          they feel ready (supervisor request, 2026-07-24). */}
       <div className="px-4 py-2 border-b border-brand/20 bg-brand-bg shrink-0">
         <p className="text-[10px] text-ink-muted">
           You don't have to finish all the questions — your answers save automatically as you
-          work, and you can move on to the feedback as soon as you feel ready.
+          work, and you can move on to the feedback whenever you feel ready.
         </p>
       </div>
       <ol className="px-4 py-3 space-y-4 overflow-y-auto flex-1">
