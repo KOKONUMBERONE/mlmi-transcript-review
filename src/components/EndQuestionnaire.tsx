@@ -14,9 +14,12 @@ export type SurveyAnswers = Record<string, SurveyValue>
 export default function EndQuestionnaire({
   onSubmit,
   submitting,
+  onPeek,
 }: {
   onSubmit: (answers: SurveyAnswers) => void
   submitting: boolean
+  /** Hide the questionnaire and reopen the review screen (answers are kept). */
+  onPeek?: () => void
 }) {
   const [answers, setAnswers] = useState<SurveyAnswers>({})
   const [showErrors, setShowErrors] = useState(false)
@@ -48,11 +51,20 @@ export default function EndQuestionnaire({
     <div className="absolute inset-0 z-30 bg-surface-muted overflow-y-auto">
       <div className="mx-auto max-w-2xl px-5 py-8">
         <h1 className="text-base font-semibold text-ink mb-1">Feedback questionnaire</h1>
-        <p className="text-[12px] text-ink-muted mb-6">
-          Thank you for completing both tasks. Please answer the questions below — the starred (
-          <span className="text-risk-high">*</span>) choice questions are required; the open
-          comments are optional.
+        <p className="text-[12px] text-ink-muted mb-3">
+          Thank you for completing the review task. Please answer the questions below — the
+          starred (<span className="text-risk-high">*</span>) choice questions are required; the
+          open comments are optional.
         </p>
+        {onPeek && (
+          <button
+            onClick={onPeek}
+            className="mb-6 flex items-center gap-1.5 text-[12px] text-brand border border-brand/30 bg-brand-bg rounded-md px-3 py-1.5 hover:border-brand/60 transition-colors"
+          >
+            ↩ Reopen the review screen — try the tools again any time; your answers here are
+            kept.
+          </button>
+        )}
 
         <div className="space-y-5">
           {POLICE_QUESTIONNAIRE.map((q) => (

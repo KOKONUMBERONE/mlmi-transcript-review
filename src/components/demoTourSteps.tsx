@@ -261,7 +261,7 @@ export const DEMO_TOUR_STEPS: TourStep[] = [
     id: 'ready',
     title: 'Ready to start',
     body:
-      'That is everything — you have now used every tool once. You will review two recordings, each with its case questions; there is no time limit, and the AI transcripts do contain mistakes — finding them is part of the job. Press "End task" (top right) whenever you finish a task.',
+      'That is everything — you have now used every tool once. Next you will review a real recording and answer its case questions; there is no time limit, and the AI transcript does contain mistakes — finding them is part of the job. Press "End task" (top right) when you finish.',
     prepare: (api) => api.closeOutline(),
   },
 ]
