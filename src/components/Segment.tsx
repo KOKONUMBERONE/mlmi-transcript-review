@@ -61,6 +61,8 @@ interface Props {
   // #2 structural edits.
   onMergeNext?: (segId: number) => void
   canMergeNext?: boolean
+  /** "Split here" inside the line editor — draft halves cut at the cursor. */
+  onSplitDraft?: (segId: number, textA: string, textB: string) => void
   onChangeSpeaker?: (segId: number, speaker: string) => void
   // Track-changes view (threaded to each Word). Default on.
   showChanges?: boolean
@@ -116,6 +118,7 @@ export default function Segment({
   editMode = 'assisted',
   onMergeNext,
   canMergeNext = false,
+  onSplitDraft,
   onChangeSpeaker,
   showChanges = true,
   editLabel,
@@ -129,6 +132,8 @@ export default function Segment({
 
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
+  // Cursor access for "Split here" — where in the draft the cut lands.
+  const editTaRef = useRef<HTMLTextAreaElement | null>(null)
   const [editingSpeaker, setEditingSpeaker] = useState(false)
   const [speakerDraft, setSpeakerDraft] = useState('')
 
@@ -425,6 +430,7 @@ export default function Segment({
         {editing ? (
           <div onClick={(e) => e.stopPropagation()}>
             <textarea
+              ref={editTaRef}
               autoFocus
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
@@ -483,6 +489,28 @@ export default function Segment({
                   >
                     Cancel
                   </button>
+                  {onSplitDraft && words.length >= 2 && (
+                    // Split without leaving the editor (supervisor request):
+                    // the text after the cursor becomes a new segment, and the
+                    // draft halves are saved onto the two segments.
+                    <button
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        const ta = editTaRef.current
+                        if (!ta) return
+                        const cur = ta.selectionStart ?? 0
+                        const a = draft.slice(0, cur).trim()
+                        const b = draft.slice(cur).trim()
+                        if (!a || !b) return // cursor at an edge — nothing to split
+                        setEditing(false)
+                        onSplitDraft(segment.id, a, b)
+                      }}
+                      title="Split into two segments at the cursor — the text after the cursor starts the new segment (edits are kept)"
+                      className="text-xs px-2.5 py-1 rounded border border-border text-ink-muted hover:text-ink hover:border-border-strong"
+                    >
+                      Split here
+                    </button>
+                  )}
                   <span className="text-[10px] text-ink-faint italic">
                     Rewriting the sentence drops per-word risk highlighting for this segment.
                   </span>

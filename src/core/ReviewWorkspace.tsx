@@ -37,7 +37,7 @@ import defaultTriageJson from '../data/defaultTriage.json'
 import { runChat, type ChatCitation } from '../lib/chatApi'
 import { transcribeAudio } from '../lib/transcribeApi'
 import { segmentRiskWithFocus } from '../lib/segmentRisk'
-import { keptTokenPosition } from '../lib/retainRisk'
+import { alignRewrite, keptTokenPosition, tokenize } from '../lib/retainRisk'
 import { buildDisplayRiskMap, combinedSegmentRisk } from '../lib/displayRisk'
 import QuestionsPanel, { type AnswerValue } from '../components/QuestionsPanel'
 import DemoTour from '../components/DemoTour'
@@ -1450,12 +1450,19 @@ export default function ReviewWorkspace({
   }
 
   // ---- #2 structural edits (split / merge / change speaker) ----
-  const splitSegment = (segId: number, wordIdx: number) => {
+  // `drafts` = the "Split here" path from the line editor: the reviewer's draft
+  // text, already cut at the cursor, becomes each half's text. Without drafts,
+  // a saved whole-line rewrite SURVIVES the split (it used to be discarded —
+  // supervisor bug report 2026-07-24): the override is cut at the token that
+  // renders the first kept original word ≥ wordIdx (alignRewrite is 1:1 with
+  // tokenize), falling back to a proportional cut when nothing aligns.
+  const splitSegment = (segId: number, wordIdx: number, drafts?: { a: string; b: string }) => {
     const segs = transcript.segments
     const idx = segs.findIndex((s) => s.id === segId)
     if (idx === -1 || wordIdx <= 0) return
     const seg = segs[idx]
-    const total = (seg.words[model] ?? []).length
+    const words = seg.words[model] ?? []
+    const total = words.length
     if (wordIdx >= total) return
     const newId = Math.max(...segs.map((s) => s.id)) + 1
     const boundary = seg.start + (wordIdx / total) * (seg.end - seg.start)
@@ -1474,11 +1481,37 @@ export default function ReviewWorkspace({
       paraRisk: segMaxRisk(wordsB[model]),
       words: wordsB,
     }
+    // Post-split overrides for the two halves, decided up front. A draft half
+    // that still equals its raw words gets NO override (a plain split must not
+    // stamp a phantom "rewritten" tag on unchanged text).
+    const rawA = words.slice(0, wordIdx).map((w) => w.text).join(' ')
+    const rawB = words.slice(wordIdx).map((w) => w.text).join(' ')
+    const existingOverride = segmentTextEdits[segId]
+    let ovA: string | null = null
+    let ovB: string | null = null
+    if (drafts) {
+      ovA = drafts.a !== rawA ? drafts.a : null
+      ovB = drafts.b !== rawB ? drafts.b : null
+    } else if (existingOverride) {
+      const parts = tokenize(existingOverride.text)
+      if (parts.length >= 2) {
+        const toks = alignRewrite(existingOverride.text, words, seg.start, seg.end)
+        let cut = toks.findIndex((t) => t.op === 'keep' && (t.originalIndex ?? -1) >= wordIdx)
+        if (cut < 0) cut = Math.round((parts.length * wordIdx) / total)
+        cut = Math.min(Math.max(cut, 1), parts.length - 1)
+        ovA = parts.slice(0, cut).join(' ')
+        ovB = parts.slice(cut).join(' ')
+      } else {
+        ovA = existingOverride.text // 1-token rewrite: nothing meaningful to cut
+      }
+    }
     setTranscript({
       ...transcript,
       segments: [...segs.slice(0, idx), segA, segB, ...segs.slice(idx + 1)],
     })
-    // Remap edits: A keeps indices < wordIdx; B reindexed under the new id.
+    // Remap edits: A keeps indices < wordIdx; B reindexed under the new id. A
+    // half that got an override drops its per-word edits (the rewrite
+    // supersedes them, same as applyEditAll's whole-line path).
     setEdits((prev) => {
       const next: Record<string, EditState> = {}
       for (const [k, v] of Object.entries(prev)) {
@@ -1488,8 +1521,11 @@ export default function ReviewWorkspace({
           continue
         }
         const widx = Number(m[2])
-        if (widx < wordIdx) next[`${segId}-${widx}`] = v
-        else next[`${newId}-${widx - wordIdx}`] = v
+        if (widx < wordIdx) {
+          if (ovA == null) next[`${segId}-${widx}`] = v
+        } else {
+          if (ovB == null) next[`${newId}-${widx - wordIdx}`] = v
+        }
       }
       return next
     })
@@ -1497,13 +1533,44 @@ export default function ReviewWorkspace({
     setSegmentTextEdits((prev) => {
       const n = { ...prev }
       delete n[segId]
+      if (ovA != null) n[segId] = { ...(existingOverride ?? {}), text: ovA }
+      if (ovB != null) n[newId] = { ...(existingOverride ?? {}), text: ovB }
       return n
     })
     logEntry({ kind: 'split', segmentId: segId, to: `→ new seg ${newId}` })
     events.log('segment_split', { segment_id: segId })
+    if (drafts) {
+      // The editor split carried text changes — audit them like normal edits.
+      if (ovA != null) {
+        logEntry({ kind: 'edit', segmentId: segId, from: rawA, to: ovA })
+        events.log('edit_apply', { segment_id: segId, from_text: rawA, to_text: ovA, via: 'manual' })
+      }
+      if (ovB != null) {
+        logEntry({ kind: 'edit', segmentId: newId, from: rawB, to: ovB })
+        events.log('edit_apply', { segment_id: newId, from_text: rawB, to_text: ovB, via: 'manual' })
+      }
+    }
     setPopup(null)
     setExpandedSegmentId(null)
     autoExpandedRef.current = null
+  }
+
+  // "Split here" from the line editor: the draft is cut at the cursor; the
+  // word arrays split at the proportional word boundary (the same
+  // interpolation the click-a-word split uses for its timing boundary).
+  const splitFromEditor = (segId: number, textA: string, textB: string) => {
+    const seg = transcript.segments.find((s) => s.id === segId)
+    if (!seg) return
+    const total = (seg.words[model] ?? []).length
+    if (total < 2) return
+    const a = tokenize(textA)
+    const b = tokenize(textB)
+    if (a.length === 0 || b.length === 0) return
+    const wordIdx = Math.min(
+      Math.max(Math.round((total * a.length) / (a.length + b.length)), 1),
+      total - 1,
+    )
+    splitSegment(segId, wordIdx, { a: textA, b: textB })
   }
 
   const mergeWithNext = (segId: number) => {
@@ -2602,6 +2669,7 @@ export default function ReviewWorkspace({
           segmentTextEdits={segmentTextEdits}
           onEditSentence={editSentence}
           onMergeNext={mergeWithNext}
+          onSplitDraft={splitFromEditor}
           onChangeSpeaker={changeSpeaker}
           editMode={editMode}
           onEditModeChange={config.allowEditModeToggle ? handleEditModeChange : undefined}
@@ -2735,7 +2803,7 @@ export default function ReviewWorkspace({
           onApplyAll={applyEditAll}
           onDelete={deleteWord}
           onClose={closePopup}
-          onSplit={popupOverride != null ? undefined : () => splitSegment(popup.segId, popup.wordIdx)}
+          onSplit={() => splitSegment(popup.segId, popup.wordIdx)}
           onPlayFromWord={(s, w) => {
             playFromWord(s, w)
             closePopup()

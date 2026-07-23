@@ -66,6 +66,8 @@ interface Props {
   segmentTextEdits?: Record<number, { text: string; reason?: string }>
   onEditSentence?: (segId: number, text: string) => void
   onMergeNext?: (segId: number) => void
+  /** "Split here" from the line editor: draft text already cut at the cursor. */
+  onSplitDraft?: (segId: number, textA: string, textB: string) => void
   onChangeSpeaker?: (segId: number, speaker: string) => void
   /** Editing interaction mode + its toggle. When onEditModeChange is provided,
    *  an "Editing: Assisted | Document" control shows in the View menu. */
@@ -177,6 +179,7 @@ export default function TranscriptView({
   segmentTextEdits,
   onEditSentence,
   onMergeNext,
+  onSplitDraft,
   onChangeSpeaker,
   editMode = 'assisted',
   onEditModeChange,
@@ -614,6 +617,7 @@ export default function TranscriptView({
                   textOverride={segmentTextEdits?.[segment.id]?.text}
                   onEditSentence={onEditSentence}
                   onMergeNext={onMergeNext}
+                  onSplitDraft={onSplitDraft}
                   canMergeNext={
                     transcript.segments[transcript.segments.length - 1]?.id !== segment.id
                   }
