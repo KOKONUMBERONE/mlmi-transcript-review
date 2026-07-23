@@ -187,7 +187,6 @@ function SurveyInput({
       <textarea
         value={typeof value === 'string' ? value : ''}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Optional…"
         rows={2}
         className="w-full text-[13px] rounded border border-border bg-bg px-2.5 py-1.5 text-ink placeholder:text-ink-faint resize-y focus:outline-none focus:border-brand/60"
       />
