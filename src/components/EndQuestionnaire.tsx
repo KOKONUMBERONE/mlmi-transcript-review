@@ -110,7 +110,8 @@ function SurveyRow({
     return <p className="text-[11px] text-ink-faint italic leading-snug">{q.text}</p>
   }
 
-  const required = q.type === 'radio' || q.type === 'scale' || q.type === 'multi'
+  const required =
+    q.type === 'radio' || q.type === 'scale' || (q.type === 'multi' && q.required !== false)
   return (
     <div
       className={`rounded-lg border p-3.5 ${
