@@ -59,7 +59,7 @@ export default function EndQuestionnaire({
         <h1 className="text-base font-semibold text-ink mb-1">Feedback questionnaire</h1>
         <p className="text-[12px] text-ink-muted mb-3">
           Thank you for completing the review task. Please answer the questions below — the
-          starred (<span className="text-risk-high">*</span>) choice questions are required; the
+          starred (<span className="text-risk-high">*</span>) questions are required; unstarred
           open comments are optional.
         </p>
         {onPeek && (
@@ -129,7 +129,10 @@ function SurveyRow({
   }
 
   const required =
-    q.type === 'radio' || q.type === 'scale' || (q.type === 'multi' && q.required !== false)
+    q.type === 'radio' ||
+    q.type === 'scale' ||
+    (q.type === 'multi' && q.required !== false) ||
+    (q.type === 'open' && q.required === true)
   return (
     <div
       className={`rounded-lg border p-3.5 ${
@@ -137,12 +140,26 @@ function SurveyRow({
       }`}
     >
       <p className="text-[13px] text-ink leading-snug mb-2.5">
-        {q.prompt}
+        <PromptText text={q.prompt} boldTerm={'boldTerm' in q ? q.boldTerm : undefined} />
         {required && <span className="text-risk-high ml-1">*</span>}
       </p>
       {'note' in q && q.note && <p className="text-[11px] text-ink-faint italic -mt-1.5 mb-2">{q.note}</p>}
       <SurveyInput q={q} value={value} onChange={onChange} />
     </div>
+  )
+}
+
+function PromptText({ text, boldTerm }: { text: string; boldTerm?: string }) {
+  if (!boldTerm) return <>{text}</>
+  const start = text.toLocaleLowerCase().indexOf(boldTerm.toLocaleLowerCase())
+  if (start < 0) return <>{text}</>
+  const end = start + boldTerm.length
+  return (
+    <>
+      {text.slice(0, start)}
+      <strong className="font-semibold">{text.slice(start, end)}</strong>
+      {text.slice(end)}
+    </>
   )
 }
 
@@ -202,6 +219,17 @@ function SurveyInput({
   }
 
   if (q.type === 'open') {
+    if (q.inputMode === 'email') {
+      return (
+        <input
+          type="email"
+          autoComplete="email"
+          value={typeof value === 'string' ? value : ''}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full text-[13px] rounded border border-border bg-bg px-2.5 py-2 text-ink placeholder:text-ink-faint focus:outline-none focus:border-brand/60"
+        />
+      )
+    }
     return (
       <textarea
         value={typeof value === 'string' ? value : ''}
