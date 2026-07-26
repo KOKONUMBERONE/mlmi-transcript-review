@@ -2776,11 +2776,12 @@ export default function ReviewWorkspace({
         />
       )}
 
-      {/* Page-bottom playback bar (reviewer + transport + speed). The keyboard-
-          shortcuts / researcher panel sits at the far right, after Speed. */}
+      {/* Page-bottom playback bar. The keyboard-shortcuts / researcher panel
+          stays at the far right; participant trials hide playback speed. */}
       <PlayerBar
         audio={audio}
         onSpeedChange={handleSpeedChange}
+        showSpeed={config.showPlaybackSpeed !== false}
         onTogglePlay={togglePlayWithRewind}
         onSkip={(delta) =>
           seekWithLog(Math.max(0, Math.min(audio.duration, audio.currentTime + delta)), 'keyboard')

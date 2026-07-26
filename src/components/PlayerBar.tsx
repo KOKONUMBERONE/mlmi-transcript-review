@@ -4,6 +4,8 @@ import type { AudioController } from '../state/useAudio'
 interface Props {
   audio: AudioController
   onSpeedChange?: (speed: number) => void
+  /** Hide the playback-rate selector while retaining the trailing controls. */
+  showSpeed?: boolean
   // Play/pause with the auto-rewind-on-resume convention; falls back to the raw
   // audio toggle when not provided.
   onTogglePlay?: () => void
@@ -26,6 +28,7 @@ function formatTime(seconds: number): string {
 export default function PlayerBar({
   audio,
   onSpeedChange,
+  showSpeed = true,
   onTogglePlay,
   onSkip,
   trailing,
@@ -132,25 +135,27 @@ export default function PlayerBar({
 
       {/* Speed + trailing slot (right cell) */}
       <div className="flex items-center gap-3 justify-self-end">
-        <label className="flex items-center gap-1.5">
-          <span className="text-[11px] text-ink-muted">Speed</span>
-          <select
-            defaultValue="1"
-            onChange={(e) => {
-              const v = parseFloat(e.target.value)
-              if (onSpeedChange) onSpeedChange(v)
-              else audio.setRate(v)
-            }}
-            className="text-xs border border-border rounded px-2 py-1 bg-surface text-ink hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
-          >
-            <option value="0.5">0.5×</option>
-            <option value="0.75">0.75×</option>
-            <option value="1">1×</option>
-            <option value="1.25">1.25×</option>
-            <option value="1.5">1.5×</option>
-            <option value="2">2×</option>
-          </select>
-        </label>
+        {showSpeed && (
+          <label className="flex items-center gap-1.5">
+            <span className="text-[11px] text-ink-muted">Speed</span>
+            <select
+              defaultValue="1"
+              onChange={(e) => {
+                const v = parseFloat(e.target.value)
+                if (onSpeedChange) onSpeedChange(v)
+                else audio.setRate(v)
+              }}
+              className="text-xs border border-border rounded px-2 py-1 bg-surface text-ink hover:border-border-strong focus:outline-none focus:ring-1 focus:ring-border-strong"
+            >
+              <option value="0.5">0.5×</option>
+              <option value="0.75">0.75×</option>
+              <option value="1">1×</option>
+              <option value="1.25">1.25×</option>
+              <option value="1.5">1.5×</option>
+              <option value="2">2×</option>
+            </select>
+          </label>
+        )}
         {trailing}
       </div>
     </div>
