@@ -811,6 +811,13 @@ export default function ReviewWorkspace({
     setSegmentTextEdits({})
     setVerified({})
     setQuestionAnswers({})
+    // Every Full (C4) trial must open from the same neutral comparison view,
+    // regardless of what the reviewer selected in the demo or an earlier Full
+    // trial. These are defaults for the new trial, not logged user actions.
+    if (trial.condition === 'C4') {
+      setDimension('combined')
+      setSentenceSignal('confidence')
+    }
     // Police trials open with the RIGHT column expanded on the case-questions
     // tab — the task is the first thing an officer sees; Review sits behind
     // the second tab. Other trials keep their defaults.
@@ -2697,6 +2704,11 @@ export default function ReviewWorkspace({
             answers={questionAnswers}
             onChange={handleQuestionChange}
             onCommit={handleQuestionCommit}
+            guidance={
+              trial?.difficulty.startsWith('part-t2')
+                ? 'You do not have to finish every question — answer as many as you can. Verify key details against the audio and correct important transcript errors as you work.'
+                : undefined
+            }
             side="right"
             tabStrip={<RightTabStrip active="questions" onSelect={switchRightTab} />}
             onToggleCollapse={() => {

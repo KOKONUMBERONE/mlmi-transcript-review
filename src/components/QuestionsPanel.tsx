@@ -26,6 +26,8 @@ interface Props {
   onToggleCollapse?: () => void
   /** Which side of the workspace the panel sits on (border + chevron flip). */
   side?: 'left' | 'right'
+  /** Optional study-specific guidance shown above the question list. */
+  guidance?: string
 }
 
 export default function QuestionsPanel({
@@ -36,6 +38,7 @@ export default function QuestionsPanel({
   tabStrip,
   onToggleCollapse,
   side = 'left',
+  guidance,
 }: Props) {
   if (questions.length === 0) return null
   return (
@@ -65,8 +68,12 @@ export default function QuestionsPanel({
           they feel ready (supervisor request, 2026-07-24). */}
       <div className="px-4 py-2 border-b border-brand/20 bg-brand-bg shrink-0">
         <p className="text-[10px] text-ink-muted">
-          You don't have to finish all the questions — you can move on to the feedback whenever
-          you feel ready.
+          {guidance ?? (
+            <>
+              You don't have to finish all the questions — you can move on to the feedback whenever
+              you feel ready.
+            </>
+          )}
         </p>
       </div>
       <ol className="px-4 py-3 space-y-4 overflow-y-auto flex-1">

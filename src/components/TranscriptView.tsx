@@ -230,7 +230,9 @@ export default function TranscriptView({
   // Karaoke: index of the word currently being spoken, scanned in the ACTIVE
   // segment only (cheap — ~tens of words, not the whole transcript). null when
   // no segment is active or the words carry no timestamps (graceful no-op).
+  // Plain (dimension='none') deliberately disables word-follow highlighting.
   const activeWordIndex = useMemo(() => {
+    if (dimension === 'none') return null
     if (activeId == null) return null
     const seg = transcript.segments.find((s) => s.id === activeId)
     const ws = seg?.words[model] ?? []
@@ -239,7 +241,7 @@ export default function TranscriptView({
       if (w.start != null && w.end != null && currentTime >= w.start && currentTime < w.end) return i
     }
     return null
-  }, [transcript, model, activeId, currentTime])
+  }, [transcript, model, activeId, currentTime, dimension])
 
   // Capture the active dimension's risk lookup so the filter and counts
   // agree with the segment-level bar shown on the left. In focus mode a
@@ -608,7 +610,9 @@ export default function TranscriptView({
                   collapsedHighUnderline={collapsedHighUnderline}
                   highlightLevel={highlightLevel}
                   activeWordIndex={segment.id === activeId ? activeWordIndex : null}
-                  activeTime={segment.id === activeId ? currentTime : undefined}
+                  activeTime={
+                    dimension !== 'none' && segment.id === activeId ? currentTime : undefined
+                  }
                   displayRiskMap={displayRiskMap}
                   focusHitFor={focusHitFor}
                   onSeek={onSeek}
