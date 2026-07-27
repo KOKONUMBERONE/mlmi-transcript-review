@@ -43,8 +43,8 @@ export default function DemoTour({
   // suspend the mask entirely so it can be explored; the card stays on top.
   const [fullscreenPass, setFullscreenPass] = useState(false)
   const baselineRef = useRef(0)
-  // finish/skip must fire exactly once — a double-click on "Start task 1"
-  // would otherwise advance the runner twice and silently skip task 1.
+  // finish/skip must fire exactly once — a double-click must not close the
+  // walkthrough and trigger its escape action at the same time.
   const firedRef = useRef(false)
 
   const step = DEMO_TOUR_STEPS[index] ?? DEMO_TOUR_STEPS[DEMO_TOUR_STEPS.length - 1]
@@ -356,7 +356,7 @@ export default function DemoTour({
             title={interactive && !done ? 'Try the highlighted control first' : undefined}
             className="text-[12px] font-medium px-3.5 py-1.5 rounded bg-brand text-white hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {last ? 'Start task 1' : 'Next'}
+            {last ? 'Continue' : 'Next'}
           </button>
         </div>
       </div>

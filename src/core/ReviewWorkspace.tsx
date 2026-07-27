@@ -147,6 +147,8 @@ export default function ReviewWorkspace({
   interactionLocked = false,
   participantOverride,
   onDemoFinish,
+  onDemoTourComplete,
+  demoTourCompleted = false,
 }: {
   config: WorkspaceConfig
   // Behavioural event log, created by the shell (AppFull/AppStudy) so it
@@ -161,9 +163,11 @@ export default function ReviewWorkspace({
   interactionLocked?: boolean
   // Study: participant code from the experimenter setup (stamped on every event).
   participantOverride?: string
-  // Police demo trial (difficulty 'demo'): called when the spotlight tour ends
-  // or is skipped — the shell advances the runner straight into task 1.
+  // Demo trial (difficulty 'demo'): leaving the demo and completing its guided
+  // steps are separate actions so participants can freely explore in between.
   onDemoFinish?: () => void
+  onDemoTourComplete?: () => void
+  demoTourCompleted?: boolean
 }) {
   const [transcript, setTranscript] = useState<Transcript>(defaultTranscript)
   // Pristine snapshot of the loaded transcript (raw pipeline output) so the
@@ -1659,7 +1663,11 @@ export default function ReviewWorkspace({
   // ---- Police demo tour ----------------------------------------------------
   // The spotlight walkthrough mounts on the demo trial (difficulty 'demo') and
   // drives the real workspace state between steps through this bundle.
-  const tourActive = trial?.difficulty === 'demo' && !!onDemoFinish
+  const tourActive =
+    trial?.difficulty === 'demo' &&
+    !!onDemoFinish &&
+    !!onDemoTourComplete &&
+    !demoTourCompleted
   const tourHighRiskSegmentId = useMemo(() => {
     if (!tourActive) return null
     for (const seg of transcript.segments) {
@@ -2868,13 +2876,13 @@ export default function ReviewWorkspace({
         </div>
       )}
 
-      {/* Police demo: the guided spotlight walkthrough (Next-only) over the
-          live workspace. Finishing or skipping advances the runner to task 1. */}
+      {/* Demo: finishing the guided steps unlocks free exploration; skipping
+          still exits directly to task 1. */}
       {tourActive && !interactionLocked && (
         <DemoTour
           api={tourApi}
           events={events}
-          onFinish={onDemoFinish!}
+          onFinish={onDemoTourComplete!}
           onSkip={onDemoFinish!}
         />
       )}

@@ -268,9 +268,9 @@ export const DEMO_TOUR_STEPS: TourStep[] = [
   },
   {
     id: 'ready',
-    title: 'Ready to start',
+    title: 'Explore on your own',
     body:
-      'That is everything — you have now used every tool once. Next you will review a real recording and answer its case questions; there is no time limit, and the AI transcript does contain mistakes — finding them is part of the job. Press "End task" (top right) when you finish.',
+      'That is the guided part finished. Press "Continue" to close these steps, then take as much time as you need to explore this practice recording. When you feel ready, press "Start task 1" in the top-right corner.',
     prepare: (api) => api.closeOutline(),
   },
 ]
