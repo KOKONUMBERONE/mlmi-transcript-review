@@ -51,6 +51,8 @@ interface Props {
   onWordClick: (segId: number, wordIdx: number, rect: DOMRect) => void
   // Single toggle; shift-click verifies the range from the last-clicked segment.
   onToggleVerify: (segId: number, opts?: { range?: boolean }) => void
+  /** Hide reviewer-facing verification while edit/audit capture keeps running. */
+  showVerify?: boolean
   // #1 whole-sentence edit. When textOverride is set, the segment is rendered as
   // one rewritten block (per-word highlighting is dropped).
   textOverride?: string
@@ -113,6 +115,7 @@ export default function Segment({
   onSeek,
   onWordClick,
   onToggleVerify,
+  showVerify = true,
   textOverride,
   onEditSentence,
   editMode = 'assisted',
@@ -407,23 +410,25 @@ export default function Segment({
             {/* Verify — kept quiet by default (a column of solid buttons drowns
                 the transcript); it goes solid navy only on the segment you're
                 on or hovering. Verified is a calm green. */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onToggleVerify(segment.id, { range: e.shiftKey })
-              }}
-              title="Mark this segment checked. Shift-click to verify a range."
-              className={[
-                'text-[11px] font-medium px-2.5 py-1 rounded transition-colors',
-                verified
-                  ? 'border border-verified/40 text-verified bg-verified-bg/60'
-                  : active
-                  ? 'bg-brand text-white hover:bg-brand-dark shadow-sm'
-                  : 'border border-transparent text-ink-faint group-hover:border-border group-hover:text-ink-muted hover:!border-brand hover:!text-brand',
-              ].join(' ')}
-            >
-              {verified ? '✓ Verified' : 'Verify'}
-            </button>
+            {showVerify && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onToggleVerify(segment.id, { range: e.shiftKey })
+                }}
+                title="Mark this segment checked. Shift-click to verify a range."
+                className={[
+                  'text-[11px] font-medium px-2.5 py-1 rounded transition-colors',
+                  verified
+                    ? 'border border-verified/40 text-verified bg-verified-bg/60'
+                    : active
+                    ? 'bg-brand text-white hover:bg-brand-dark shadow-sm'
+                    : 'border border-transparent text-ink-faint group-hover:border-border group-hover:text-ink-muted hover:!border-brand hover:!text-brand',
+                ].join(' ')}
+              >
+                {verified ? '✓ Verified' : 'Verify'}
+              </button>
+            )}
           </span>
         </header>
 

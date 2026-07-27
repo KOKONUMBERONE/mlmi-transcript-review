@@ -6,7 +6,7 @@ interface Args {
   currentTime: number
   togglePlay: () => void
   seek: (seconds: number) => void
-  toggleVerify: (segId: number) => void
+  toggleVerify?: (segId: number) => void
   replaySegment: () => void
 }
 
@@ -77,6 +77,7 @@ export function useKeyboardShortcuts({
           seek(nextSegmentStart())
           return
         case 'v': {
+          if (!toggleVerify) return
           const id = activeSegmentId()
           if (id !== null) {
             e.preventDefault()

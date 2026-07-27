@@ -189,6 +189,7 @@ export default function ReviewWorkspace({
     !(config.timelineView || config.anomalyDetection),
   )
   const [auditCollapsed, setAuditCollapsed] = useState(!!config.defaultReviewCollapsed)
+  const auditUiHidden = !!config.hideAuditUi
   // Right column tab: police case questions share the column with Review.
   const [rightTab, setRightTab] = useState<RightTab>('questions')
   // Left column tab (full build with allowChat): Find | Assistant (+ the
@@ -2301,7 +2302,7 @@ export default function ReviewWorkspace({
     currentTime: audio.currentTime,
     togglePlay: togglePlayWithRewind,
     seek: (t) => seekWithLog(t, 'keyboard'),
-    toggleVerify,
+    toggleVerify: auditUiHidden ? undefined : toggleVerify,
     replaySegment: replayCurrentSegment,
   })
 
@@ -2672,7 +2673,8 @@ export default function ReviewWorkspace({
           onSeek={(t) => seekWithLog(t, 'segment')}
           onWordClick={openPopup}
           onToggleVerify={toggleVerify}
-          onBulkVerify={verifyMany}
+          onBulkVerify={auditUiHidden ? undefined : verifyMany}
+          showVerifyControls={!auditUiHidden}
           segmentTextEdits={segmentTextEdits}
           onEditSentence={editSentence}
           onMergeNext={mergeWithNext}
@@ -2698,7 +2700,8 @@ export default function ReviewWorkspace({
         />
         {/* Right column: police trials share it between the case questions and
             Review via RightTabStrip; other builds keep the plain Review panel. */}
-        {caseQuestions.length > 0 && rightTab === 'questions' && !auditCollapsed ? (
+        {caseQuestions.length > 0 &&
+        (auditUiHidden || (rightTab === 'questions' && !auditCollapsed)) ? (
           <QuestionsPanel
             questions={caseQuestions}
             answers={questionAnswers}
@@ -2706,17 +2709,29 @@ export default function ReviewWorkspace({
             onCommit={handleQuestionCommit}
             guidance={
               trial?.difficulty.startsWith('part-t2')
-                ? 'You do not have to finish every question — answer as many as you can. Verify key details against the audio and correct important transcript errors as you work.'
+                ? 'You do not have to finish every question — answer as many as you can. Listen to confirm key details and correct important transcript errors as you work.'
                 : undefined
             }
             side="right"
-            tabStrip={<RightTabStrip active="questions" onSelect={switchRightTab} />}
-            onToggleCollapse={() => {
-              setAuditCollapsed(true)
-              events.log('tab_switch', { tab: 'right:collapsed' })
-            }}
+            tabStrip={
+              auditUiHidden ? (
+                <span className="text-[10px] uppercase tracking-[0.1em] font-semibold px-1.5 py-0.5 rounded border text-white bg-brand border-brand">
+                  Questions
+                </span>
+              ) : (
+                <RightTabStrip active="questions" onSelect={switchRightTab} />
+              )
+            }
+            onToggleCollapse={
+              auditUiHidden
+                ? undefined
+                : () => {
+                    setAuditCollapsed(true)
+                    events.log('tab_switch', { tab: 'right:collapsed' })
+                  }
+            }
           />
-        ) : (
+        ) : !auditUiHidden ? (
           <HistorySidebar
             history={history}
             verified={verified}
@@ -2752,7 +2767,7 @@ export default function ReviewWorkspace({
                 : undefined
             }
           />
-        )}
+        ) : null}
       </div>
 
       {/* Full-width time-proportional timeline strip (timeline build only):
@@ -2796,6 +2811,7 @@ export default function ReviewWorkspace({
             condition={condition}
             onParticipantChange={setParticipantId}
             onConditionChange={setCondition}
+            showAuditControls={!auditUiHidden}
           />
         }
       />

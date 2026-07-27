@@ -19,6 +19,8 @@ interface Props {
   condition: string
   onParticipantChange: (id: string) => void
   onConditionChange: (condition: string) => void
+  /** Hide verify shortcuts and researcher/audit exports from participants. */
+  showAuditControls?: boolean
 }
 
 export default function ShortcutLegend({
@@ -28,6 +30,7 @@ export default function ShortcutLegend({
   condition,
   onParticipantChange,
   onConditionChange,
+  showAuditControls = true,
 }: Props) {
   const [open, setOpen] = useState(false)
 
@@ -46,7 +49,9 @@ export default function ShortcutLegend({
             Keyboard shortcuts
           </p>
           <ul className="space-y-1.5 mb-3">
-            {SHORTCUTS.map((s) => (
+            {SHORTCUTS.filter(
+              (s) => showAuditControls || !s.label.startsWith('Verify'),
+            ).map((s) => (
               <li
                 key={s.label}
                 className="flex items-center justify-between text-xs"
@@ -67,10 +72,11 @@ export default function ShortcutLegend({
           </ul>
 
           {/* Researcher-only controls. Not for the reviewer. */}
-          <div className="pt-2 border-t border-border">
-            <p className="text-[10px] text-ink-faint uppercase tracking-[0.1em] mb-2">
-              Researcher
-            </p>
+          {showAuditControls && (
+            <div className="pt-2 border-t border-border">
+              <p className="text-[10px] text-ink-faint uppercase tracking-[0.1em] mb-2">
+                Researcher
+              </p>
 
             {/* Study identity */}
             <div className="space-y-1.5 mb-2">
@@ -117,7 +123,8 @@ export default function ShortcutLegend({
                 Events CSV
               </button>
             </div>
-          </div>
+            </div>
+          )}
         </div>
       )}
 

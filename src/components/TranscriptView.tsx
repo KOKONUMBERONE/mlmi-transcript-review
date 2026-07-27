@@ -62,6 +62,8 @@ interface Props {
   onWordClick: (segId: number, wordIdx: number, rect: DOMRect) => void
   onToggleVerify: (segId: number, opts?: { range?: boolean }) => void
   onBulkVerify?: (segIds: number[], value: boolean) => void
+  /** Hide verification controls for non-auditing study conditions. */
+  showVerifyControls?: boolean
   // #1 whole-sentence edit + #2 structural edits, threaded to each Segment.
   segmentTextEdits?: Record<number, { text: string; reason?: string }>
   onEditSentence?: (segId: number, text: string) => void
@@ -176,6 +178,7 @@ export default function TranscriptView({
   onWordClick,
   onToggleVerify,
   onBulkVerify,
+  showVerifyControls = true,
   segmentTextEdits,
   onEditSentence,
   onMergeNext,
@@ -517,7 +520,7 @@ export default function TranscriptView({
                       </div>
                     </MenuRow>
                   )}
-                  {onBulkVerify && (
+                  {showVerifyControls && onBulkVerify && (
                     <MenuSection label="Verify">
                       <MenuItem
                         onClick={() => onBulkVerify(displaySegments.map((s) => s.id), true)}
@@ -618,6 +621,7 @@ export default function TranscriptView({
                   onSeek={onSeek}
                   onWordClick={onWordClick}
                   onToggleVerify={onToggleVerify}
+                  showVerify={showVerifyControls}
                   textOverride={segmentTextEdits?.[segment.id]?.text}
                   onEditSentence={onEditSentence}
                   onMergeNext={onMergeNext}
@@ -641,7 +645,9 @@ export default function TranscriptView({
         </div>
 
         <p className="mt-8 pt-4 border-t border-border text-[11px] text-ink-faint italic">
-          End of transcript. All changes are recorded in the audit trail.
+          {showVerifyControls
+            ? 'End of transcript. All changes are recorded in the audit trail.'
+            : 'End of transcript. Your edits are saved automatically.'}
         </p>
       </div>
     </main>
