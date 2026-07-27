@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import TopBar from '../components/TopBar'
 import PlayerBar from '../components/PlayerBar'
 import TranscriptView from '../components/TranscriptView'
@@ -139,17 +147,12 @@ export interface TrialContext {
   triageUrl?: string
 }
 
-export default function ReviewWorkspace({
-  config,
-  events,
-  lockedCondition,
-  trial,
-  interactionLocked = false,
-  participantOverride,
-  onDemoFinish,
-  onDemoTourComplete,
-  demoTourCompleted = false,
-}: {
+export interface ReviewWorkspaceHandle {
+  /** Freeze the currently displayed transcript into task_result log rows. */
+  captureTaskResult: () => void
+}
+
+interface ReviewWorkspaceProps {
   config: WorkspaceConfig
   // Behavioural event log, created by the shell (AppFull/AppStudy) so it
   // survives across study trials and is reachable for export on the done screen.
@@ -168,7 +171,19 @@ export default function ReviewWorkspace({
   onDemoFinish?: () => void
   onDemoTourComplete?: () => void
   demoTourCompleted?: boolean
-}) {
+}
+
+const ReviewWorkspace = forwardRef<ReviewWorkspaceHandle, ReviewWorkspaceProps>(function ReviewWorkspace({
+  config,
+  events,
+  lockedCondition,
+  trial,
+  interactionLocked = false,
+  participantOverride,
+  onDemoFinish,
+  onDemoTourComplete,
+  demoTourCompleted = false,
+}: ReviewWorkspaceProps, ref) {
   const [transcript, setTranscript] = useState<Transcript>(defaultTranscript)
   // Pristine snapshot of the loaded transcript (raw pipeline output) so the
   // "Original (JSON)" export stays untouched by manual split/merge/sentence edits.
@@ -804,10 +819,12 @@ export default function ReviewWorkspace({
   // clock, and mark trial_start. On time-up (interactionLocked): mark trial_end.
   const trialKeyRef = useRef<string | null>(null)
   const trialEndedRef = useRef(false)
+  const taskResultCapturedRef = useRef<string | null>(null)
   useEffect(() => {
     if (!trial || trialKeyRef.current === trial.key) return
     trialKeyRef.current = trial.key
     trialEndedRef.current = false
+    taskResultCapturedRef.current = null
     setEdits({})
     // Whole-sentence rewrites live in a separate map keyed by numeric segment id.
     // Segment ids repeat across stimuli (every transcript numbers 0,1,2,…), so a
@@ -965,12 +982,6 @@ export default function ReviewWorkspace({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trial?.key])
-  useEffect(() => {
-    if (!trial || !interactionLocked || trialEndedRef.current) return
-    trialEndedRef.current = true
-    events.log('trial_end', {})
-  }, [interactionLocked, trial, events])
-
   // Display-time risk "operating point" (deployment quiet vs study dense, see
   // RiskPolicy). The full build can switch it at runtime to preview both without
   // opening the study build; the study build keeps its fixed regime.
@@ -1825,6 +1836,41 @@ export default function ReviewWorkspace({
       }),
     }
   }, [transcript, edits, segmentTextEdits, model])
+
+  // Event-by-event edits are useful for behaviour analysis, but they are not a
+  // reliable answer sheet: a reviewer can rewrite a whole sentence, delete and
+  // retype a word, or change only whitespace. At task end, therefore, freeze
+  // the actual text currently shown on screen as one flat task_result row per
+  // segment. These rows ride inside the existing Supabase `events` JSONB — no
+  // database migration is required — and make scoring independent of edit UI.
+  const captureTaskResult = useCallback(() => {
+    if (!trial || trial.difficulty === 'demo') return
+    if (taskResultCapturedRef.current === trial.key) return
+    taskResultCapturedRef.current = trial.key
+
+    for (const segment of effectiveTranscript.segments) {
+      events.log('task_result', {
+        segment_id: segment.id,
+        segment_start: segment.start,
+        segment_count: effectiveTranscript.segments.length,
+        to_text: (segment.words[model] ?? []).map((word) => word.text).join(' '),
+      })
+    }
+    if (!trialEndedRef.current) {
+      trialEndedRef.current = true
+      events.log('trial_end', {})
+    }
+  }, [effectiveTranscript, events, model, trial])
+
+  useImperativeHandle(ref, () => ({ captureTaskResult }), [captureTaskResult])
+
+  // A fixed-time participant trial can lock before the participant clicks the
+  // Continue button. Capture immediately at that boundary as well; the ref
+  // guard keeps the later button press idempotent.
+  useEffect(() => {
+    if (!trial || !interactionLocked) return
+    captureTaskResult()
+  }, [captureTaskResult, interactionLocked, trial])
 
   // Unified "Find": lexical first (fast, deterministic) then, in the full
   // build, a local-LLM pass enriches/extends it in the background. The lexical
@@ -2888,4 +2934,6 @@ export default function ReviewWorkspace({
       )}
     </div>
   )
-}
+})
+
+export default ReviewWorkspace

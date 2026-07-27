@@ -294,6 +294,8 @@ export type EventType =
   | 'focus_snippet_click'
   | 'trial_start'
   | 'trial_end'
+  // Final displayed transcript, one row per segment, captured at task end.
+  | 'task_result'
   | 'question_answer'
   | 'tab_switch'
   | 'dimension_change'
