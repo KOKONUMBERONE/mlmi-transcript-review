@@ -64,6 +64,14 @@ test_data/
 # service_role key at runtime).
 scripts/download_study_data.py
 study_data/
+# Later download/analysis rounds + the answer keys they are scored against.
+# Same rule: participant data and answers never leave the machine.
+study_data_new/
+outputs/
+work/
+police_answer_key.xlsx
+# Scratch space for other coding agents.
+.codex-tmp/
 
 # Python bytecode cache (from the local analysis script)
 __pycache__/
