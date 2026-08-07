@@ -839,6 +839,14 @@ const ReviewWorkspace = forwardRef<ReviewWorkspaceHandle, ReviewWorkspaceProps>(
     if (trial.condition === 'C4') {
       setDimension('combined')
       setSentenceSignal('confidence')
+      // …and, where the trial asks for it, with the tool column already open on
+      // a named tab. It has to happen here rather than in the useState initial:
+      // the workspace mounts during the intro/brief screens, before any trial
+      // exists, so at mount `config` is still the base (toolkit-less) one.
+      if (config.defaultLeftTab) {
+        setLeftTab(config.defaultLeftTab)
+        setFocusCollapsed(false)
+      }
     }
     // Police trials open with the RIGHT column expanded on the case-questions
     // tab — the task is the first thing an officer sees; Review sits behind
@@ -866,7 +874,7 @@ const ReviewWorkspace = forwardRef<ReviewWorkspaceHandle, ReviewWorkspaceProps>(
       taskType: trial.task,
     })
     events.log('trial_start', { time_budget_ms: trial.timeBudgetMs })
-  }, [trial, events])
+  }, [trial, events, config.defaultLeftTab])
 
   // Load this trial's frozen stimulus (transcript + audio). Separate effect,
   // keyed on the trial KEY (a primitive) with the standard cancel-on-cleanup
