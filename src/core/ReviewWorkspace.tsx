@@ -837,7 +837,7 @@ const ReviewWorkspace = forwardRef<ReviewWorkspaceHandle, ReviewWorkspaceProps>(
     // regardless of what the reviewer selected in the demo or an earlier Full
     // trial. These are defaults for the new trial, not logged user actions.
     if (trial.condition === 'C4') {
-      setDimension('combined')
+      setDimension(config.defaultWordDimension ?? 'combined')
       setSentenceSignal('confidence')
       // …and, where the trial asks for it, with the tool column already open on
       // a named tab. It has to happen here rather than in the useState initial:
@@ -874,7 +874,7 @@ const ReviewWorkspace = forwardRef<ReviewWorkspaceHandle, ReviewWorkspaceProps>(
       taskType: trial.task,
     })
     events.log('trial_start', { time_budget_ms: trial.timeBudgetMs })
-  }, [trial, events, config.defaultLeftTab])
+  }, [trial, events, config.defaultLeftTab, config.defaultWordDimension])
 
   // Load this trial's frozen stimulus (transcript + audio). Separate effect,
   // keyed on the trial KEY (a primitive) with the standard cancel-on-cleanup

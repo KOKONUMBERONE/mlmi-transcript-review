@@ -200,6 +200,12 @@ export default function TranscriptView({
 }: Props) {
   const [filter, setFilter] = useState<RiskFilter>('all')
   const [highlightLevel, setHighlightLevel] = useState<HighlightLevel>(defaultHighlightLevel)
+  // Follow the prop when it actually changes value. The study mounts this view
+  // once and keeps it for the whole session, so a useState initial is captured
+  // under whatever config was live at mount — before any trial exists — and a
+  // per-trial default would never apply. Keyed on the primitive, so a re-render
+  // with the same level leaves a reviewer's own toggle alone.
+  useEffect(() => setHighlightLevel(defaultHighlightLevel), [defaultHighlightLevel])
   // 'Marks: always' — pin word-level risk marks on every segment (no hover
   // needed). Pairs well with highlightLevel='high' to scan all red words.
   const [revealAll, setRevealAll] = useState(defaultRevealAll)
