@@ -1849,8 +1849,8 @@ const ReviewWorkspace = forwardRef<ReviewWorkspaceHandle, ReviewWorkspaceProps>(
   // reliable answer sheet: a reviewer can rewrite a whole sentence, delete and
   // retype a word, or change only whitespace. At task end, therefore, freeze
   // the actual text currently shown on screen as one flat task_result row per
-  // segment. These rows ride inside the existing Supabase `events` JSONB — no
-  // database migration is required — and make scoring independent of edit UI.
+  // segment. These rows stay in the local event log and make scoring independent
+  // of the edit UI.
   const captureTaskResult = useCallback(() => {
     if (!trial || trial.difficulty === 'demo') return
     if (taskResultCapturedRef.current === trial.key) return

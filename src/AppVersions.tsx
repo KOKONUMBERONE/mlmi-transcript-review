@@ -82,7 +82,7 @@ export default function AppVersions() {
           </p>
           {/* Onboarding: police reviewers land here cold — point them at the
               guide first. Static page in public/guide.html, served at /guide.html
-              on both dev and the Vercel deploy; new tab keeps this menu intact. */}
+              in local development; a new tab keeps this menu intact. */}
           <a
             href="/guide.html"
             target="_blank"

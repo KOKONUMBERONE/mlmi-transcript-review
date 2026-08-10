@@ -1,0 +1,17 @@
+{
+  "conflicts": [
+    {
+      "a": 1,
+      "b": 31,
+      "type": "time",
+      "note": "Interview time conflicts with stated time of 9:42."
+    },
+    {
+      "a": 10,
+      "b": 11,
+      "type": "time",
+      "note": "Arrival time conflicts with phone check time of 9:36."
+    }
+  ],
+  "_windows": 1
+}

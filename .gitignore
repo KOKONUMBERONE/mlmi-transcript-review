@@ -26,9 +26,6 @@ Thumbs.db
 .env
 .env.*
 !.env.example
-# Build-mode selector for the user-study build (no secrets — needed by build:study).
-!.env.study
-!.env.production
 
 # Test / coverage
 coverage/
@@ -39,6 +36,8 @@ coverage/
 
 # Claude Code working files (project-local, not for the repo)
 .claude/
+AGENTS.md
+CLAUDE.md
 CLAUDE_CODE_PROMPTS.md
 .vercel
 server/__pycache__/
@@ -48,8 +47,7 @@ server/.outline_cache/
 # baked into src/data/defaultTriage.json, which IS committed).
 server/.triage_cache/
 
-# ASR transcribe service (Python venv + CI)
-.github/
+# Local Python environment
 .venv/
 # Local LLM conflict-check + timeline caches (regenerated on demand).
 server/.anomaly_cache/

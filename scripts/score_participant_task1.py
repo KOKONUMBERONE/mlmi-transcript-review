@@ -9,7 +9,7 @@ the same way as a one-word correction.
 
 Examples:
   python3 scripts/score_participant_task1.py study_data/latest.json
-  python3 scripts/score_participant_task1.py study_data/supabase-export.csv \
+  python3 scripts/score_participant_task1.py study_data/session-export.csv \
       --output study_data/analysis/task1_scores.csv
   python3 scripts/score_participant_task1.py --self-test
 """
@@ -127,7 +127,7 @@ def load_jsonish(value: Any) -> Any:
 
 
 def load_snapshots(path: Path) -> list[dict[str, Any]]:
-    """Accept a Supabase CSV/JSON export or a browser event-log JSON file."""
+    """Accept a tabular study export or a browser event-log JSON file."""
     if path.suffix.lower() == ".csv":
         with path.open(newline="", encoding="utf-8-sig") as handle:
             rows = list(csv.DictReader(handle))
@@ -161,7 +161,7 @@ def load_snapshots(path: Path) -> list[dict[str, Any]]:
     elif isinstance(payload, dict) and isinstance(payload.get("data"), list):
         snapshots = payload["data"]
     else:
-        raise ValueError("Expected an event-log object or a list of Supabase rows")
+        raise ValueError("Expected an event-log object or a list of study rows")
     for snapshot in snapshots:
         snapshot["events"] = load_jsonish(snapshot.get("events"))
     return snapshots
@@ -371,7 +371,7 @@ def run_self_test(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("input", nargs="?", type=Path, help="Supabase export or event-log JSON/CSV")
+    parser.add_argument("input", nargs="?", type=Path, help="Study export or event-log JSON/CSV")
     parser.add_argument("--reference", type=Path, default=DEFAULT_REFERENCE)
     parser.add_argument("--answer-key", type=Path, default=DEFAULT_ANSWER_KEY)
     parser.add_argument("--output", type=Path, help="Write summary CSV or JSON (details are written beside it)")

@@ -1,0 +1,87 @@
+{
+  "summary": "The interview focuses on an incident involving a witness, who witnessed a man with a knife demanding money from a woman at a cash machine last Saturday evening. Key evidence includes the witness's detailed observations of the suspect's arrival and actions during the event. The principal suspect is the man with the knife, whose motives appear to be robbery. The interview concludes with a summary of the witness's statements, which will aid in the ongoing investigation.",
+  "parts": [
+    {
+      "id": 1,
+      "start_id": 0,
+      "end_id": 3,
+      "segment_start": 0.0,
+      "segment_end": 25.94,
+      "title": "Interview Introduction",
+      "description": "The interview begins at Riverside Police Station with Daniel Hargraves, a resident of Millend, providing context for the investigation.",
+      "chapters": [
+        {
+          "id": 1,
+          "start_id": 0,
+          "end_id": 3,
+          "segment_start": 0.0,
+          "segment_end": 25.94,
+          "title": "Interview Introduction",
+          "gist": "The interview is conducted at Riverside Police Station with Daniel Hargraves, who lives in Millend."
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "start_id": 4,
+      "end_id": 17,
+      "segment_start": 31.66,
+      "segment_end": 155.18,
+      "title": "The Night in Question",
+      "description": "Daniel recounts the events of the previous Saturday evening, detailing the appearance of a man with a knife and his observations regarding the timing and circumstances of the incident.",
+      "chapters": [
+        {
+          "id": 2,
+          "start_id": 4,
+          "end_id": 17,
+          "segment_start": 31.66,
+          "segment_end": 155.18,
+          "title": "The Night in Question",
+          "gist": "Daniel describes the scene from last Saturday evening, mentioning a man with a knife and details about his arrival time and observations."
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "start_id": 18,
+      "end_id": 30,
+      "segment_start": 162.66,
+      "segment_end": 285.92,
+      "title": "Witness Description of Incident",
+      "description": "A witness corroborates Daniel's account, describing the man with the knife and the demand made towards a woman at the cash machine, providing critical evidence for the case.",
+      "chapters": [
+        {
+          "id": 3,
+          "start_id": 18,
+          "end_id": 30,
+          "segment_start": 162.66,
+          "segment_end": 285.92,
+          "title": "Witness Description of Incident",
+          "gist": "The witness describes seeing a knife and a woman near the cash machine, recounting the demand made by the man."
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "start_id": 31,
+      "end_id": 31,
+      "segment_start": 288.82,
+      "segment_end": 293.86,
+      "title": "Interview Conclusion",
+      "description": "The interview wraps up with a summary of the witness statements, reinforcing the details provided and setting the stage for further investigation.",
+      "chapters": [
+        {
+          "id": 4,
+          "start_id": 31,
+          "end_id": 31,
+          "segment_start": 288.82,
+          "segment_end": 293.86,
+          "title": "Interview Conclusion",
+          "gist": "The interview concludes with a summary and confirmation of the witness's statements."
+        }
+      ]
+    }
+  ],
+  "_window": 18,
+  "_target_parts": 4
+}

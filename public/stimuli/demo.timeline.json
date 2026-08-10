@@ -1,0 +1,50 @@
+{
+  "events": [
+    {
+      "id": 4,
+      "time": "last Saturday evening",
+      "event": "asked about the scene"
+    },
+    {
+      "id": 6,
+      "time": "",
+      "event": "saw a man holding a knife"
+    },
+    {
+      "id": 11,
+      "time": "",
+      "event": "checked phone after getting off bus"
+    },
+    {
+      "id": 13,
+      "time": "",
+      "event": "remembered flickering street light"
+    },
+    {
+      "id": 15,
+      "time": "",
+      "event": "man stood inside doorway"
+    },
+    {
+      "id": 17,
+      "time": "",
+      "event": "saw something silver in man's hand"
+    },
+    {
+      "id": 21,
+      "time": "",
+      "event": "saw woman in green jacket"
+    },
+    {
+      "id": 23,
+      "time": "",
+      "event": "woman looked frightened"
+    },
+    {
+      "id": 25,
+      "time": "",
+      "event": "heard demand for bag or cash"
+    }
+  ],
+  "_windows": 1
+}

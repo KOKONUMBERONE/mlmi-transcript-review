@@ -524,8 +524,8 @@ def run_focus(
     # transcript, this generalises to whatever wording a case happens to use —
     # search "weapon" and it discovers this case says "knife"/"gun".
     # encoder=None -> degraded mode (no semantic leg): exact/alias/@pattern
-    # matching still runs in full. Used on memory-tight hosts (Render 512MB
-    # kills the process while loading SentenceTransformer -> 502 on /focus).
+    # matching still runs in full. Useful on machines that cannot comfortably
+    # load SentenceTransformer.
     # Per-item {normalised word -> cosine to the label}: powers BOTH the auto-
     # expansion below AND the salient-word highlighting of semantic matches.
     word_sims: List[Dict[str, float]] = [{} for _ in items]

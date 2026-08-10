@@ -4,8 +4,7 @@ import type { PoliceQuestion } from '../study/trials'
 // "Case questions" panel — lives in the RIGHT column during a police foraging
 // task, sharing it with the Review panel via a two-tab strip (Questions is a
 // framed brand chip so it's spottable). Drives the search + captures answers
-// in-app; answers are logged (question_answer events) and ride the Supabase
-// snapshot with everything else.
+// in-app; answers are logged as question_answer events in the local event log.
 // Four question types — see PoliceQuestion in trials.ts:
 //   mc    single- or multi-select choice
 //   open  free-text answer in a box below the prompt (NOT an in-sentence blank)

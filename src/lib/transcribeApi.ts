@@ -2,7 +2,7 @@ import type { Transcript } from '../types'
 import { ASR_BASE } from './apiBase'
 import { PredictError } from './predictApi'
 
-// Busola's ASR transcription service (separate from the importance classifier
+// Optional local ASR transcription service (separate from the importance classifier
 // on :8000). Runs the 4 ASR models locally and returns a transcript already in
 // the front-end schema shape — see server/TRANSCRIBE_API_README.md.
 // 127.0.0.1 (not "localhost") so an IPv6 ::1 squatter can't intercept it.

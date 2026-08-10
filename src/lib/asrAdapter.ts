@@ -14,7 +14,7 @@ import type { Risk, Segment, Transcript, Word } from '../types'
  * confidence" interface version (`paraRisk`). We read `confidence` (0–1) and
  * ignore `score` (1–5); if `confidence` later becomes a real continuous value
  * (today it is `score/5`) this still works — only the thresholds may need
- * recalibrating with Busola.
+ * recalibrating against a held-out development set.
  */
 
 interface AsrSentence {
@@ -39,12 +39,12 @@ interface AsrPipelineOutput {
 
 // One stable model key for the merged transcript text. `availableModels` is
 // derived from Object.keys(segment.words), so this key auto-selects and the
-// text renders via segment.words[model]. Her pipeline gives no word-level
+// text renders via segment.words[model]. The pipeline gives no word-level
 // scores, so every word carries risk 'low'.
 const MODEL_KEY = 'ASR ensemble'
 
 // confidence → risk, INVERTED (low confidence = high risk = "check this").
-// Placeholder thresholds — calibrate with Busola once confidence is real.
+// Placeholder thresholds — calibrate once confidence estimates are validated.
 // With her discrete confidence = score/5: 1.0 → 'low' (no tint), 0.8 & 0.6 →
 // 'med' (amber), 0.4 & 0.2 → 'high' (red). Only near-total agreement is left
 // unmarked so borderline sentences still surface.
