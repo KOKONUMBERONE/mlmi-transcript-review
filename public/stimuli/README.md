@@ -1,8 +1,8 @@
-# Frozen study stimuli
+# Stimuli
 
-Each registered clip consists of a transcript, an audio file, and optional
-frozen local-model panels. Frozen panels make study trials deterministic and
-avoid model latency during a session.
+A registered clip is a transcript, an audio file, and optional frozen
+local-model panels. Freezing the panels makes a clip load deterministically and
+without model latency.
 
 - `<id>.json` — transcript with word and sentence signals.
 - `<id>.mp3` — matching audio.
@@ -11,9 +11,9 @@ avoid model latency during a session.
 - `<id>.anomalies.json` — potential conflicts.
 - `<id>.triage.json` — sentence-importance results.
 
-Register clips in `src/study/trials.ts` under `STIMULI`. Unregistered ids fall
-back to the bundled demonstration transcript.
+Register clips in `src/study/trials.ts` under `STIMULI`. An unregistered id
+falls back to the bundled demonstration transcript.
 
-The media files are research stimuli and are not relicensed by the repository's
-MIT License. Verify the status and attribution requirements of any stimulus
-before redistributing it or replacing it with other material.
+No media is distributed here beyond the demonstration panels. Anything you add
+is yours to license and attribute; the repository's MIT License covers code
+only.

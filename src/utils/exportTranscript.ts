@@ -247,7 +247,7 @@ export function exportRawPipelineJson(rawSource: unknown, args: ExportArgs): voi
 //
 // One self-contained .html (all CSS/JS inlined, no external deps) intended for
 // non-technical readers. It bundles the two deliverables the reviewer's
-// supervisor asked for into a single file:
+// requested into a single file:
 //   1. the full, up-to-date transcript (with a "clean view <-> show changes"
 //      toggle, styled like familiar word-processor tracked changes), and
 //   2. a chronological change log — what was changed, when, by whom, and why,

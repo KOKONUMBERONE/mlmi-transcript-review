@@ -1484,7 +1484,6 @@ const ReviewWorkspace = forwardRef<ReviewWorkspaceHandle, ReviewWorkspaceProps>(
   // `drafts` = the "Split here" path from the line editor: the reviewer's draft
   // text, already cut at the cursor, becomes each half's text. Without drafts,
   // a saved whole-line rewrite SURVIVES the split (it used to be discarded —
-  // supervisor bug report 2026-07-24): the override is cut at the token that
   // renders the first kept original word ≥ wordIdx (alignRewrite is 1:1 with
   // tokenize), falling back to a proportional cut when nothing aligns.
   const splitSegment = (segId: number, wordIdx: number, drafts?: { a: string; b: string }) => {
@@ -1805,7 +1804,6 @@ const ReviewWorkspace = forwardRef<ReviewWorkspaceHandle, ReviewWorkspaceProps>(
   // The transcript AS REVIEWED — per-word corrections and whole-line rewrites
   // applied over the active model's words. The live AI tools (Find, Assistant)
   // receive THIS, so their answers track the reviewer's edits instead of
-  // quoting the original ASR output (supervisor bug report 2026-07-24:
   // corrected "beads" still answered as "beans"). Deleted words drop out; a
   // whole-line rewrite replaces the segment's words with evenly-timed tokens.
   // Other models' word arrays are untouched (edit indices are only valid

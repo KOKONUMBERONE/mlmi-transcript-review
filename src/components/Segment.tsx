@@ -495,7 +495,7 @@ export default function Segment({
                     Cancel
                   </button>
                   {onSplitDraft && words.length >= 2 && (
-                    // Split without leaving the editor (supervisor request):
+                    // Split without leaving the editor:
                     // the text after the cursor becomes a new segment, and the
                     // draft halves are saved onto the two segments.
                     <button

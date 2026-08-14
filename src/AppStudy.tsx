@@ -58,7 +58,6 @@ const SHOW_POLICE_ENTRY = true
 // Plain = C1, Full = C4 (the only two conditions the study uses).
 const assistanceLabel = (c: string) => (c === 'C1' ? 'Plain' : 'Full')
 
-// Participant design cell. One bare link for everyone (supervisor, 2026-08-07):
 // it always runs PARTICIPANT_DEFAULT_GROUP, so nothing depends on the URL
 // carrying a query string. ?g=G1 only exists to reproduce the earlier cell when
 // testing. See PARTICIPANT_PLAN in study/trials.ts for what each cell runs.
@@ -94,7 +93,6 @@ function Overlay({ children }: { children: React.ReactNode }) {
 }
 
 // Repeated, compact condition preview used on the participant welcome screen.
-// Both participant tasks run the same order, but WHICH order is counterbalanced
 // per participant (fullFirst), so this must follow the assigned cell rather than
 // state a fixed Plain → Full.
 function ModeSequence({ fullFirst }: { fullFirst: boolean }) {
@@ -138,7 +136,6 @@ export default function AppStudy() {
   // Police is untimed; the participant study keeps per-task time limits.
   const inApp = isPolice || isParticipant
   const [cbGroup, setCbGroup] = useState<CBGroup>('CB1')
-  // Participant counterbalance cell for THIS session (fixed once the session
   // starts). Also encoded into the participant code, so every export and the
   // trial banner carry it without a schema change.
   const [pGroup, setPGroup] = useState<PGroup>(PARTICIPANT_DEFAULT_GROUP)
@@ -163,7 +160,6 @@ export default function AppStudy() {
   const lastSnapKeyRef = useRef('')
   const [uploadState, setUploadState] = useState<'idle' | 'uploading' | 'ok' | 'error'>('idle')
 
-  // Full design cell for the log: CB group + T2 scheme (+ assignment under C).
   // The self-run cohorts carry a fixed tag instead — analysis filters on it.
   const groupTag = isPolice
     ? 'POLICE'
@@ -298,7 +294,6 @@ export default function AppStudy() {
         ? lastRealTrialRef.current
         : runner.current
 
-  // Per-trial workspace config — 2026-07-19 decision: the study runs the LIVE
   // AI toolkit (no freezing; participants search with their own words, so
   // outputs can't be pre-baked). Full (C4) trials get free-input Find +
   // Assistant + Outline + Conflicts + Timeline against the live backend
@@ -358,18 +353,14 @@ export default function AppStudy() {
       // Participant Task 2 is a ~27 min recording answered against case
       // questions — the tools are the point, so its Full trial opens with the
       // left column already expanded on Assistant rather than collapsed to the
-      // rail. Task 1 keeps the collapsed default: it is the confirmatory
-      // error-correction contrast and its interface should stay as the earlier
       // sessions had it.
       ...(isParticipant && workspaceTrial.taskGroup === 2
         ? { defaultLeftTab: 'chat' as const }
         : {}),
       // Participant Task 1 opens on the WORDS · Uncertainty view. Its Full clip
-      // (part1b) has had its uncertainty layer retuned to mark the planted
       // errors and nothing else (scripts/retune_task1_uncertainty.py), so that
       // view is the one that actually helps on an error-correction task —
       // Combined adds ~40 marks on correct-but-important words. Task 2 stays on
-      // Combined: police1's uncertainty is real ASR confidence, not curated.
       // …and shows the amber marks too. In Uncertainty on the retuned clip the
       // amber words are exactly the ordinary-tier errors, so 'high' would hide
       // 19 of the 66 findable errors for no benefit.
@@ -416,7 +407,6 @@ export default function AppStudy() {
               // Regular (participant) study — self-run like the police flow
               // (guided demo → 2 timed tasks → in-app questionnaire). Auto-assign
               // a code and start immediately; no experimenter setup screen.
-              // The counterbalance cell comes from ?g= on the link (the cell
               // being recruited when absent) and rides along in the participant
               // code, e.g. P-G3-4K2QX.
               const g = readGroupFromUrl() ?? PARTICIPANT_DEFAULT_GROUP

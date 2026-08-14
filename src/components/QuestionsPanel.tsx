@@ -64,7 +64,7 @@ export default function QuestionsPanel({
       </div>
       {/* Brand-tinted banner keeps the "this is the task" signal inside the tab.
           Copy: questions are optional; officers may move to the feedback whenever
-          they feel ready (supervisor request, 2026-07-24). */}
+          they feel ready. */}
       <div className="px-4 py-2 border-b border-brand/20 bg-brand-bg shrink-0">
         <p className="text-[10px] text-ink-muted">
           {guidance ?? (

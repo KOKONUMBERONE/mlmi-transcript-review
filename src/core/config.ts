@@ -96,7 +96,7 @@ export interface WorkspaceConfig {
    *  only — the study uses short, frozen clips where chaptering adds nothing. */
   allowOutline: boolean
   /** AI assistant chat over the loaded transcript (local Ollama), as a tab
-   *  beside Find. Full/police build only — a supervisor-requested convenience,
+   *  beside Find. Full/police build only — a convenience,
    *  NOT part of the study manipulation. The conversation is ephemeral
    *  (in-memory, cleared on transcript change) and never enters the event-log
    *  content, the audit trail, or any export. */

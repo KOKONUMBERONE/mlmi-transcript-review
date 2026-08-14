@@ -90,7 +90,6 @@ export const DEMO_TOUR_STEPS: TourStep[] = [
     id: 'words',
     anchor: 'words-toggle',
     title: 'Word highlighting',
-    // The copy tracks the switch live (supervisor request): what red/amber
     // mean depends on the selected dimension.
     body: (api) =>
       api.dimension === 'uncertainty'

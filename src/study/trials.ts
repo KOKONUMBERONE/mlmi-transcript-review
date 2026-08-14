@@ -1,14 +1,10 @@
 import type { Condition } from '../types'
 
 // Three-session within-subject design — one round per session, fixed order
-// T1 → T2 → T3 (operational plan v3, 2026-07-13; supersedes the 2×2):
-//   T1 proofread      — matched short pair, Plain vs Full (the ONLY
-//                       confirmatory contrast; H1 = recall@T, Full > Plain)
 //   T2 long recording — ~30 min drama episode: find clues/contradictions,
 //                       answer questions after, correct key passages
 //   T3 voice notes    — concatenated short messages: find the target info
 //
-// Counterbalance (T1 only): condition order (2) × clip-condition assignment
 // (2) = 4 groups; N=20 → 5 per group.
 // T2 runs as scheme A (Full-only, one episode) until a second matched episode
 // passes the selection probes; scheme C (two episodes, Plain/Full within) adds
@@ -54,10 +50,7 @@ export interface Stimulus {
 
 export const STIMULI: Record<string, Stimulus> = {
   // Police cohort (Wed session, MSt in Policing): evidence-collection /
-  // information-foraging material for the full interface. Only police1 is
   // currently active; see POLICE_ACTIVE_CLIPS and buildPoliceSession.
-  //   police1 = tom_the_tailor radio episode (~27 min), sentence-level tint.
-  //   police2 = sland_s1_combined (Shetland synthetic interview, ~36 min),
   //             re-segmented from the teammate's 30s windows into sentences so
   //             the sentence tint discriminates; whisper-large, real word-level
   //             risk + confidence (no ASR alternatives in this source).
@@ -80,18 +73,7 @@ export const STIMULI: Record<string, Stimulus> = {
     timeline: 'demo.timeline.json', outline: 'demo.outline.json',
     anomalies: 'demo.anomalies.json',
   },
-  // Participant Task 1 — two matched excerpts from the same public-domain
-  // detective audiobook chapter. Each is ~6.5 min with ~7% controlled errors
-  // split into high-risk (red) and ordinary (amber) tiers. Since 2026-08-07 the
-  // counterbalance lets EITHER clip carry the Full interface (see
-  // PARTICIPANT_PLAN), so both now ship frozen toolkit panels — otherwise the
-  // swapped cells would sit through live backend calls the other cells never
-  // see. Both sets are the AUTHORED panels that build_participant_task1.py
-  // writes from its per-clip specs (it only copied part1a's into public/ before,
-  // when part1a was the only Full clip). Do NOT regenerate these with the live
-  // LLM routes: on part1b that produces a conflicts panel pointing straight at
-  // two of the nine planted errors, which would hand the swapped cells a hint
-  // the already-collected sessions never got.
+  // Short clips registered for the two-recording tasks.
   part1a: {
     transcript: 'part1a.json', audio: 'part1a.mp3',
     timeline: 'part1a.timeline.json', outline: 'part1a.outline.json',
@@ -103,11 +85,8 @@ export const STIMULI: Record<string, Stimulus> = {
     anomalies: 'part1b.anomalies.json', triage: 'part1b.triage.json',
   },
   //   Task 2 — two LONG recordings, Plain + Full (precise finding, with
-  //   questions). Full = police1 (Tom the Tailor, planted errors + questions —
   //   the trial points at that stimulus directly). Plain = Mr District
-  //   Attorney ("The Forgery-Proof Note", ~27 min — picked 2026-07-25 over the
   //   Sherlock episodes: near-identical duration/wordcount/segmentation to
-  //   police1 and clean diarization, so the Plain-vs-Full materials match):
   part2b: {
     transcript: 'part2b.json', audio: 'part2b.mp3',
   },
@@ -115,7 +94,6 @@ export const STIMULI: Record<string, Stimulus> = {
   // resolves to the bundled placeholder transcript, so the session still runs.
   // Practice (short, Full/C4 — exercises highlight + focus + edit/verify/seek):
   // gp:  { transcript: 'gp.json', audio: 'gp.m4a', focus: 'gp.focus.json' },
-  // T1 — the matched short pair from study_scripts_v1 (GA1/GA2 or GB1/GB2,
   // picked after the ASR probe; the other pair is the backup):
   // t1a: { transcript: 't1a.json', audio: 't1a.m4a' },
   // t1b: { transcript: 't1b.json', audio: 't1b.m4a' },
@@ -173,10 +151,6 @@ export interface TrialSpec {
   recordingLabel?: string
 }
 
-// ----- Counterbalance (T1) -------------------------------------------------
-// Two crossed factors over the matched pair {t1a, t1b}:
-//   condition order   — Plain first (CB1, CB3) vs Full first (CB2, CB4)
-//   clip assignment   — t1a=Plain (CB1, CB2) vs t1a=Full (CB3, CB4)
 // Each clip is Plain for 10 and Full for 10 at N=20.
 const T1_PLAN: Record<CBGroup, { clips: [string, string]; conds: [Condition, Condition] }> = {
   CB1: { clips: ['t1a', 't1b'], conds: ['C1', 'C4'] }, // Plain first · t1a=Plain
@@ -223,7 +197,6 @@ const PRACTICE_FOCUS = 'blue van\ncaller'
 
 // ----- Police cohort (Wed session) -----------------------------------------
 // One active evidence-collection / information-foraging task + a feedback
-// questionnaire (supervisor decision, 2026-07-24; no proofreading task). It runs
 // on the FULL interface (C4 toolkit + sentence tints — AppStudy overlays the
 // config), untimed: timeBudgetSec is effectively infinite and the banner hides
 // the countdown; officers end the task themselves. The second task remains
@@ -243,7 +216,6 @@ const POLICE_BRIEFS: Record<string, string> = {
 //   scale Likert rating min..max (default 1..5)
 //   task  directive only — no answer field; the response is what they correct in
 //         the transcript.
-// FULL question banks (2026-07-21) — deliberately over-complete so the
 // experimenter can trim to a final set; answers live OUTSIDE the repo.
 // id scheme: p<task><type-letter><n> — t=task, a=mc, b=multi, c=open,
 // d=correction-focused open, e=scale.
@@ -321,8 +293,6 @@ const POLICE_QUESTION_BANK: Record<string, PoliceQuestion[]> = {
       prompt: 'If this were a real case file, how comfortable would you be relying on this reviewed transcript as evidence?',
       min: 1, max: 5, minLabel: 'Not at all', maxLabel: 'Fully' },
   ],
-  // Participant Task 2 Plain — Mr District Attorney, "The Forgery-Proof Note"
-  // (~27 min). Mirrors police1's structure: task + 9 mc + 2 multi + 4 open +
   // 2 correction-open (+ 3 scales, hidden by the slice). The correction items
   // target NATURAL ASR damage already in this transcript: the con man's name
   // renders as Royger / Orger / Riker / Reuger / Olga, and the check-room
@@ -463,7 +433,6 @@ const POLICE_QUESTION_BANK: Record<string, PoliceQuestion[]> = {
   ],
 }
 
-// Final selection for the police session (2026-07-22): only the leading slice
 // of each bank is shown/answered — task 1 stops after #18 (p1d2; the p1e
 // scales are hidden), task 2 after #13 (p2b3; the p2c/p2d/p2e items are
 // hidden). The full banks stay above for reference — the experimenter's
@@ -484,10 +453,7 @@ export const POLICE_QUESTIONS: Record<string, PoliceQuestion[]> = {
   // Participant study — Task 1 (the two SHORT recordings) has NO case-questions
   // panel at all: the task is purely error-finding, explained by the brief
   // overlay ("find as many errors as you can") before the trial starts. With no
-  // POLICE_QUESTIONS entry for part1a/part1b, caseQuestions is empty, so the
   // right column drops the Questions tab and shows only the Review log.
-  // Participant Task 2 — Full reuses police1's set via the shared stimulusId;
-  // Plain (part2b / Mr District Attorney) mirrors it: first 18 of the bank
   // (task + 9 mc + 2 multi + 6 open; the mdae scales stay hidden).
   part2b: POLICE_QUESTION_BANK.part2b.slice(0, 18),
 }
@@ -495,9 +461,6 @@ export const POLICE_QUESTIONS: Record<string, PoliceQuestion[]> = {
 // Effectively untimed (the runner has no "no limit" mode; ~11.5 days).
 export const POLICE_TIME_BUDGET_SEC = 999_999
 
-// 2026-07-24 (supervisor): one task is enough — the session runs demo + task 1
-// only. police2 stays fully registered (stimulus, questions, brief); to restore
-// the two-task session just add 'police2' back to this list.
 const POLICE_ACTIVE_CLIPS = ['police1'] as const
 
 export function buildPoliceSession(): TrialSpec[] {
@@ -532,7 +495,6 @@ export function buildPoliceSession(): TrialSpec[] {
 }
 
 // ---- Participant study (mirrors the police flow: guided demo → tasks →
-// in-app questionnaire, self-run) but TIMED. 2026-07-24 design:
 //   Task 1 — TWO short recordings, Plain and Full (the contrast). Error-finding
 //            only: correct as many transcription errors as you can. NO questions.
 //   Task 2 — TWO long recordings, Plain and Full (the contrast). Precise finding
@@ -550,7 +512,6 @@ const PARTICIPANT_BRIEFS: Record<string, string> = {
     'A ~27 min recording with the full AI-assisted interface. Answer as many case questions as you can — you are not expected to finish them all. Use the tools to find relevant passages, but listen to confirm key evidence: the transcript may be wrong, and correcting important transcription errors is part of the task.',
 }
 
-// ----- Participant design cells (2026-08-07, supervisor) --------------------
 // The first ~12 participants all ran ONE arrangement: Plain always first, and
 // always the same recording carrying Plain. Design review requested that the remaining
 // participants to swap that round — and, because the link had already gone out,
@@ -561,12 +522,8 @@ const PARTICIPANT_BRIEFS: Record<string, string> = {
 // Both tasks now swap the ORDER (Full first), but only Task 1 also swaps the
 // clip assignment — which is why the order flag is per task rather than shared:
 //   Task 1 — swaps BOTH the clip assignment and the order. It is the
-//     confirmatory error-correction contrast, and its pair part1a/part1b is
-//     genuinely matched (~6.5 min each, ~7% planted errors, and both JSONs carry
 //     full word-level annotation), so either clip can carry either interface.
 //   Task 2 — swaps the order only, keeping its original clip assignment. Its
-//     pair is police1 (Tom the Tailor) and part2b (Mr District Attorney), and
-//     part2b was frozen as a Plain-only clip: every word is risk='low', with no
 //     per-word confidence and no word timings (only sentence paraRisk). Running
 //     it as Full would show an empty highlight layer, so it cannot trade places
 //     without being re-annotated at word level first.
@@ -576,19 +533,13 @@ export const PARTICIPANT_GROUPS: PGroup[] = ['G1', 'G2']
 interface ParticipantCell {
   t1FullFirst: boolean
   t2FullFirst: boolean
-  /** Task 1 only: part1a carries Plain (and part1b Full) instead of the reverse. */
   swapT1: boolean
 }
 
 const PARTICIPANT_PLAN: Record<PGroup, ParticipantCell> = {
-  // Sessions 1–12, up to 2026-08-07. Kept so the collected design stays
   // documented (and reproducible with ?g=G1), not because it is still recruited.
-  //   T1: Plain part1b → Full part1a     T2: Plain part2b → Full police1
   G1: { t1FullFirst: false, t2FullFirst: false, swapT1: false },
-  // The cell being recruited from 2026-08-07. Both tasks meet the Full
-  // interface first (T2's order flipped 2026-08-08); only T1 also trades which
   // recording carries which interface.
-  //   T1: Full part1b  → Plain part1a    T2: Full police1 → Plain part2b
   G2: { t1FullFirst: true, t2FullFirst: true, swapT1: true },
 }
 
@@ -607,11 +558,8 @@ export function buildParticipantSession(
   group: PGroup = PARTICIPANT_DEFAULT_GROUP,
 ): TrialSpec[] {
   const { swapT1 } = PARTICIPANT_PLAN[group]
-  // Task 1 — the matched short pair; either clip can carry either interface.
   const t1Plain = swapT1 ? 'part1a' : 'part1b'
   const t1Full = swapT1 ? 'part1b' : 'part1a'
-  // Task 2 — assignment fixed (see the note above): Plain = Mr District Attorney
-  // (part2b); Full = the police task-1 material as-is (Tom the Tailor, with
   // questions and frozen panels).
   const t2Plain = 'part2b'
   const t2Full = 'police1'
@@ -707,8 +655,6 @@ export function buildSession(
     })
   }
 
-  // T1 — the matched pair, Plain vs Full per the group's plan (the only
-  // confirmatory contrast).
   const t1 = T1_PLAN[group]
   t1.clips.forEach((clip, i) => {
     const condition = t1.conds[i]
