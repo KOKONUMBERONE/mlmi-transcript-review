@@ -357,13 +357,6 @@ export default function AppStudy() {
       ...(isParticipant && workspaceTrial.taskGroup === 2
         ? { defaultLeftTab: 'chat' as const }
         : {}),
-      // Participant Task 1 opens on the WORDS · Uncertainty view. Its Full clip
-      // errors and nothing else (scripts/retune_task1_uncertainty.py), so that
-      // view is the one that actually helps on an error-correction task —
-      // Combined adds ~40 marks on correct-but-important words. Task 2 stays on
-      // …and shows the amber marks too. In Uncertainty on the retuned clip the
-      // amber words are exactly the ordinary-tier errors, so 'high' would hide
-      // 19 of the 66 findable errors for no benefit.
       ...(isParticipant && workspaceTrial.taskGroup === 1
         ? { defaultWordDimension: 'uncertainty' as const, defaultHighlightLevel: 'all' as const }
         : {}),
